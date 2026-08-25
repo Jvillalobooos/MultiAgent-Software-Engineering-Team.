@@ -28,7 +28,7 @@ if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
 
 function Test-Ollama {
     try {
-        $response = Invoke-WebRequest -Uri "http://localhost:11434/api/tags" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+        $response = Invoke-WebRequest -Uri "http://localhost:11434/api/tags" -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
         return $response.StatusCode -ge 200 -and $response.StatusCode -lt 300
     }
     catch {
@@ -44,7 +44,7 @@ if (-not (Test-Ollama)) {
     }
 
     Start-Process -FilePath $ollama.Source -ArgumentList "serve" -WindowStyle Hidden
-    Start-Sleep -Seconds 3
+    Start-Sleep -Seconds 5
     if (-not (Test-Ollama)) {
         Write-Error "Ollama did not respond at http://localhost:11434."
         exit 1
