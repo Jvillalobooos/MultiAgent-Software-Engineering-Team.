@@ -30,14 +30,21 @@
     ],
     "rag_sources": [
       "api-design-guidelines.md",
+      "architecture-guidelines.md",
       "security-guidelines.md",
       "owasp-api-security.md",
-      "testing-strategy.md"
+      "testing-strategy.md",
+      "coding-standards.md"
     ],
     "tools_used": [
       "scenario_acceptance",
       "list_files",
       "list_files",
+      "search_code",
+      "search_code",
+      "search_code",
+      "read_file",
+      "read_file",
       "scan_dependencies",
       "run_security_scan",
       "run_tests"
@@ -45,17 +52,22 @@
     "tool_evidence": [
       "mcp://repository/list_files",
       "mcp://repository/list_files",
+      "mcp://repository/search_code",
+      "mcp://repository/search_code",
+      "mcp://repository/search_code",
+      "mcp://repository/read_file",
+      "mcp://repository/read_file",
       "mcp://quality/scan_dependencies",
       "mcp://quality/run_security_scan",
       "mcp://quality/run_tests"
     ],
-    "trace_id": "9e49cbf9039fd06d2285a051ba2ac563",
+    "trace_id": "6356fa6f671ff508883d6e489247caa2",
     "langfuse_live": true,
     "pass": true,
-    "duration": 786.6203091999632,
+    "duration": 244.3847014999992,
     "llm_calls": 6,
-    "tool_calls": 6,
-    "retrievals": 4,
+    "tool_calls": 11,
+    "retrievals": 12,
     "errors": [],
     "acceptance_evidence": [
       "expiration=15_minutes",
@@ -72,9 +84,9 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 189788,
+        "latency_ms": 23534,
         "usage": {
-          "prompt_eval_count": 690,
+          "prompt_eval_count": 692,
           "eval_count": 165
         },
         "structured_output_success": true,
@@ -89,10 +101,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 82833,
+        "latency_ms": 12983,
         "usage": {
-          "prompt_eval_count": 718,
-          "eval_count": 71
+          "prompt_eval_count": 981,
+          "eval_count": 126
         },
         "structured_output_success": true,
         "error": null
@@ -106,10 +118,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 169295,
+        "latency_ms": 59649,
         "usage": {
-          "prompt_eval_count": 762,
-          "eval_count": 249
+          "prompt_eval_count": 1220,
+          "eval_count": 644
         },
         "structured_output_success": true,
         "error": null
@@ -123,9 +135,9 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 90667,
+        "latency_ms": 17167,
         "usage": {
-          "prompt_eval_count": 1028,
+          "prompt_eval_count": 1181,
           "eval_count": 107
         },
         "structured_output_success": true,
@@ -140,10 +152,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 62853,
+        "latency_ms": 30967,
         "usage": {
-          "prompt_eval_count": 813,
-          "eval_count": 206
+          "prompt_eval_count": 1072,
+          "eval_count": 266
         },
         "structured_output_success": true,
         "error": null
@@ -157,10 +169,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 164184,
+        "latency_ms": 96788,
         "usage": {
-          "prompt_eval_count": 1336,
-          "eval_count": 318
+          "prompt_eval_count": 2150,
+          "eval_count": 531
         },
         "structured_output_success": true,
         "error": null
@@ -206,6 +218,11 @@
       "scenario_acceptance",
       "list_files",
       "list_files",
+      "search_code",
+      "search_code",
+      "search_code",
+      "read_file",
+      "read_file",
       "scan_dependencies",
       "run_security_scan",
       "run_tests"
@@ -213,17 +230,22 @@
     "tool_evidence": [
       "mcp://repository/list_files",
       "mcp://repository/list_files",
+      "mcp://repository/search_code",
+      "mcp://repository/search_code",
+      "mcp://repository/search_code",
+      "mcp://repository/read_file",
+      "mcp://repository/read_file",
       "mcp://quality/scan_dependencies",
       "mcp://quality/run_security_scan",
       "mcp://quality/run_tests"
     ],
-    "trace_id": "b47a7f60f5d63ee00b2d22b5a7355574",
+    "trace_id": "083d4b8da6dc39aae489fed44994b335",
     "langfuse_live": true,
     "pass": true,
-    "duration": 575.0020723000052,
+    "duration": 270.12790333299927,
     "llm_calls": 6,
-    "tool_calls": 6,
-    "retrievals": 5,
+    "tool_calls": 11,
+    "retrievals": 12,
     "errors": [],
     "acceptance_evidence": [
       "attempts_1_to_4=unlocked",
@@ -239,7 +261,7 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 69869,
+        "latency_ms": 20234,
         "usage": {
           "prompt_eval_count": 642,
           "eval_count": 125
@@ -256,10 +278,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 45708,
+        "latency_ms": 16888,
         "usage": {
-          "prompt_eval_count": 706,
-          "eval_count": 71
+          "prompt_eval_count": 973,
+          "eval_count": 128
         },
         "structured_output_success": true,
         "error": null
@@ -273,10 +295,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 112200,
+        "latency_ms": 88061,
         "usage": {
-          "prompt_eval_count": 739,
-          "eval_count": 238
+          "prompt_eval_count": 1173,
+          "eval_count": 611
         },
         "structured_output_success": true,
         "error": null
@@ -290,9 +312,9 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 92704,
+        "latency_ms": 22485,
         "usage": {
-          "prompt_eval_count": 1026,
+          "prompt_eval_count": 1177,
           "eval_count": 107
         },
         "structured_output_success": true,
@@ -307,10 +329,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 68307,
+        "latency_ms": 25662,
         "usage": {
-          "prompt_eval_count": 894,
-          "eval_count": 227
+          "prompt_eval_count": 1069,
+          "eval_count": 266
         },
         "structured_output_success": true,
         "error": null
@@ -324,10 +346,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 171860,
+        "latency_ms": 93006,
         "usage": {
-          "prompt_eval_count": 1416,
-          "eval_count": 339
+          "prompt_eval_count": 2151,
+          "eval_count": 532
         },
         "structured_output_success": true,
         "error": null
@@ -365,8 +387,8 @@
     ],
     "rag_sources": [
       "api-design-guidelines.md",
-      "security-guidelines.md",
       "owasp-api-security.md",
+      "security-guidelines.md",
       "testing-strategy.md",
       "coding-standards.md"
     ],
@@ -374,6 +396,12 @@
       "scenario_acceptance",
       "list_files",
       "list_files",
+      "search_code",
+      "search_code",
+      "search_code",
+      "read_file",
+      "read_file",
+      "read_file",
       "scan_dependencies",
       "run_security_scan",
       "run_tests"
@@ -381,17 +409,23 @@
     "tool_evidence": [
       "mcp://repository/list_files",
       "mcp://repository/list_files",
+      "mcp://repository/search_code",
+      "mcp://repository/search_code",
+      "mcp://repository/search_code",
+      "mcp://repository/read_file",
+      "mcp://repository/read_file",
+      "mcp://repository/read_file",
       "mcp://quality/scan_dependencies",
       "mcp://quality/run_security_scan",
       "mcp://quality/run_tests"
     ],
-    "trace_id": "40b48572da7bf0f8de64fb73c29659bd",
+    "trace_id": "6fbca1a7c475349655a4951f2096451d",
     "langfuse_live": true,
     "pass": true,
-    "duration": 582.6876779000158,
+    "duration": 290.644852292,
     "llm_calls": 6,
-    "tool_calls": 6,
-    "retrievals": 5,
+    "tool_calls": 12,
+    "retrievals": 12,
     "errors": [],
     "acceptance_evidence": [
       "authorized_result_count=5",
@@ -407,9 +441,9 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 74341,
+        "latency_ms": 21526,
         "usage": {
-          "prompt_eval_count": 663,
+          "prompt_eval_count": 659,
           "eval_count": 143
         },
         "structured_output_success": true,
@@ -424,10 +458,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 45358,
+        "latency_ms": 15850,
         "usage": {
-          "prompt_eval_count": 713,
-          "eval_count": 71
+          "prompt_eval_count": 976,
+          "eval_count": 128
         },
         "structured_output_success": true,
         "error": null
@@ -441,10 +475,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 111399,
+        "latency_ms": 104863,
         "usage": {
-          "prompt_eval_count": 749,
-          "eval_count": 241
+          "prompt_eval_count": 1323,
+          "eval_count": 749
         },
         "structured_output_success": true,
         "error": null
@@ -458,9 +492,9 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 90840,
+        "latency_ms": 21044,
         "usage": {
-          "prompt_eval_count": 1031,
+          "prompt_eval_count": 1176,
           "eval_count": 107
         },
         "structured_output_success": true,
@@ -475,10 +509,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 68344,
+        "latency_ms": 25538,
         "usage": {
-          "prompt_eval_count": 897,
-          "eval_count": 227
+          "prompt_eval_count": 1073,
+          "eval_count": 268
         },
         "structured_output_success": true,
         "error": null
@@ -492,10 +526,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 175915,
+        "latency_ms": 97503,
         "usage": {
-          "prompt_eval_count": 1420,
-          "eval_count": 339
+          "prompt_eval_count": 2175,
+          "eval_count": 544
         },
         "structured_output_success": true,
         "error": null
@@ -528,6 +562,7 @@
       "qwen3.5:4b",
       "qwen3.5:9b",
       "qwen3.5:9b",
+      "qwen3.5:9b",
       "qwen3.5:4b",
       "qwen3.5:9b",
       "qwen3.5:9b",
@@ -541,23 +576,38 @@
     ],
     "rag_sources": [
       "api-design-guidelines.md",
-      "architecture-guidelines.md",
       "security-guidelines.md",
       "owasp-api-security.md",
-      "testing-strategy.md"
+      "testing-strategy.md",
+      "coding-standards.md"
     ],
     "tools_used": [
       "scenario_acceptance",
       "list_files",
       "list_files",
+      "search_code",
+      "search_code",
+      "search_code",
+      "read_file",
+      "read_file",
       "scan_dependencies",
       "run_security_scan",
       "run_tests",
       "list_files",
+      "search_code",
+      "search_code",
+      "search_code",
+      "read_file",
+      "read_file",
       "scan_dependencies",
       "run_security_scan",
       "run_tests",
       "list_files",
+      "search_code",
+      "search_code",
+      "search_code",
+      "read_file",
+      "read_file",
       "scan_dependencies",
       "run_security_scan",
       "run_tests"
@@ -565,25 +615,40 @@
     "tool_evidence": [
       "mcp://repository/list_files",
       "mcp://repository/list_files",
+      "mcp://repository/search_code",
+      "mcp://repository/search_code",
+      "mcp://repository/search_code",
+      "mcp://repository/read_file",
+      "mcp://repository/read_file",
       "mcp://quality/scan_dependencies",
       "mcp://quality/run_security_scan",
       "mcp://quality/run_tests",
       "mcp://repository/list_files",
+      "mcp://repository/search_code",
+      "mcp://repository/search_code",
+      "mcp://repository/search_code",
+      "mcp://repository/read_file",
+      "mcp://repository/read_file",
       "mcp://quality/scan_dependencies",
       "mcp://quality/run_security_scan",
       "mcp://quality/run_tests",
       "mcp://repository/list_files",
+      "mcp://repository/search_code",
+      "mcp://repository/search_code",
+      "mcp://repository/search_code",
+      "mcp://repository/read_file",
+      "mcp://repository/read_file",
       "mcp://quality/scan_dependencies",
       "mcp://quality/run_security_scan",
       "mcp://quality/run_tests"
     ],
-    "trace_id": "559e46dca7e0b8aff62fe47682b817e1",
+    "trace_id": "b544c2cc741f6abf0c9c6d0c99bcf532",
     "langfuse_live": true,
     "pass": true,
-    "duration": 1600.6597044999944,
-    "llm_calls": 14,
-    "tool_calls": 14,
-    "retrievals": 5,
+    "duration": 1037.371147374999,
+    "llm_calls": 15,
+    "tool_calls": 29,
+    "retrievals": 12,
     "errors": [],
     "acceptance_evidence": [
       "unsafe_non_expiring_requirement=must_reject",
@@ -599,10 +664,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 75448,
+        "latency_ms": 27959,
         "usage": {
-          "prompt_eval_count": 633,
-          "eval_count": 165
+          "prompt_eval_count": 631,
+          "eval_count": 196
         },
         "structured_output_success": true,
         "error": null
@@ -616,10 +681,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 48780,
+        "latency_ms": 17549,
         "usage": {
-          "prompt_eval_count": 791,
-          "eval_count": 90
+          "prompt_eval_count": 975,
+          "eval_count": 128
         },
         "structured_output_success": true,
         "error": null
@@ -633,10 +698,95 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 113567,
+        "latency_ms": 95814,
         "usage": {
-          "prompt_eval_count": 744,
-          "eval_count": 238
+          "prompt_eval_count": 1176,
+          "eval_count": 611
+        },
+        "structured_output_success": true,
+        "error": null
+      },
+      {
+        "agent": "Security",
+        "provider": "ollama",
+        "requested_model": "qwen3.5:9b",
+        "actual_model": "qwen3.5:9b",
+        "model_profile": "DEEP_MODEL",
+        "fallback_used": false,
+        "fallback_reason": null,
+        "degraded": true,
+        "latency_ms": 74785,
+        "usage": {
+          "prompt_eval_count": 1262,
+          "eval_count": 550
+        },
+        "structured_output_success": false,
+        "error": "LLM_QUALITY_ERROR: governed artifact contradiction"
+      },
+      {
+        "agent": "Security",
+        "provider": "ollama",
+        "requested_model": "qwen3.5:9b",
+        "actual_model": "qwen3.5:9b",
+        "model_profile": "DEEP_MODEL",
+        "fallback_used": false,
+        "fallback_reason": null,
+        "degraded": false,
+        "latency_ms": 28154,
+        "usage": {
+          "prompt_eval_count": 407,
+          "eval_count": 224
+        },
+        "structured_output_success": true,
+        "error": null
+      },
+      {
+        "agent": "Testing",
+        "provider": "ollama",
+        "requested_model": "qwen3.5:4b",
+        "actual_model": "qwen3.5:4b",
+        "model_profile": "FAST_MODEL",
+        "fallback_used": false,
+        "fallback_reason": null,
+        "degraded": false,
+        "latency_ms": 26716,
+        "usage": {
+          "prompt_eval_count": 1076,
+          "eval_count": 268
+        },
+        "structured_output_success": true,
+        "error": null
+      },
+      {
+        "agent": "Reviewer",
+        "provider": "ollama",
+        "requested_model": "qwen3.5:9b",
+        "actual_model": "qwen3.5:9b",
+        "model_profile": "DEEP_MODEL",
+        "fallback_used": false,
+        "fallback_reason": null,
+        "degraded": false,
+        "latency_ms": 93676,
+        "usage": {
+          "prompt_eval_count": 2160,
+          "eval_count": 542
+        },
+        "structured_output_success": true,
+        "error": null
+      },
+      {
+        "agent": "Developer",
+        "provider": "ollama",
+        "requested_model": "qwen3.5:9b",
+        "actual_model": "qwen3.5:9b",
+        "model_profile": "CODING_MODEL",
+        "fallback_used": false,
+        "fallback_reason": null,
+        "degraded": false,
+        "latency_ms": 92922,
+        "usage": {
+          "prompt_eval_count": 1327,
+          "eval_count": 611
         },
         "structured_output_success": true,
         "error": null
@@ -650,9 +800,9 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 125439,
+        "latency_ms": 37979,
         "usage": {
-          "prompt_eval_count": 1113,
+          "prompt_eval_count": 1295,
           "eval_count": 233
         },
         "structured_output_success": true,
@@ -667,10 +817,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 63468,
+        "latency_ms": 21868,
         "usage": {
-          "prompt_eval_count": 817,
-          "eval_count": 206
+          "prompt_eval_count": 1103,
+          "eval_count": 197
         },
         "structured_output_success": true,
         "error": null
@@ -684,10 +834,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 179314,
+        "latency_ms": 106301,
         "usage": {
-          "prompt_eval_count": 1428,
-          "eval_count": 355
+          "prompt_eval_count": 2365,
+          "eval_count": 643
         },
         "structured_output_success": true,
         "error": null
@@ -701,10 +851,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 84814,
+        "latency_ms": 85580,
         "usage": {
-          "prompt_eval_count": 763,
-          "eval_count": 238
+          "prompt_eval_count": 1405,
+          "eval_count": 611
         },
         "structured_output_success": true,
         "error": null
@@ -718,9 +868,9 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 122188,
+        "latency_ms": 43651,
         "usage": {
-          "prompt_eval_count": 1146,
+          "prompt_eval_count": 1322,
           "eval_count": 233
         },
         "structured_output_success": true,
@@ -735,10 +885,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 71924,
+        "latency_ms": 38629,
         "usage": {
-          "prompt_eval_count": 844,
-          "eval_count": 216
+          "prompt_eval_count": 1124,
+          "eval_count": 205
         },
         "structured_output_success": true,
         "error": null
@@ -752,78 +902,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 200223,
+        "latency_ms": 236021,
         "usage": {
-          "prompt_eval_count": 1521,
-          "eval_count": 397
-        },
-        "structured_output_success": true,
-        "error": null
-      },
-      {
-        "agent": "Developer",
-        "provider": "ollama",
-        "requested_model": "qwen3.5:9b",
-        "actual_model": "qwen3.5:9b",
-        "model_profile": "CODING_MODEL",
-        "fallback_used": false,
-        "fallback_reason": null,
-        "degraded": false,
-        "latency_ms": 88588,
-        "usage": {
-          "prompt_eval_count": 776,
-          "eval_count": 238
-        },
-        "structured_output_success": true,
-        "error": null
-      },
-      {
-        "agent": "Security",
-        "provider": "ollama",
-        "requested_model": "qwen3.5:9b",
-        "actual_model": "qwen3.5:9b",
-        "model_profile": "DEEP_MODEL",
-        "fallback_used": false,
-        "fallback_reason": null,
-        "degraded": false,
-        "latency_ms": 122602,
-        "usage": {
-          "prompt_eval_count": 1173,
-          "eval_count": 233
-        },
-        "structured_output_success": true,
-        "error": null
-      },
-      {
-        "agent": "Testing",
-        "provider": "ollama",
-        "requested_model": "qwen3.5:4b",
-        "actual_model": "qwen3.5:4b",
-        "model_profile": "FAST_MODEL",
-        "fallback_used": false,
-        "fallback_reason": null,
-        "degraded": false,
-        "latency_ms": 63437,
-        "usage": {
-          "prompt_eval_count": 865,
-          "eval_count": 149
-        },
-        "structured_output_success": true,
-        "error": null
-      },
-      {
-        "agent": "Reviewer",
-        "provider": "ollama",
-        "requested_model": "qwen3.5:9b",
-        "actual_model": "qwen3.5:9b",
-        "model_profile": "DEEP_MODEL",
-        "fallback_used": false,
-        "fallback_reason": null,
-        "degraded": false,
-        "latency_ms": 204568,
-        "usage": {
-          "prompt_eval_count": 1608,
-          "eval_count": 439
+          "prompt_eval_count": 2557,
+          "eval_count": 735
         },
         "structured_output_success": true,
         "error": null
@@ -869,8 +951,8 @@
     "rag_sources": [
       "api-design-guidelines.md",
       "architecture-guidelines.md",
-      "security-guidelines.md",
       "owasp-api-security.md",
+      "security-guidelines.md",
       "testing-strategy.md",
       "coding-standards.md"
     ],
@@ -878,14 +960,32 @@
       "scenario_acceptance",
       "list_files",
       "list_files",
+      "search_code",
+      "search_code",
+      "search_code",
+      "read_file",
+      "read_file",
+      "read_file",
       "scan_dependencies",
       "run_security_scan",
       "run_tests",
       "list_files",
+      "search_code",
+      "search_code",
+      "search_code",
+      "read_file",
+      "read_file",
+      "read_file",
       "scan_dependencies",
       "run_security_scan",
       "run_tests",
       "list_files",
+      "search_code",
+      "search_code",
+      "search_code",
+      "read_file",
+      "read_file",
+      "read_file",
       "scan_dependencies",
       "run_security_scan",
       "run_tests"
@@ -893,25 +993,43 @@
     "tool_evidence": [
       "mcp://repository/list_files",
       "mcp://repository/list_files",
+      "mcp://repository/search_code",
+      "mcp://repository/search_code",
+      "mcp://repository/search_code",
+      "mcp://repository/read_file",
+      "mcp://repository/read_file",
+      "mcp://repository/read_file",
       "mcp://quality/scan_dependencies",
       "mcp://quality/run_security_scan",
       "mcp://quality/run_tests",
       "mcp://repository/list_files",
+      "mcp://repository/search_code",
+      "mcp://repository/search_code",
+      "mcp://repository/search_code",
+      "mcp://repository/read_file",
+      "mcp://repository/read_file",
+      "mcp://repository/read_file",
       "mcp://quality/scan_dependencies",
       "mcp://quality/run_security_scan",
       "mcp://quality/run_tests",
       "mcp://repository/list_files",
+      "mcp://repository/search_code",
+      "mcp://repository/search_code",
+      "mcp://repository/search_code",
+      "mcp://repository/read_file",
+      "mcp://repository/read_file",
+      "mcp://repository/read_file",
       "mcp://quality/scan_dependencies",
       "mcp://quality/run_security_scan",
       "mcp://quality/run_tests"
     ],
-    "trace_id": "edb28b450fee1774ade9c66da5baf468",
+    "trace_id": "5b47f4ba5a948147e8ceb42d95840569",
     "langfuse_live": true,
     "pass": true,
-    "duration": 1730.066954399983,
+    "duration": 2086.5473711659997,
     "llm_calls": 14,
-    "tool_calls": 14,
-    "retrievals": 6,
+    "tool_calls": 32,
+    "retrievals": 12,
     "errors": [],
     "acceptance_evidence": [
       "authorization_failure=detected",
@@ -927,10 +1045,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 71233,
+        "latency_ms": 70654,
         "usage": {
-          "prompt_eval_count": 650,
-          "eval_count": 117
+          "prompt_eval_count": 651,
+          "eval_count": 269
         },
         "structured_output_success": true,
         "error": null
@@ -944,10 +1062,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 48643,
+        "latency_ms": 27429,
         "usage": {
-          "prompt_eval_count": 797,
-          "eval_count": 90
+          "prompt_eval_count": 977,
+          "eval_count": 126
         },
         "structured_output_success": true,
         "error": null
@@ -961,10 +1079,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 114151,
+        "latency_ms": 199877,
         "usage": {
-          "prompt_eval_count": 755,
-          "eval_count": 244
+          "prompt_eval_count": 1343,
+          "eval_count": 761
         },
         "structured_output_success": true,
         "error": null
@@ -978,9 +1096,9 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 151454,
+        "latency_ms": 103511,
         "usage": {
-          "prompt_eval_count": 1113,
+          "prompt_eval_count": 1260,
           "eval_count": 319
         },
         "structured_output_success": true,
@@ -995,10 +1113,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 63935,
+        "latency_ms": 50262,
         "usage": {
-          "prompt_eval_count": 898,
-          "eval_count": 152
+          "prompt_eval_count": 1076,
+          "eval_count": 267
         },
         "structured_output_success": true,
         "error": null
@@ -1012,10 +1130,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 198619,
+        "latency_ms": 163615,
         "usage": {
-          "prompt_eval_count": 1505,
-          "eval_count": 369
+          "prompt_eval_count": 2170,
+          "eval_count": 549
         },
         "structured_output_success": true,
         "error": null
@@ -1029,10 +1147,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 99817,
+        "latency_ms": 198511,
         "usage": {
-          "prompt_eval_count": 836,
-          "eval_count": 244
+          "prompt_eval_count": 1573,
+          "eval_count": 761
         },
         "structured_output_success": true,
         "error": null
@@ -1046,9 +1164,9 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 154303,
+        "latency_ms": 86004,
         "usage": {
-          "prompt_eval_count": 1146,
+          "prompt_eval_count": 1293,
           "eval_count": 319
         },
         "structured_output_success": true,
@@ -1063,10 +1181,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 68155,
+        "latency_ms": 38371,
         "usage": {
-          "prompt_eval_count": 925,
-          "eval_count": 160
+          "prompt_eval_count": 1103,
+          "eval_count": 196
         },
         "structured_output_success": true,
         "error": null
@@ -1080,10 +1198,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 215403,
+        "latency_ms": 247227,
         "usage": {
-          "prompt_eval_count": 1598,
-          "eval_count": 411
+          "prompt_eval_count": 2389,
+          "eval_count": 651
         },
         "structured_output_success": true,
         "error": null
@@ -1097,10 +1215,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 84226,
+        "latency_ms": 414827,
         "usage": {
-          "prompt_eval_count": 849,
-          "eval_count": 244
+          "prompt_eval_count": 1664,
+          "eval_count": 761
         },
         "structured_output_success": true,
         "error": null
@@ -1114,9 +1232,9 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 142813,
+        "latency_ms": 108186,
         "usage": {
-          "prompt_eval_count": 1173,
+          "prompt_eval_count": 1320,
           "eval_count": 319
         },
         "structured_output_success": true,
@@ -1131,10 +1249,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 66490,
+        "latency_ms": 62852,
         "usage": {
-          "prompt_eval_count": 946,
-          "eval_count": 168
+          "prompt_eval_count": 1124,
+          "eval_count": 204
         },
         "structured_output_success": true,
         "error": null
@@ -1148,10 +1266,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 217167,
+        "latency_ms": 299012,
         "usage": {
-          "prompt_eval_count": 1685,
-          "eval_count": 453
+          "prompt_eval_count": 2602,
+          "eval_count": 753
         },
         "structured_output_success": true,
         "error": null
