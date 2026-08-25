@@ -46,8 +46,9 @@ def test_real_sentence_transformers_chroma_match_and_persistence(tmp_path) -> No
     assert all(item.source and item.section and item.chunk_id and item.fragment for item in evidence)
     assert all(item.domain in {"security", "owasp"} for item in evidence)
     assert retriever.pipeline == [
-        "Documents", "loader", "chunking", "Sentence Transformers", "embeddings",
-        "Chroma", "specialized retriever", "RetrievedEvidence", "agent",
+        "source documents", "LangChain Document", "LangChain text splitting",
+        "Sentence Transformers", "embeddings", "Chroma", "specialized retriever",
+        "RetrievedEvidence", "agent",
     ]
 
     reopened = ChromaIndex(index_path, collection_name="acceptance-rag")

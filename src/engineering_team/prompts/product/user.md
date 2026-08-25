@@ -1,1 +1,2 @@
-Requirement: {requirement}\nSchema: {output_schema}
+Requirement: {requirement}
+Output schema summary: {output_schema}

@@ -497,6 +497,84 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** Un operador puede reproducir la demostración sin introducir
   UI compleja, bonus adicionales ni cambios de contratos SDD.
 
+## FASE 9 — REMEDIACIÓN FINAL DE CUMPLIMIENTO
+
+### [X] T028 — Servidores y cliente MCP mediante protocolo real
+
+- **Objetivo:** Exponer Repository y Quality como MCP Servers reales y
+  consumir sus tools desde el grafo mediante una sesión oficial MCP por stdio.
+- **FR/NFR:** FR-025, FR-041–045, FR-065, FR-067; NFR-011–014, NFR-018.
+- **Dependencias:** T012, T014, T022–T023.
+- **Módulos/archivos:** `mcp/` server bootstrap/client adapter, composición del
+  grafo y pruebas `tests/mcp/`/`tests/integration/`.
+- **Validaciones/tests:** RED/GREEN para sesión/protocolo real, discovery,
+  list/read/run_tests, allowlists, traversal y cadena FAILED→REJECTED→remediation.
+- **Done When:** La evidencia principal atraviesa cliente, protocolo y server
+  MCP reales; una falla cambia estado/routing.
+
+### [X] T029 — LangChain productivo en el pipeline RAG
+
+- **Objetivo:** Usar las abstracciones oficiales LangChain Document y text
+  splitter dentro de la ingesta real, preservando embeddings y Chroma actuales.
+- **FR/NFR:** FR-035–040, FR-074; NFR-004, NFR-008.
+- **Dependencias:** T010–T011.
+- **Módulos/archivos:** `rag/loaders.py`, dependencias oficiales
+  mínimas y pruebas RAG.
+- **Validaciones/tests:** RED/GREEN que demuestre el componente LangChain real,
+  metadata/provenance, match, NO_RELEVANT_DOCS y persistencia Chroma.
+- **Done When:** LangChain tiene responsabilidad productiva verificable sin
+  reemplazar LangGraph, Sentence Transformers ni Chroma.
+
+### [X] T030 — Propuesta técnica Developer detallada y segura
+
+- **Objetivo:** Producir un candidate determinístico rico y evidence-backed
+  para PROPOSED sin permitir archivos o evidencia inventados.
+- **FR/NFR:** FR-023–027, FR-044, FR-049; NFR-006, NFR-011–013.
+- **Dependencias:** T018, T028.
+- **Módulos/archivos:** `agents/developer.py`, semantic guard relacionado y
+  pruebas Developer.
+- **Validaciones/tests:** RED/GREEN para propuesta no vacía, paths inspeccionados,
+  pseudodiff, evidencia, validación, superficie security y facts gobernados.
+- **Done When:** Un resultado normal no queda vacío y cualquier no-op está
+  específicamente justificado.
+
+### [X] T031 — Evaluación LIVE local de cinco escenarios y métricas
+
+- **Objetivo:** Añadir un modo reproducible separado que ejecute SC-01–SC-05
+  mediante ModelRouter/LocalModelRuntime reales y derive métricas observadas.
+- **FR/NFR:** FR-048–049, FR-071–076; NFR-007, NFR-009, NFR-015–016.
+- **Dependencias:** T024–T026, T030.
+- **Módulos/archivos:** evaluación, script CLI, pruebas E2E y reportes LIVE
+  separados.
+- **Validaciones/tests:** Cinco outcomes inmutables, LLM calls > 0, latencias
+  por agente/modelo, 3 APPROVED/2 REJECTED, multi-model local sin cloud.
+- **Done When:** Reportes LIVE contienen solo métricas derivadas de ejecuciones
+  reales y no sobrescriben los reportes determinísticos.
+
+### [X] T032 — Prompts, evidencia y documentación de remediación
+
+- **Objetivo:** Fortalecer concisamente los seis system prompts y documentar
+  MCP protocol, LangChain RAG, evaluación LIVE y evidencia sanitizada.
+- **FR/NFR:** FR-008, FR-078–085; NFR-012, NFR-015–016.
+- **Dependencias:** T028–T031.
+- **Módulos/archivos:** prompts, README, docs/diagramas/runbook y
+  `docs/evidence/final-audit.md`.
+- **Validaciones/tests:** Contenido contractual mínimo, comandos reproducibles,
+  run_id/trace_id reales y ausencia de secretos.
+- **Done When:** La documentación distingue LangGraph/LangChain/RAG/MCP y
+  permite reproducir la evidencia final.
+
+### [X] T033 — Regresión y acceptance final
+
+- **Objetivo:** Ejecutar todos los gates focalizados, suite completa, Ruff y
+  smokes LIVE requeridos sin regresiones ni evidencia falsa.
+- **FR/NFR:** Todos los afectados por T028–T032.
+- **Dependencias:** T028–T032.
+- **Validaciones/tests:** MCP, RAG/LangChain, Developer, graph/integration, E2E,
+  Ruff, pytest completo, MCP LIVE, 4B/9B LIVE, cinco escenarios y Langfuse LIVE.
+- **Done When:** Todos los gates de Definition of Done pasan, secretos/caches
+  quedan fuera de Git y el commit aprobado se publica en el branch actual.
+
 ## MATRIZ DE TRAZABILIDAD FR/NFR → TASK(S)
 
 | FR/NFR | Task(s) |
@@ -506,26 +584,27 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 | FR-006–009 | T002–T004, T015 |
 | FR-010–020 | T008–T009, T022–T023 |
 | FR-021–022 | T002, T016–T017 |
-| FR-023–027 | T012, T018 |
+| FR-023–027 | T012, T018, T030 |
 | FR-028–029 | T002, T019 |
 | FR-030–031 | T002, T013, T020 |
 | FR-032–034 | T002, T009, T021 |
-| FR-035–040 | T010–T011, T017, T019–T020 |
-| FR-041 | T012 |
-| FR-042 | T014 |
-| FR-043–045 | T012, T014, T018–T020, T023 |
+| FR-035–040 | T010–T011, T017, T019–T020, T029 |
+| FR-041 | T012, T028 |
+| FR-042 | T014, T028 |
+| FR-043–045 | T012, T014, T018–T020, T023, T028 |
 | FR-046–050 | T001, T005–T006, T016–T021, T026 |
 | FR-051–059 | T001, T003, T007, T023 |
 | FR-060–061 | T006, T024 |
 | FR-062–069 | T003, T006–T007, T009, T023 |
 | FR-070 | T002, T021–T022 |
-| FR-071–073 | T013, T025 |
-| FR-074 | T010–T011, T027 |
-| FR-075–076 | T024–T026, T027 |
+| FR-071–073 | T013, T025, T031 |
+| FR-074 | T010–T011, T027, T029 |
+| FR-075–076 | T024–T027, T031 |
 | FR-077 | T007, T023 |
-| FR-078–086 | T024–T027 |
+| FR-078–086 | T024–T027, T032 |
+| Remediación MCP/LangChain/Developer/LIVE | T028–T033 |
 | NFR-001–003 | T001, T013 |
-| NFR-004 | T006, T011, T022 |
+| NFR-004 | T006, T011, T022, T029 |
 | NFR-005–006 | T002–T004, T008–T009 |
 | NFR-007–010 | T005–T007, T022, T026 |
 | NFR-011–014 | T003, T007, T012, T014, T023 |
@@ -547,6 +626,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 | Langfuse, métricas y reportes | T024–T026 |
 | Sample app, escenarios y E2E | T013, T025–T026 |
 | Documentación, diagramas y demo | T027 |
+| MCP protocol, LangChain RAG y evaluación LIVE | T028–T033 |
 
 ## REQUISITOS SIN COBERTURA
 

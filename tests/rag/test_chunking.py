@@ -1,3 +1,5 @@
+from langchain_core.documents import Document
+
 from engineering_team.rag.loaders import chunk_document, load_documents
 
 
@@ -23,5 +25,24 @@ def test_markdown_loader_preserves_sections(tmp_path) -> None:
 
     documents = load_documents(tmp_path)
 
-    assert documents[0].domain == "security"
-    assert documents[0].section == "Security / Authorization"
+    assert isinstance(documents[0], Document)
+    assert documents[0].metadata["domain"] == "security"
+    assert documents[0].metadata["section"] == "Security / Authorization"
+
+
+def test_rag_ingestion_uses_langchain_document_and_text_splitter(tmp_path) -> None:
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+    from engineering_team.rag.loaders import build_text_splitter, chunk_documents
+
+    source = tmp_path / "architecture-guidelines.md"
+    source.write_text("# Boundaries\n\n" + "bounded context " * 300, encoding="utf-8")
+    documents = load_documents(tmp_path)
+    splitter = build_text_splitter(chunk_size=80, overlap=16)
+    chunks = chunk_documents(documents, chunk_size=80, overlap=16)
+
+    assert all(isinstance(item, Document) for item in documents)
+    assert isinstance(splitter, RecursiveCharacterTextSplitter)
+    assert len(chunks) > 1
+    assert all(item.source == source.name for item in chunks)
+    assert all(item.section == "Boundaries" for item in chunks)

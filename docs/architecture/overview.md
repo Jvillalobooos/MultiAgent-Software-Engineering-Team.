@@ -20,3 +20,9 @@ repository contents or tool permissions.
 Workspaces are copied to `workspace/runs/<run_id>` and Repository MCP resolves
 every path beneath that copy. Cloud remains a sanitized, bounded contingency,
 not an orchestrator or multi-model substitute.
+
+RAG ingestion uses LangChain Document and RecursiveCharacterTextSplitter as a
+small integration layer before Sentence Transformers and persistent Chroma.
+Tool execution crosses the official MCP stdio protocol through
+`MCPRepositoryClient`/`MCPQualityClient` into independently exposed Repository
+and Quality MCP Server surfaces; bounded backends retain sandbox and allowlists.

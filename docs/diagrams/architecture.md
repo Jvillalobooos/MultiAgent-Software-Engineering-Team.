@@ -4,14 +4,16 @@
 flowchart LR
     U[User / CLI] --> G[LangGraph StateGraph]
     G --> A[Six specialized agents]
-    A --> R[Sentence Transformers + Chroma RAG]
-    A --> M[Repository MCP / Quality MCP]
+    A --> R[LangChain Document + splitter]
+    R --> E[Sentence Transformers + Chroma RAG]
+    A --> MC[MCP Client]
+    MC --> MS[Repository / Quality MCP Server via stdio]
     A --> O[Ollama 4B / 9B]
-    R --> K[Local knowledge documents]
-    M --> W[Isolated run workspace]
+    E --> K[Local knowledge documents]
+    MS --> W[Isolated run workspace / pytest / ruff / scans]
     G --> L[Langfuse root trace]
-    R --> L
-    M --> L
+    E --> L
+    MC --> L
     O --> L
     C[Optional Gemini / Groq fallback] -. governed contingency .-> A
     C --> L

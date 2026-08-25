@@ -20,6 +20,7 @@ when already present.
 $env:HF_HUB_OFFLINE='1'
 $env:TRANSFORMERS_OFFLINE='1'
 .\.venv\Scripts\python.exe -m pytest tests/rag -q
+.\.venv\Scripts\python.exe -m pytest tests/mcp/test_protocol.py -q
 .\.venv\Scripts\python.exe -m pytest tests/graph tests/mcp tests/integration -q
 ```
 
@@ -37,6 +38,16 @@ Get-Content evaluation/reports/aggregate.json
 
 Observe SC-01..SC-03 APPROVED and SC-04..SC-05 REJECTED with `pass: true`,
 RAG provenance, Quality MCP tools, Reviewer scores and trace IDs.
+
+```powershell
+.\.venv\Scripts\python.exe scripts/run_evaluation.py --live-models
+Get-Content evaluation/reports/scenarios-live.json
+Get-Content evaluation/reports/aggregate-live.json
+```
+
+The LIVE files must show `llm_calls > 0`, latency for qwen3.5:4b/9b,
+`langfuse_live: true`, and `mcp://` tool evidence. This is the primary local
+five-scenario and multi-model evidence; the fast mode remains for regression.
 
 ## 4. Normal real multi-model run
 

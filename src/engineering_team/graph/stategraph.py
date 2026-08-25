@@ -135,6 +135,13 @@ def build_engineering_graph(
         AgentRole.TESTING: "test_results", AgentRole.REVIEWER: "review",
     }
 
+    def mcp_trace_metadata(adapter: Any) -> dict[str, Any]:
+        return {
+            "transport": getattr(adapter, "transport", "direct-backend"),
+            "protocol_version": getattr(adapter, "last_protocol_version", None),
+            "server": getattr(adapter, "last_server_name", type(adapter).__name__),
+        }
+
     def make_node(role: AgentRole):
         def node(raw_state: dict[str, Any]) -> dict[str, Any]:
             current = EngineeringState.model_validate(raw_state)
@@ -160,12 +167,18 @@ def build_engineering_graph(
                 result = repository_mcp.list_files(role)
                 tool_results.append(result)
                 if trace is not None:
-                    trace.record("MCP call", as_type="tool", output=result.model_dump(mode="json"))
+                    trace.record(
+                        "MCP call", as_type="tool", output=result.model_dump(mode="json"),
+                        metadata=mcp_trace_metadata(repository_mcp),
+                    )
             if quality_mcp is not None and role is AgentRole.TESTING:
                 result = quality_mcp.run_tests(role, test_paths)
                 tool_results.append(result)
                 if trace is not None:
-                    trace.record("MCP call", as_type="tool", output=result.model_dump(mode="json"))
+                    trace.record(
+                        "MCP call", as_type="tool", output=result.model_dump(mode="json"),
+                        metadata=mcp_trace_metadata(quality_mcp),
+                    )
             if quality_mcp is not None and role is AgentRole.SECURITY:
                 operations = [
                     getattr(quality_mcp, name) for name in (
@@ -177,7 +190,8 @@ def build_engineering_graph(
                     tool_results.append(result)
                     if trace is not None:
                         trace.record(
-                            "MCP call", as_type="tool", output=result.model_dump(mode="json")
+                            "MCP call", as_type="tool", output=result.model_dump(mode="json"),
+                            metadata=mcp_trace_metadata(quality_mcp),
                         )
             current = current.model_copy(
                 update={"rag_evidence": rag_evidence, "errors": errors, "tool_results": tool_results}
@@ -189,7 +203,8 @@ def build_engineering_graph(
                 attempt_start = len(model_runtime.attempts)
                 try:
                     output, model_info = model_runtime.invoke_artifact(role, envelope, candidate)
-                    model_usage.append(model_info)
+                    attempts = model_runtime.attempts[attempt_start:]
+                    model_usage.extend(attempts or [model_info])
                 except RuntimeError as exc:
                     model_usage.extend(model_runtime.attempts[attempt_start:])
                     message = str(exc)

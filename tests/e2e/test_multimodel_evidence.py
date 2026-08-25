@@ -41,3 +41,8 @@ def test_one_normal_run_invokes_both_local_models_through_router(tmp_path) -> No
     assert all(not item["fallback_used"] and item["error"] is None for item in evidence["model_usage"])
     assert evidence["bonus_pass"] is True
     assert evidence["trace_id"]
+    assert evidence["trace_events"]
+    assert all(
+        "input" not in event and "output" not in event
+        for event in evidence["trace_events"]
+    )

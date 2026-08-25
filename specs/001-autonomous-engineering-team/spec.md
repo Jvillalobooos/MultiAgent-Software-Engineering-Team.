@@ -73,8 +73,8 @@ Each requirement names the minimum evidence by which it shall be verified.
 | FR-021 | Product SHALL produce a structured specification containing objective, actors, business rules, constraints, acceptance criteria, non-functional requirements, ambiguities, and assumptions. | Validated Product output containing every named field. |
 | FR-022 | Architecture SHALL produce components, APIs, data changes, integrations, dependencies, decisions, risks, impact, and RAG evidence/sources. | Validated Architecture output and linked retrieval evidence. |
 | FR-023 | Developer SHALL consume the validated Product specification and Architecture output for the current run. | Developer input evidence referencing both artifacts. |
-| FR-024 | Developer SHALL inspect actual context from the authorized workspace before proposing or applying a change. | Repository tool evidence preceding the Developer result. |
-| FR-025 | Developer SHALL use Repository MCP for repository inspection and authorized workspace changes. | Repository MCP calls linked to the Developer span. |
+| FR-024 | Developer SHALL inspect actual context from the authorized workspace before proposing or applying a change and SHALL produce a concrete technical proposal grounded in inspected files; an empty proposal is permitted only with a specific evidence-backed no-op justification. | Repository tool evidence preceding a non-empty Developer proposal or its explicit no-op justification. |
+| FR-025 | Developer SHALL use Repository MCP through a real Model Context Protocol client/server session for repository inspection and authorized workspace changes. | Protocol-level Repository MCP calls linked to the Developer span. |
 | FR-026 | Developer SHALL distinguish whether its result only proposes changes or applies authorized changes. | Explicit action mode in the validated Developer output. |
 | FR-027 | Developer SHALL preserve `changed_files`, `diff`, `evidence`, and `validation_result` in its structured output. | Validated Developer output containing every named field. |
 | FR-028 | Security SHALL evaluate authentication, authorization, input validation, sensitive information, secrets, injection, access control, IDOR, secure logging, data protection, API abuse, rate limiting, and applicable OWASP risks. | Security checklist with a result for every category. |
@@ -90,7 +90,7 @@ Each requirement names the minimum evidence by which it shall be verified.
 | ID | Requirement | Required evidence |
 | --- | --- | --- |
 | FR-035 | The RAG corpus SHALL contain at least five real, non-placeholder documents. | Corpus inventory with five or more source identifiers. |
-| FR-036 | Retrieval SHALL execute the observable sequence Documents → Loaders → Chunking → Sentence Transformers → Chroma → Specialized Retriever → RetrievedEvidence → Agent. | Retrieval trace containing each ordered stage. |
+| FR-036 | Retrieval SHALL execute the observable sequence source documents → LangChain `Document` abstraction → LangChain text splitting → Sentence Transformers → Chroma → Specialized Retriever → RetrievedEvidence → Agent. | Retrieval trace and integration test containing each ordered stage and the concrete LangChain component. |
 | FR-037 | Every `RetrievedEvidence` item SHALL contain `source`, `section`, `chunk_id`, `fragment/reference`, `domain/query`, and `score` when the retriever supplies one. | Validated retrieval output. |
 | FR-038 | Architecture, Security, and Testing SHALL each have retrieval specialized for its own domain and query. | Three agent-specific retrieval traces. |
 | FR-039 | A retrieval with no relevant evidence SHALL return `NO_RELEVANT_DOCS`. | Empty-retrieval test and state result. |
@@ -100,11 +100,11 @@ Each requirement names the minimum evidence by which it shall be verified.
 
 | ID | Requirement | Required evidence |
 | --- | --- | --- |
-| FR-041 | Repository MCP SHALL provide `list_files`, `read_file`, `search_code`, `get_file_content`, `create_file`, `update_file`, and `get_diff`. | MCP capability discovery and contract tests. |
-| FR-042 | Quality MCP SHALL provide `run_tests`, `get_test_results`, `run_build`, `get_build_status`, `run_linter`, `scan_dependencies`, `run_security_scan`, and `get_security_report`. | MCP capability discovery and contract tests. |
+| FR-041 | A real Repository MCP Server SHALL expose `list_files`, `read_file`, `search_code`, `get_file_content`, `create_file`, `update_file`, and `get_diff` through the official Model Context Protocol, and the workflow SHALL consume it through a real MCP client session. | Server capability discovery and real protocol session tests. |
+| FR-042 | A real Quality MCP Server SHALL expose `run_tests`, `get_test_results`, `run_build`, `get_build_status`, `run_linter`, `scan_dependencies`, `run_security_scan`, and `get_security_report` through the official Model Context Protocol, and the workflow SHALL consume it through a real MCP client session. | Server capability discovery and real protocol session tests. |
 | FR-043 | Each agent SHALL be restricted to an explicit least-privilege allowlist of MCP operations. | Per-agent permission matrix and denied-operation tests. |
 | FR-044 | Every MCP result SHALL be preserved in `tool_results` and SHALL affect an applicable state field, validation, or routing decision. | Tool-result-to-state/route correlation. |
-| FR-045 | The system SHALL demonstrate `run_tests=FAILED` → `TestResult=FAIL` → `Reviewer=REJECTED` → remediation. | E2E trace of the complete failure chain. |
+| FR-045 | The system SHALL demonstrate LangGraph → real MCP client/session → MCP Server → `run_tests=FAILED` → `TestResult=FAIL` → `Reviewer=REJECTED` → remediation. | E2E trace of the complete protocol-backed failure chain. |
 
 ### 4.5 Multi-model local bonus and cloud contingency
 
@@ -140,11 +140,11 @@ Each requirement names the minimum evidence by which it shall be verified.
 | FR-068 | Invalid structured agent output, including Pydantic validation failure, SHALL be rejected before state mutation, recorded as `LLM_QUALITY_ERROR`, and receive at most one local repair before an eligible bounded fallback. | Schema-validation fault-injection trace. |
 | FR-069 | An agent timeout SHALL cancel the timed-out attempt, record `AGENT_TIMEOUT`, preserve completed evidence, and follow the bounded local retry and availability policy. | Timeout fault-injection trace. |
 | FR-070 | The final output SHALL be a `FinalReport` containing FEATURE, STATUS, REQUIREMENTS, ARCHITECTURE, SECURITY, TESTING, IMPLEMENTATION, RISK, ITERATIONS, DOCUMENTATION USED, TOOLS EXECUTED, MODELS USED, ERRORS / DEGRADATIONS, TRACE ID, and NEXT ACTION. | Validated FinalReport containing every named field. |
-| FR-071 | The evaluation suite SHALL define and execute exactly the five scenarios SC-01 through SC-05 in Section 7. | Evaluation manifest and five result records. |
+| FR-071 | The evaluation suite SHALL define and execute exactly the five scenarios SC-01 through SC-05 in Section 7, preserving a fast deterministic mode and providing a reproducible LIVE mode that invokes the real local ModelRouter and LocalModelRuntime. | Deterministic manifest plus five separate LIVE result records with local model calls. |
 | FR-072 | Every scenario result SHALL preserve `expected_status`, `observed_status`, `status_match`, `expected_security_signal`, `observed_findings`, `reviewer_score`, `iterations`, `models_used`, `rag_sources`, `tools_used`, `trace_id`, and `pass`. | Validated result for each scenario. |
 | FR-073 | Every scenario SHALL report scores for Requirements completeness, Architecture correctness, Security compliance, Testing completeness, Implementation consistency, and RAG grounding. | Scenario evaluation records containing all six dimensions. |
 | FR-074 | The RAG documentation SHALL define and technically justify the chunking strategy, chunk size, overlap, embedding model, vector database, retrieval count/top_k, relevance criterion, specialized retrievers or metadata filters, and `NO_RELEVANT_DOCS` policy; parameters SHALL be externally configurable when applicable, and this requirement SHALL NOT fix their concrete values. | Versioned RAG documentation, configuration evidence where applicable, and a justification review. |
-| FR-075 | The evaluation report SHALL derive from real executions and/or Langfuse evidence an aggregate report containing average duration, average LLM calls, average iterations, average tokens/usage when providers expose it, average tool calls, average retrievals, APPROVED count, REJECTED count, latency by agent, latency by model, cloud fallback count/rate, and errors grouped by type; unavailable metrics SHALL be reported as unavailable and SHALL NOT be invented. | Aggregate evaluation report linked to scenario records and Langfuse traces. |
+| FR-075 | The LIVE evaluation report SHALL derive from real local-model executions and Langfuse evidence an aggregate report containing average duration, average LLM calls greater than zero, average iterations, average tokens/usage when providers expose it, average tool calls, average retrievals, APPROVED count, REJECTED count, latency by agent, latency by model, cloud fallback count/rate, structured-output success/failure, and errors grouped by type; unavailable metrics SHALL be reported as unavailable and SHALL NOT be invented. | Separate LIVE aggregate report linked to five LIVE scenario records and Langfuse traces. |
 | FR-076 | Multi-model evaluation SHALL compare, for each model/agent combination, the model used, agent, latency, tokens/usage when available, structured-output validation success/failure, expected-versus-observed outcome, observable quality/result, and fallback used when applicable; primary bonus evidence SHALL be a normal local run using both `qwen3.5:4b` and `qwen3.5:9b`, and cloud fallback SHALL NOT satisfy this evidence. | Multi-model comparison report linked to the local E2E trace and validation records. |
 | FR-077 | An agent SHALL receive at most `MAX_LOCAL_RETRIES=1` local retry only for availability or transport failures: unavailable LLM, unavailable local model, agent timeout, or transient availability-attributable error; after a repeated eligible failure, the workflow may use cloud fallback only under FR-055. | Fault-injection traces distinguishing availability retries from quality repairs. |
 | FR-078 | `README.md` SHALL document the purpose, architecture, technologies, installation, configuration, execution, environment variables, required Ollama models, optional cloud configuration, and demo commands. | README completeness review against the named topics. |
@@ -164,7 +164,7 @@ Each requirement names the minimum evidence by which it shall be verified.
 | NFR-001 | The runtime SHALL support Python 3.10 or newer. | Runtime-version test. |
 | NFR-002 | The user-facing execution interface SHALL be a CLI. | CLI acceptance test. |
 | NFR-003 | The system SHALL remain a modular monolith with explicit module boundaries and no microservice dependency. | Architecture conformance review. |
-| NFR-004 | LangChain SHALL be used only as an integration layer where it adds measurable integration value. | Dependency-use review mapped to integrations. |
+| NFR-004 | LangChain SHALL have the bounded productive responsibility of representing and splitting RAG documents; it SHALL NOT orchestrate the workflow or replace Sentence Transformers, Chroma, or LangGraph. | Runtime RAG integration test proving use of official LangChain document and splitting components. |
 | NFR-005 | LangGraph SHALL be the only workflow orchestrator. | Dependency and graph conformance test. |
 | NFR-006 | Decision-affecting structured outputs SHALL use Pydantic validation. | Schema-validation coverage report. |
 | NFR-007 | Local model inference SHALL use Ollama. | Provider evidence in a local E2E trace. |
@@ -197,14 +197,14 @@ Each requirement names the minimum evidence by which it shall be verified.
 | AC-011 | A `CRITICAL` Security finding pauses at HITL before approval, fallback, or automated remediation. |
 | AC-012 | Product output includes all fields in FR-021 and each field maps to supplied input or an explicit assumption/ambiguity. |
 | AC-013 | Architecture output includes all fields in FR-022 and every RAG-backed claim maps to retrieved provenance. |
-| AC-014 | Developer evidence shows real workspace inspection and reports action mode, changed files, diff, evidence, and validation result. |
+| AC-014 | Developer evidence shows real workspace inspection and a concrete non-empty technical proposal reporting action mode, inspected/proposed files, diff or pseudodiff, repository evidence, validation strategy/result, and security-surface impact; empty output requires a specific no-op justification. |
 | AC-015 | Security produces a result for every category in FR-028 and its structured outcome contains all fields in FR-029. |
 | AC-016 | Testing covers all categories in FR-030 and distinguishes proposed, generated, executed, and actual results. |
 | AC-017 | Reviewer scores every dimension in FR-032, emits every field in FR-033, and cannot bypass route validation. |
 | AC-018 | The RAG inventory has at least five real documents and retrieval evidence contains every applicable provenance field in FR-037. |
 | AC-019 | A no-match retrieval returns `NO_RELEVANT_DOCS`, records `RAG_ERROR`, and produces no invented source. |
-| AC-020 | MCP contract tests expose every operation in FR-041 and FR-042 and deny operations outside each agent allowlist. |
-| AC-021 | A failed `run_tests` result is preserved and produces TestResult FAIL, Reviewer REJECTED, and a remediation route. |
+| AC-020 | Real MCP server discovery exposes every operation in FR-041 and FR-042, a real client establishes a protocol session over stdio, and operations outside each agent allowlist remain denied. |
+| AC-021 | A failed `run_tests` result transported through the real MCP protocol is preserved and produces TestResult FAIL, Reviewer REJECTED, and a remediation route. |
 | AC-022 | One normal local E2E trace proves actual successful use of both `qwen3.5:4b` and `qwen3.5:9b` under the fixed agent mapping. |
 | AC-023 | The local multi-model acceptance run passes without any cloud invocation; cloud is not counted as evidence for the multi-model bonus. |
 | AC-024 | Cloud fault tests prove local-first ordering, allowed causes, fixed provider mappings, one escalation per agent, and three per run. |
@@ -220,7 +220,7 @@ Each requirement names the minimum evidence by which it shall be verified.
 | AC-034 | SC-05 passes only when observed status is REJECTED and findings identify authorization failure and IDOR. |
 | AC-035 | Each of the five scenario records contains every field in FR-072, all six scores in FR-073, and `pass=true` only when expected and observed outcomes match. |
 | AC-036 | RAG documentation identifies and justifies every parameter in FR-074 without fixing unapproved concrete parameter values, and applicable parameters are evidenced as configurable. |
-| AC-037 | An aggregate evaluation report derived from real runs and/or Langfuse contains every metric in FR-075 and marks unavailable provider metrics as unavailable rather than assigning values. |
+| AC-037 | A separate LIVE aggregate from five local-model runs contains every metric in FR-075, has LLM calls greater than zero and latency by agent/model, preserves three APPROVED and two REJECTED outcomes, and marks unavailable provider metrics as unavailable rather than assigning values. |
 | AC-038 | Multi-model evaluation compares all fields in FR-076 and proves its primary evidence through one normal local run that actually uses both `qwen3.5:4b` and `qwen3.5:9b`; cloud fallback is excluded from satisfying the bonus. |
 | AC-039 | Fault-injection evidence proves that availability failures consume at most one `MAX_LOCAL_RETRIES` retry, response-quality failures consume at most one `MAX_LOCAL_REPAIRS` repair, and each follows its distinct eligible fallback path. |
 | AC-040 | README, both required diagrams, RAG documentation, MCP documentation, verifiable complete Langfuse evidence, and the evaluation report exist and satisfy FR-078 through FR-084. |

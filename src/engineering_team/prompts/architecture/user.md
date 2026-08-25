@@ -1,1 +1,3 @@
-Requirement: {requirement}\nEvidence: {rag_evidence}\nSchema: {output_schema}
+Requirement: {requirement}
+Relevant RAG evidence: {rag_evidence}
+Output schema summary: {output_schema}

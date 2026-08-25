@@ -31,6 +31,14 @@ derived from records: duration, LLM/tool/retrieval calls, iterations, exposed
 token usage, outcomes, latency by agent/model, fallback rate, structured
 output validation and errors. Missing usage is `unavailable`, never estimated.
 
+Run `python scripts/run_evaluation.py --live-models` for the separate LIVE
+acceptance. It invokes LocalModelRuntime and ModelRouter for all five scenarios,
+uses real Repository/Quality MCP stdio sessions, exports each root trace through
+the project Langfuse adapter, and writes `scenarios-live.json` plus
+`aggregate-live.json`. LIVE acceptance requires non-zero LLM calls, measured
+latency by agent/model, both qwen3.5 tags, no cloud substitution, three
+APPROVED outcomes and two REJECTED outcomes.
+
 Run `python scripts/run_multimodel.py` for the normal real Ollama proof. Its
 record contains requested/actual model, agent, provider, profile, latency,
 usage when Ollama supplies it, structured_output_success, fallback_used and

@@ -1,1 +1,3 @@
-Task: {current_task}\nContext: {state_projection}\nTools: {allowed_tools}
+Task: {current_task}
+Relevant state: {state_projection}
+Authorized tools: {allowed_tools}

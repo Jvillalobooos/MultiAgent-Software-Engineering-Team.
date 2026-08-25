@@ -1,0 +1,29 @@
+{
+  "runs": 5,
+  "average_duration": 1055.0073436599923,
+  "average_llm_calls": 9.2,
+  "average_iterations": 1.2,
+  "average_tokens_usage": 1211.5434782608695,
+  "average_tool_calls": 9.2,
+  "average_retrievals": 5.0,
+  "approved": 3,
+  "rejected": 2,
+  "status_matches": 5,
+  "latency_by_agent": {
+    "Product": 96135.8,
+    "Architecture": 54264.4,
+    "Developer": 108673.0,
+    "Security": 121445.55555555556,
+    "Testing": 66323.66666666667,
+    "Reviewer": 191917.0
+  },
+  "latency_by_model": {
+    "qwen3.5:9b": 133718.71875,
+    "qwen3.5:4b": 62016.78571428572
+  },
+  "cloud_fallback_count": 0,
+  "cloud_fallback_rate": 0.0,
+  "structured_output_success": 46,
+  "structured_output_failure": 0,
+  "errors_by_type": {}
+}

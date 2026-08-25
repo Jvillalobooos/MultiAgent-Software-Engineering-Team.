@@ -238,7 +238,7 @@ node or model.
 | --- | --- | --- | --- | --- | --- |
 | Product | Turn a requirement into ProductSpecification; no RAG required unless product-policy corpus is later added. | `DEEP_MODEL` / `qwen3.5:9b` | Google `gemini-3.7-flash` | none | Schema/semantic failure uses one repair, then eligible cloud fallback; otherwise HUMAN_REVIEW_REQUIRED. |
 | Architecture | Produce ArchitectureProposal grounded in architecture/API sources. | `FAST_MODEL` / `qwen3.5:4b` | Google `gemini-3.7-flash` | repository read-only: list_files, read_file, search_code, get_file_content | Schema/grounding repair once; if relevant RAG remains over budget after deterministic filtering/compression, use eligible cloud fallback. |
-| Developer | Inspect isolated workspace and propose/apply bounded change. | `CODING_MODEL` / `qwen3.5:9b` | Groq `openai/gpt-oss-120b` | all Repository MCP tools; Quality MCP run_build, get_build_status, run_linter | Incorrect generated-code compile/lint/test outcome is repaired once; MCP/filesystem failure never triggers cloud. |
+| Developer | Inspect isolated workspace and produce a concrete evidence-backed technical proposal or apply a bounded authorized change. A PROPOSED result names only inspected paths, includes a safe diff/pseudodiff, validation strategy, and explicit security-surface impact; an empty result requires a specific no-op justification. | `CODING_MODEL` / `qwen3.5:9b` | Groq `openai/gpt-oss-120b` | all Repository MCP tools; Quality MCP run_build, get_build_status, run_linter | Incorrect generated-code compile/lint/test outcome is repaired once; MCP/filesystem failure never triggers cloud. |
 | Security | Evaluate required threat categories using security/OWASP RAG and scans. | `DEEP_MODEL` / `qwen3.5:9b` | Groq `openai/gpt-oss-120b` | Quality MCP scan_dependencies, run_security_scan, get_security_report | Scanner/RAG contradiction with PASS, ambiguous HIGH/CRITICAL, or Reviewer-detected omission becomes `SECURITY_CONFLICT` and uses cloud only as a second opinion. CRITICAL routes HITL. |
 | Testing | Distinguish proposed/generated/executed tests and actual results using testing RAG. | `FAST_MODEL` / `qwen3.5:4b` | Groq `openai/gpt-oss-20b` | Quality MCP run_tests, get_test_results, run_build, get_build_status, run_linter | Generated test syntax/collection failure repairs once; a valid test finding a real application bug does not trigger cloud. |
 | Reviewer | Score evidence and issue an approval/rejection recommendation. | `DEEP_MODEL` / `qwen3.5:9b` | Google `gemini-3.7-flash` | none | Invalid structure, low confidence, or material evidence contradiction repairs once then uses eligible cloud fallback; router validates result. |
@@ -250,8 +250,9 @@ prompts/<agent>/system.md
 prompts/<agent>/user.md
 ```
 
-`system.md` declares role, responsibilities, boundaries, allowed tools,
-decision rules, output contract, security rules, and failure behavior.
+`system.md` concisely declares role, responsibility, boundaries, evidence to
+preserve, output contract, and that the role does not select routing or a
+model. Deterministic decisions remain in graph/code rather than prompts.
 `user.md` receives only task/current requirement, the envelope's relevant
 state, necessary RAG evidence, relevant ToolResults, remediation feedback,
 and output schema context. Prompt rendering refuses full-history injection.
@@ -364,7 +365,7 @@ the provider adapter is called.
 above. The retrieval pipeline is fixed as:
 
 ```text
-Documents → loaders → token-aware RecursiveCharacterTextSplitter
+source documents → LangChain Document → LangChain RecursiveCharacterTextSplitter
 → Sentence Transformers → Chroma → domain-filtered retriever
 → RetrievedEvidence → ContextEnvelope → Agent
 ```
@@ -389,8 +390,14 @@ provided user context.
 ## 7. MCP, workspace, and guardrails
 
 `mcp/contracts.py` normalizes all calls as validated `ToolResult` values with
-input/output summaries, timeout, duration, status, and safe error. Each call
-is checked by `mcp/permissions.py` and `workspace/paths.py` before execution.
+input/output summaries, timeout, duration, status, and safe error. The locked
+runtime boundary is LangGraph/agent → synchronous MCP client adapter → official
+MCP client session over stdio → real Repository or Quality MCP Server → bounded
+existing backend service. Each server call is checked by
+`mcp/permissions.py` and `workspace/paths.py` before execution. Repository and
+Quality retain independent tool surfaces and permissions even if they share
+server bootstrap infrastructure. Direct backend calls remain unit-testable but
+do not count as primary protocol evidence.
 
 | MCP server | Permitted operations | Roles |
 | --- | --- | --- |
@@ -426,8 +433,11 @@ latency by model, fallback count/rate, error counts by type, structured-output
 success/failure, expected-vs-observed status, and final outcome. Missing
 provider usage is reported as unavailable rather than estimated.
 
-`observability/evaluation.py` persists one record per SC-01 to SC-05 with all
-specified fields, produces the aggregate report, and produces a multi-model
+`observability/evaluation.py` preserves the fast deterministic mode and adds an
+explicit LIVE mode that runs SC-01 through SC-05 through the real local
+`ModelRouter` and `LocalModelRuntime`. LIVE records and aggregates are written
+separately, contain non-zero LLM calls and measured agent/model latencies, and
+never overwrite deterministic evidence. It also produces a multi-model
 comparison grouped by `(agent, actual_model)`. The local bonus acceptance run
 must contain all six agent spans and actual successful spans for both
 `qwen3.5:4b` and `qwen3.5:9b`; cloud spans are labelled contingency and are

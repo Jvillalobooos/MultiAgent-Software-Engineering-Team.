@@ -3,8 +3,18 @@ import json
 import httpx
 
 from engineering_team.config import Settings
-from engineering_team.contracts.enums import ActionMode, AgentRole
-from engineering_team.contracts.models import ArchitectureProposal, ImplementationResult
+from engineering_team.contracts.enums import (
+    ActionMode,
+    AgentRole,
+    RemediationCategory,
+    ReviewerStatus,
+    RouteTarget,
+)
+from engineering_team.contracts.models import (
+    ArchitectureProposal,
+    ImplementationResult,
+    ReviewerDecision,
+)
 from engineering_team.contracts.state import EngineeringState
 from engineering_team.llm.runtime import LocalModelRuntime, _preserves_governed_facts
 from engineering_team.models.context import build_context
@@ -48,7 +58,16 @@ def test_runtime_routes_model_and_validates_actual_structured_response() -> None
     assert artifact == candidate
     assert runtime.outputs[AgentRole.ARCHITECTURE] == candidate
     assert requests[0]["format"]["type"] == "object"
+    assert set(requests[0]["format"]["required"]) == set(
+        requests[0]["format"]["properties"]
+    )
     assert requests[0]["system"] != requests[0]["prompt"]
+    assert requests[0]["prompt"].rfind("Candidate artifact:") > requests[0]["prompt"].rfind(
+        "Output schema:"
+    )
+    assert requests[0]["prompt"].endswith(
+        "Copy every candidate key and value exactly; do not omit schema-optional keys."
+    )
     assert any(event["name"] == "Architecture model" for event in trace.events)
 
 
@@ -73,6 +92,48 @@ def test_runtime_rejects_schema_valid_contradiction_after_one_repair() -> None:
     assert len(runtime.attempts) == 2
 
 
+def test_governed_repair_replaces_verbose_prompt_with_exact_candidate() -> None:
+    candidate = ReviewerDecision(
+        status=ReviewerStatus.REJECTED,
+        score=40,
+        subscores={"security_compliance": 0},
+        reason="security findings require code remediation",
+        problems=["authorization finding"],
+        remediation_category=RemediationCategory.SECURITY,
+        return_to=RouteTarget.DEVELOPER,
+        confidence=1,
+        evidence_references=["mcp://quality/run_security_scan"],
+    )
+    incomplete = candidate.model_copy(update={
+        "problems": [], "remediation_category": None, "return_to": None,
+    })
+    requests: list[dict] = []
+
+    def handler(request):
+        requests.append(json.loads(request.content))
+        response = incomplete if len(requests) == 1 else candidate
+        return httpx.Response(
+            200, json={"model": "qwen3.5:9b", "response": response.model_dump_json()}
+        )
+
+    runtime = LocalModelRuntime(
+        Settings(_env_file=None), client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    envelope = build_context(
+        AgentRole.REVIEWER,
+        EngineeringState(run_id="runtime", requirement="reject unsafe access"),
+        "Reviewer",
+    )
+
+    artifact, _ = runtime.invoke_artifact(AgentRole.REVIEWER, envelope, candidate)
+
+    assert artifact == candidate
+    assert len(requests) == 2
+    assert requests[1]["prompt"].startswith("Repair governed artifact contradiction")
+    assert "Output schema:" not in requests[1]["prompt"]
+    assert json.dumps(candidate.model_dump(mode="json"), ensure_ascii=False) in requests[1]["prompt"]
+
+
 def test_semantic_guard_rejects_invented_source_and_material_developer_change() -> None:
     architecture = ArchitectureProposal(
         components=["API"], apis=[], data_changes=[], integrations=[], dependencies=[],
@@ -82,11 +143,13 @@ def test_semantic_guard_rejects_invented_source_and_material_developer_change() 
         update={"evidence_references": ["retrieved:1", "invented:99"]}
     )
     implementation = ImplementationResult(
-        action_mode=ActionMode.PROPOSED, changed_files=[], diff="", evidence=["design"],
-        validation_result="not applied", security_surface_changed=False,
+        action_mode=ActionMode.PROPOSED, changed_files=["app.py"],
+        diff="PROPOSED TECHNICAL CHANGE\n--- app.py\n+++ app.py\n+ bounded change",
+        evidence=["mcp://repository/list_files"],
+        validation_result="PROPOSED validation: run tests", security_surface_changed=False,
     )
     fabricated = implementation.model_copy(update={
-        "action_mode": ActionMode.APPLIED, "changed_files": ["app.py"],
+        "action_mode": ActionMode.APPLIED, "changed_files": ["invented.py"],
         "diff": "+ unsafe", "validation_result": "passed",
     })
 

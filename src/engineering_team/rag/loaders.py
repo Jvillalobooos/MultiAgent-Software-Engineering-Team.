@@ -4,21 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+
+from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from engineering_team.contracts.models import RetrievedEvidence
 
 EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-
-
-@dataclass(frozen=True)
-class SourceDocument:
-    source: str
-    domain: str
-    content: str
-    section: str = "Document"
-    version: str = "local"
 
 
 @dataclass(frozen=True)
@@ -85,12 +80,21 @@ def _markdown_sections(text: str) -> list[tuple[str, str]]:
     return sections or [("Document", text.strip())]
 
 
-def load_documents(directory: str | Path) -> list[SourceDocument]:
-    documents: list[SourceDocument] = []
+def load_documents(directory: str | Path) -> list[Document]:
+    """Load source sections into the official LangChain Document abstraction."""
+    documents: list[Document] = []
     for path in sorted(Path(directory).glob("*.md")):
         domain = _domain(path)
         for section, content in _markdown_sections(path.read_text(encoding="utf-8")):
-            documents.append(SourceDocument(path.name, domain, content, section, "local"))
+            documents.append(Document(
+                page_content=content,
+                metadata={
+                    "source": path.name,
+                    "domain": domain,
+                    "section": section,
+                    "version": "local",
+                },
+            ))
     return documents
 
 
@@ -120,39 +124,49 @@ def chunk_document(
     return chunks
 
 
+def build_text_splitter(
+    *, chunk_size: int = 800, overlap: int = 160, model_name: str = EMBEDDING_MODEL
+) -> RecursiveCharacterTextSplitter:
+    """Build the Plan-frozen token-aware LangChain recursive splitter."""
+    if overlap >= chunk_size:
+        raise ValueError("overlap must be smaller than chunk size")
+    from transformers import AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    return RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
+        tokenizer,
+        chunk_size=chunk_size,
+        chunk_overlap=overlap,
+        add_start_index=True,
+    )
+
+
 def chunk_documents(
-    documents: list[SourceDocument],
+    documents: list[Document],
     *,
     chunk_size: int = 800,
     overlap: int = 160,
     model_name: str = EMBEDDING_MODEL,
 ) -> list[DocumentChunk]:
     """Split the corpus by model tokens while preserving source-section metadata."""
-    if overlap >= chunk_size:
-        raise ValueError("overlap must be smaller than chunk size")
-    from transformers import AutoTokenizer
-
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    splitter = build_text_splitter(
+        chunk_size=chunk_size, overlap=overlap, model_name=model_name
+    )
     chunks: list[DocumentChunk] = []
-    step = chunk_size - overlap
-    for document in documents:
-        token_ids = tokenizer.encode(document.content, add_special_tokens=False)
-        section_key = hashlib.sha256(document.section.encode()).hexdigest()[:10]
-        for index, offset in enumerate(range(0, max(len(token_ids), 1), step)):
-            window = token_ids[offset : offset + chunk_size]
-            if not window:
-                continue
-            text = tokenizer.decode(window, skip_special_tokens=True).strip()
-            chunks.append(
-                DocumentChunk(
-                    source=document.source,
-                    domain=document.domain,
-                    section=document.section,
-                    version=document.version,
-                    chunk_id=f"{document.source}:{section_key}:{index}",
-                    text=text,
-                )
-            )
-            if offset + chunk_size >= len(token_ids):
-                break
+    counters: defaultdict[tuple[str, str], int] = defaultdict(int)
+    for document in splitter.split_documents(documents):
+        source = str(document.metadata["source"])
+        section = str(document.metadata["section"])
+        section_key = hashlib.sha256(section.encode()).hexdigest()[:10]
+        counter_key = (source, section)
+        index = counters[counter_key]
+        counters[counter_key] += 1
+        chunks.append(DocumentChunk(
+            source=source,
+            domain=str(document.metadata["domain"]),
+            section=section,
+            version=str(document.metadata["version"]),
+            chunk_id=f"{source}:{section_key}:{index}",
+            text=document.page_content,
+        ))
     return chunks

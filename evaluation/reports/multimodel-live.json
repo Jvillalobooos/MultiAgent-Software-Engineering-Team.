@@ -1,7 +1,7 @@
 {
-  "run_id": "multimodel-863a10fc-679c-4572-b9b3-74d539f8d9ec",
-  "trace_id": "0d97ba01c9185caf94321c40a51e0485",
-  "langfuse_live": false,
+  "run_id": "multimodel-afe1bfc1-4eb5-45ef-a0e3-012ba6a9469c",
+  "trace_id": "971713e4db8ae084c18abdad2b1fdd99",
+  "langfuse_live": true,
   "langfuse_error": null,
   "final_status": "APPROVED",
   "route_history": [
@@ -23,9 +23,9 @@
       "fallback_used": false,
       "fallback_reason": null,
       "degraded": false,
-      "latency_ms": 70510,
+      "latency_ms": 99340,
       "usage": {
-        "prompt_eval_count": 593,
+        "prompt_eval_count": 688,
         "eval_count": 165
       },
       "structured_output_success": true,
@@ -40,9 +40,9 @@
       "fallback_used": false,
       "fallback_reason": null,
       "degraded": false,
-      "latency_ms": 37640,
+      "latency_ms": 57380,
       "usage": {
-        "prompt_eval_count": 614,
+        "prompt_eval_count": 716,
         "eval_count": 71
       },
       "structured_output_success": true,
@@ -57,10 +57,10 @@
       "fallback_used": false,
       "fallback_reason": null,
       "degraded": false,
-      "latency_ms": 30077,
+      "latency_ms": 115726,
       "usage": {
-        "prompt_eval_count": 488,
-        "eval_count": 31
+        "prompt_eval_count": 760,
+        "eval_count": 249
       },
       "structured_output_success": true,
       "error": null
@@ -74,10 +74,10 @@
       "fallback_used": false,
       "fallback_reason": null,
       "degraded": false,
-      "latency_ms": 80389,
+      "latency_ms": 87708,
       "usage": {
-        "prompt_eval_count": 914,
-        "eval_count": 197
+        "prompt_eval_count": 1026,
+        "eval_count": 107
       },
       "structured_output_success": true,
       "error": null
@@ -91,10 +91,10 @@
       "fallback_used": false,
       "fallback_reason": null,
       "degraded": false,
-      "latency_ms": 62187,
+      "latency_ms": 66950,
       "usage": {
-        "prompt_eval_count": 883,
-        "eval_count": 311
+        "prompt_eval_count": 811,
+        "eval_count": 206
       },
       "structured_output_success": true,
       "error": null
@@ -108,10 +108,10 @@
       "fallback_used": false,
       "fallback_reason": null,
       "degraded": false,
-      "latency_ms": 109839,
+      "latency_ms": 165656,
       "usage": {
-        "prompt_eval_count": 1145,
-        "eval_count": 266
+        "prompt_eval_count": 1315,
+        "eval_count": 311
       },
       "structured_output_success": true,
       "error": null
@@ -136,13 +136,8 @@
     {
       "name": "Product model",
       "type": "generation",
-      "input": {
-        "system_prompt": "Role: Product. Produce only ProductSpecification. No tools or routing decisions.\nReturn only one JSON object matching the supplied role-specific schema. Preserve all governed facts, findings, statuses, and evidence from the candidate artifact. Do not add prose or fields.",
-        "user_prompt": "Task: Product\nContextEnvelope: {\"agent\": \"Product\", \"current_task\": \"Product\", \"state_projection\": {\"run_id\": \"multimodel-863a10fc-679c-4572-b9b3-74d539f8d9ec\", \"requirement\": \"Provide a password-recovery link that expires after 15 minutes and can be used only once.\"}, \"rag_evidence\": [], \"tool_results\": [], \"remediation_feedback\": null}\nCandidate artifact: {\"objective\": \"Provide a password-recovery link that expires after 15 minutes and can be used only once.\", \"actors\": [\"User\"], \"business_rules\": [\"Reset link expires after 15 minutes\", \"Reset link is single-use\"], \"constraints\": [], \"acceptance_criteria\": [\"Reset link expires after 15 minutes\", \"Reset link is single-use\"], \"nfrs\": [], \"ambiguities\": [], \"assumptions\": [], \"source_requirement\": \"Provide a password-recovery link that expires after 15 minutes and can be used only once.\"}\nOutput schema: {\"additionalProperties\": false, \"properties\": {\"objective\": {\"title\": \"Objective\", \"type\": \"string\"}, \"actors\": {\"items\": {\"type\": \"string\"}, \"title\": \"Actors\", \"type\": \"array\"}, \"business_rules\": {\"items\": {\"type\": \"string\"}, \"title\": \"Business Rules\", \"type\": \"array\"}, \"constraints\": {\"items\": {\"type\": \"string\"}, \"title\": \"Constraints\", \"type\": \"array\"}, \"acceptance_criteria\": {\"items\": {\"type\": \"string\"}, \"title\": \"Acceptance Criteria\", \"type\": \"array\"}, \"nfrs\": {\"items\": {\"type\": \"string\"}, \"title\": \"Nfrs\", \"type\": \"array\"}, \"ambiguities\": {\"items\": {\"type\": \"string\"}, \"title\": \"Ambiguities\", \"type\": \"array\"}, \"assumptions\": {\"items\": {\"type\": \"string\"}, \"title\": \"Assumptions\", \"type\": \"array\"}, \"source_requirement\": {\"default\": \"\", \"title\": \"Source Requirement\", \"type\": \"string\"}}, \"required\": [\"objective\", \"actors\", \"business_rules\", \"constraints\", \"acceptance_criteria\", \"nfrs\", \"ambiguities\", \"assumptions\"], \"title\": \"ProductSpecification\", \"type\": \"object\"}"
-      },
-      "output": {
-        "response": "{\n  \"objective\": \"Provide a password-recovery link that expires after 15 minutes and can be used only once.\",\n  \"actors\": [\n    \"User\"\n  ],\n  \"business_rules\": [\n    \"Reset link expires after 15 minutes\",\n    \"Reset link is single-use\"\n  ],\n  \"constraints\": [],\n  \"acceptance_criteria\": [\n    \"Reset link expires after 15 minutes\",\n    \"Reset link is single-use\"\n  ],\n  \"nfrs\": [],\n  \"ambiguities\": [],\n  \"assumptions\": [],\n  \"source_requirement\": \"Provide a password-recovery link that expires after 15 minutes and can be used only once.\"\n}"
-      },
+      "level": "DEFAULT",
+      "status_message": null,
       "metadata": {
         "agent": "Product",
         "provider": "ollama",
@@ -152,102 +147,52 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 70510,
+        "latency_ms": 99340,
         "usage": {
-          "prompt_eval_count": 593,
+          "prompt_eval_count": 688,
           "eval_count": 165
         },
         "structured_output_success": true,
         "error": null,
         "retry": 0,
         "repair": 0
-      },
-      "level": "DEFAULT",
-      "status_message": null
+      }
     },
     {
       "name": "Product",
       "type": "agent",
-      "input": null,
-      "output": {
-        "objective": "Provide a password-recovery link that expires after 15 minutes and can be used only once.",
-        "actors": [
-          "User"
-        ],
-        "business_rules": [
-          "Reset link expires after 15 minutes",
-          "Reset link is single-use"
-        ],
-        "constraints": [],
-        "acceptance_criteria": [
-          "Reset link expires after 15 minutes",
-          "Reset link is single-use"
-        ],
-        "nfrs": [],
-        "ambiguities": [],
-        "assumptions": [],
-        "source_requirement": "Provide a password-recovery link that expires after 15 minutes and can be used only once."
-      },
+      "level": null,
+      "status_message": null,
       "metadata": {
         "iteration": 0
-      },
-      "level": null,
-      "status_message": null
+      }
     },
     {
       "name": "RAG retrieval",
       "type": "retriever",
-      "input": {
-        "query": "Provide a password-recovery link that expires after 15 minutes and can be used only once."
-      },
-      "output": [
-        {
-          "source": "api-design-guidelines.md",
-          "section": "API Design Guidelines",
-          "version": "local",
-          "chunk_id": "api-design-guidelines.md:a8af018f25:0",
-          "fragment": "Validate inputs, return explicit errors, and preserve authorization boundaries.",
-          "domain": "api",
-          "query": "Provide a password-recovery link that expires after 15 minutes and can be used only once.",
-          "score": 0.5965772271156311,
-          "retrieved_at": "2026-08-25T00:43:38.422285Z"
-        }
-      ],
+      "level": null,
+      "status_message": null,
       "metadata": {
         "agent": "Architecture",
         "status": "OK"
-      },
-      "level": null,
-      "status_message": null
+      }
     },
     {
       "name": "MCP call",
       "type": "tool",
-      "input": null,
-      "output": {
-        "tool_name": "list_files",
-        "allowed_role": "Architecture",
-        "status": "SUCCESS",
-        "input_summary": "safe",
-        "output_summary": "test_acceptance.py\n__init__.py\napp\\main.py\napp\\service.py\napp\\__init__.py\n__pycache__\\test_acceptance.cpython-314-pytest-9.1.1.pyc\n__pycache__\\__init__.cpython-314.pyc\napp\\__pycache__\\service.cpython-314.pyc\napp\\__pycache__\\__init__.cpython-314.pyc",
-        "duration_ms": 0,
-        "evidence_reference": null,
-        "error": null
-      },
-      "metadata": {},
       "level": null,
-      "status_message": null
+      "status_message": null,
+      "metadata": {
+        "transport": "stdio",
+        "protocol_version": "2026-07-28",
+        "server": "engineering-team-repository"
+      }
     },
     {
       "name": "Architecture model",
       "type": "generation",
-      "input": {
-        "system_prompt": "Role: Architecture. Ground decisions in supplied RAG evidence. Read-only tools only.\nReturn only one JSON object matching the supplied role-specific schema. Preserve all governed facts, findings, statuses, and evidence from the candidate artifact. Do not add prose or fields.",
-        "user_prompt": "Task: Architecture\nContextEnvelope: {\"agent\": \"Architecture\", \"current_task\": \"Architecture\", \"state_projection\": {\"run_id\": \"multimodel-863a10fc-679c-4572-b9b3-74d539f8d9ec\", \"requirement\": \"Provide a password-recovery link that expires after 15 minutes and can be used only once.\", \"specification\": \"present\"}, \"rag_evidence\": [{\"source\": \"api-design-guidelines.md\", \"section\": \"API Design Guidelines\", \"chunk_id\": \"api-design-guidelines.md:a8af018f25:0\", \"score\": 0.5965772271156311}], \"tool_results\": [{\"tool\": \"list_files\", \"status\": \"SUCCESS\"}], \"remediation_feedback\": null}\nCandidate artifact: {\"components\": [\"modular monolith\"], \"apis\": [], \"data_changes\": [], \"integrations\": [], \"dependencies\": [], \"decisions\": [\"preserve modular boundaries\"], \"risks\": [], \"impact\": \"bounded\", \"evidence_references\": [\"api-design-guidelines.md:a8af018f25:0\"]}\nOutput schema: {\"additionalProperties\": false, \"properties\": {\"components\": {\"items\": {\"type\": \"string\"}, \"title\": \"Components\", \"type\": \"array\"}, \"apis\": {\"items\": {\"type\": \"string\"}, \"title\": \"Apis\", \"type\": \"array\"}, \"data_changes\": {\"items\": {\"type\": \"string\"}, \"title\": \"Data Changes\", \"type\": \"array\"}, \"integrations\": {\"items\": {\"type\": \"string\"}, \"title\": \"Integrations\", \"type\": \"array\"}, \"dependencies\": {\"items\": {\"type\": \"string\"}, \"title\": \"Dependencies\", \"type\": \"array\"}, \"decisions\": {\"items\": {\"type\": \"string\"}, \"title\": \"Decisions\", \"type\": \"array\"}, \"risks\": {\"items\": {\"type\": \"string\"}, \"title\": \"Risks\", \"type\": \"array\"}, \"impact\": {\"title\": \"Impact\", \"type\": \"string\"}, \"evidence_references\": {\"items\": {\"type\": \"string\"}, \"title\": \"Evidence References\", \"type\": \"array\"}}, \"required\": [\"components\", \"apis\", \"data_changes\", \"integrations\", \"dependencies\", \"decisions\", \"risks\", \"impact\"], \"title\": \"ArchitectureProposal\", \"type\": \"object\"}"
-      },
-      "output": {
-        "response": "{\"components\": [\"modular monolith\"], \"apis\": [], \"data_changes\": [], \"integrations\": [], \"dependencies\": [], \"decisions\": [\"preserve modular boundaries\"], \"risks\": [], \"impact\": \"bounded\", \"evidence_references\": [\"api-design-guidelines.md:a8af018f25:0\"]}"
-      },
+      "level": "DEFAULT",
+      "status_message": null,
       "metadata": {
         "agent": "Architecture",
         "provider": "ollama",
@@ -257,106 +202,42 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 37640,
+        "latency_ms": 57380,
         "usage": {
-          "prompt_eval_count": 614,
+          "prompt_eval_count": 716,
           "eval_count": 71
         },
         "structured_output_success": true,
         "error": null,
         "retry": 0,
         "repair": 0
-      },
-      "level": "DEFAULT",
-      "status_message": null
+      }
     },
     {
       "name": "Architecture",
       "type": "agent",
-      "input": null,
-      "output": {
-        "components": [
-          "modular monolith"
-        ],
-        "apis": [],
-        "data_changes": [],
-        "integrations": [],
-        "dependencies": [],
-        "decisions": [
-          "preserve modular boundaries"
-        ],
-        "risks": [],
-        "impact": "bounded",
-        "evidence_references": [
-          "api-design-guidelines.md:a8af018f25:0"
-        ]
-      },
+      "level": null,
+      "status_message": null,
       "metadata": {
         "iteration": 0
-      },
-      "level": null,
-      "status_message": null
+      }
     },
     {
       "name": "MCP call",
       "type": "tool",
-      "input": null,
-      "output": {
-        "tool_name": "list_files",
-        "allowed_role": "Developer",
-        "status": "SUCCESS",
-        "input_summary": "safe",
-        "output_summary": "test_acceptance.py\n__init__.py\napp\\main.py\napp\\service.py\napp\\__init__.py\n__pycache__\\test_acceptance.cpython-314-pytest-9.1.1.pyc\n__pycache__\\__init__.cpython-314.pyc\napp\\__pycache__\\service.cpython-314.pyc\napp\\__pycache__\\__init__.cpython-314.pyc",
-        "duration_ms": 0,
-        "evidence_reference": null,
-        "error": null
-      },
-      "metadata": {},
       "level": null,
-      "status_message": null
-    },
-    {
-      "name": "Developer model",
-      "type": "generation",
-      "input": {
-        "system_prompt": "Role: Developer. Use only allowed workspace tools and return ImplementationResult.\nReturn only one JSON object matching the supplied role-specific schema. Preserve all governed facts, findings, statuses, and evidence from the candidate artifact. Do not add prose or fields.",
-        "user_prompt": "Task: Developer\nContextEnvelope: {\"agent\": \"Developer\", \"current_task\": \"Developer\", \"state_projection\": {\"run_id\": \"multimodel-863a10fc-679c-4572-b9b3-74d539f8d9ec\", \"requirement\": \"Provide a password-recovery link that expires after 15 minutes and can be used only once.\", \"specification\": \"present\", \"architecture\": \"present\", \"repository_context\": \"present\"}, \"rag_evidence\": [], \"tool_results\": [{\"tool\": \"list_files\", \"status\": \"SUCCESS\"}, {\"tool\": \"list_files\", \"status\": \"SUCCESS\"}], \"remediation_feedback\": null}\nCandidate artifact: {\"action_mode\": \"PROPOSED\", \"changed_files\": [], \"diff\": \"\", \"evidence\": [], \"validation_result\": \"not applied\", \"security_surface_changed\": false}\nOutput schema: {\"$defs\": {\"ActionMode\": {\"enum\": [\"PROPOSED\", \"APPLIED\"], \"title\": \"ActionMode\", \"type\": \"string\"}}, \"additionalProperties\": false, \"properties\": {\"action_mode\": {\"$ref\": \"#/$defs/ActionMode\"}, \"changed_files\": {\"items\": {\"type\": \"string\"}, \"title\": \"Changed Files\", \"type\": \"array\"}, \"diff\": {\"title\": \"Diff\", \"type\": \"string\"}, \"evidence\": {\"items\": {\"type\": \"string\"}, \"title\": \"Evidence\", \"type\": \"array\"}, \"validation_result\": {\"title\": \"Validation Result\", \"type\": \"string\"}, \"security_surface_changed\": {\"default\": false, \"title\": \"Security Surface Changed\", \"type\": \"boolean\"}}, \"required\": [\"action_mode\", \"changed_files\", \"diff\", \"evidence\", \"validation_result\"], \"title\": \"ImplementationResult\", \"type\": \"object\"}"
-      },
-      "output": {
-        "response": "{\n  \"action_mode\": \"PROPOSED\",\n  \"changed_files\": [],\n  \"diff\": \"\",\n  \"evidence\": [\n    \"Requirement: Provide a password-recovery link that expires after 15 minutes and can be used only once.\",\n    \"Specification status: present\",\n    \"Architecture status: present\",\n    \"Repository context: present\",\n    \"Current state: No files have been modified or created yet.\"\n  ],\n  \"validation_result\": \"not applied\",\n  \"security_surface_changed\": false\n}"
-      },
+      "status_message": null,
       "metadata": {
-        "agent": "Developer",
-        "provider": "ollama",
-        "requested_model": "qwen3.5:9b",
-        "actual_model": "qwen3.5:9b",
-        "model_profile": "CODING_MODEL",
-        "fallback_used": false,
-        "fallback_reason": null,
-        "degraded": true,
-        "latency_ms": 50232,
-        "usage": {
-          "prompt_eval_count": 471,
-          "eval_count": 120
-        },
-        "structured_output_success": false,
-        "error": "LLM_QUALITY_ERROR: governed artifact contradiction",
-        "retry": 0,
-        "repair": 0
-      },
-      "level": "ERROR",
-      "status_message": "LLM_QUALITY_ERROR: governed artifact contradiction"
+        "transport": "stdio",
+        "protocol_version": "2026-07-28",
+        "server": "engineering-team-repository"
+      }
     },
     {
       "name": "Developer model",
       "type": "generation",
-      "input": {
-        "system_prompt": "Role: Developer. Use only allowed workspace tools and return ImplementationResult.\nReturn only one JSON object matching the supplied role-specific schema. Preserve all governed facts, findings, statuses, and evidence from the candidate artifact. Do not add prose or fields.",
-        "user_prompt": "Task: Developer\nContextEnvelope: {\"agent\": \"Developer\", \"current_task\": \"Developer\", \"state_projection\": {\"run_id\": \"multimodel-863a10fc-679c-4572-b9b3-74d539f8d9ec\", \"requirement\": \"Provide a password-recovery link that expires after 15 minutes and can be used only once.\", \"specification\": \"present\", \"architecture\": \"present\", \"repository_context\": \"present\"}, \"rag_evidence\": [], \"tool_results\": [{\"tool\": \"list_files\", \"status\": \"SUCCESS\"}, {\"tool\": \"list_files\", \"status\": \"SUCCESS\"}], \"remediation_feedback\": null}\nCandidate artifact: {\"action_mode\": \"PROPOSED\", \"changed_files\": [], \"diff\": \"\", \"evidence\": [], \"validation_result\": \"not applied\", \"security_surface_changed\": false}\nOutput schema: {\"$defs\": {\"ActionMode\": {\"enum\": [\"PROPOSED\", \"APPLIED\"], \"title\": \"ActionMode\", \"type\": \"string\"}}, \"additionalProperties\": false, \"properties\": {\"action_mode\": {\"$ref\": \"#/$defs/ActionMode\"}, \"changed_files\": {\"items\": {\"type\": \"string\"}, \"title\": \"Changed Files\", \"type\": \"array\"}, \"diff\": {\"title\": \"Diff\", \"type\": \"string\"}, \"evidence\": {\"items\": {\"type\": \"string\"}, \"title\": \"Evidence\", \"type\": \"array\"}, \"validation_result\": {\"title\": \"Validation Result\", \"type\": \"string\"}, \"security_surface_changed\": {\"default\": false, \"title\": \"Security Surface Changed\", \"type\": \"boolean\"}}, \"required\": [\"action_mode\", \"changed_files\", \"diff\", \"evidence\", \"validation_result\"], \"title\": \"ImplementationResult\", \"type\": \"object\"}\nRepair: the prior JSON contradicted governed facts. Return the candidate artifact exactly."
-      },
-      "output": {
-        "response": "{\"action_mode\":\"PROPOSED\",\"changed_files\":[],\"diff\":\"\",\"evidence\":[],\"validation_result\":\"not applied\",\"security_surface_changed\":false}"
-      },
+      "level": "DEFAULT",
+      "status_message": null,
       "metadata": {
         "agent": "Developer",
         "provider": "ollama",
@@ -366,132 +247,73 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 30077,
+        "latency_ms": 115726,
         "usage": {
-          "prompt_eval_count": 488,
-          "eval_count": 31
+          "prompt_eval_count": 760,
+          "eval_count": 249
         },
         "structured_output_success": true,
         "error": null,
         "retry": 0,
-        "repair": 1
-      },
-      "level": "DEFAULT",
-      "status_message": null
+        "repair": 0
+      }
     },
     {
       "name": "Developer",
       "type": "agent",
-      "input": null,
-      "output": {
-        "action_mode": "PROPOSED",
-        "changed_files": [],
-        "diff": "",
-        "evidence": [],
-        "validation_result": "not applied",
-        "security_surface_changed": false
-      },
+      "level": null,
+      "status_message": null,
       "metadata": {
         "iteration": 0
-      },
-      "level": null,
-      "status_message": null
+      }
     },
     {
       "name": "route",
       "type": "span",
-      "input": null,
-      "output": null,
+      "level": null,
+      "status_message": null,
       "metadata": {
         "from": "Developer",
         "to": "Security"
-      },
-      "level": null,
-      "status_message": null
+      }
     },
     {
       "name": "RAG retrieval",
       "type": "retriever",
-      "input": {
-        "query": "Provide a password-recovery link that expires after 15 minutes and can be used only once."
-      },
-      "output": [
-        {
-          "source": "security-guidelines.md",
-          "section": "Security Guidelines",
-          "version": "local",
-          "chunk_id": "security-guidelines.md:f222ba16fc:0",
-          "fragment": "Protect secrets, validate authorization, and record security evidence safely.",
-          "domain": "security",
-          "query": "Provide a password-recovery link that expires after 15 minutes and can be used only once.",
-          "score": 0.6121151447296143,
-          "retrieved_at": "2026-08-25T00:45:36.860745Z"
-        },
-        {
-          "source": "owasp-api-security.md",
-          "section": "OWASP API Security",
-          "version": "local",
-          "chunk_id": "owasp-api-security.md:72a7d79810:0",
-          "fragment": "Prevent broken object level authorization, injection, excessive data exposure, and abuse.",
-          "domain": "owasp",
-          "query": "Provide a password-recovery link that expires after 15 minutes and can be used only once.",
-          "score": 0.6005601584911346,
-          "retrieved_at": "2026-08-25T00:45:36.860770Z"
-        }
-      ],
+      "level": null,
+      "status_message": null,
       "metadata": {
         "agent": "Security",
         "status": "OK"
-      },
-      "level": null,
-      "status_message": null
+      }
     },
     {
       "name": "MCP call",
       "type": "tool",
-      "input": null,
-      "output": {
-        "tool_name": "scan_dependencies",
-        "allowed_role": "Security",
-        "status": "SUCCESS",
-        "input_summary": "safe",
-        "output_summary": "No broken requirements found.\n",
-        "duration_ms": 1155,
-        "evidence_reference": null,
-        "error": null
-      },
-      "metadata": {},
       "level": null,
-      "status_message": null
+      "status_message": null,
+      "metadata": {
+        "transport": "stdio",
+        "protocol_version": "2026-07-28",
+        "server": "engineering-team-quality"
+      }
     },
     {
       "name": "MCP call",
       "type": "tool",
-      "input": null,
-      "output": {
-        "tool_name": "run_security_scan",
-        "allowed_role": "Security",
-        "status": "SUCCESS",
-        "input_summary": "safe",
-        "output_summary": "All checks passed!\n",
-        "duration_ms": 148,
-        "evidence_reference": null,
-        "error": null
-      },
-      "metadata": {},
       "level": null,
-      "status_message": null
+      "status_message": null,
+      "metadata": {
+        "transport": "stdio",
+        "protocol_version": "2026-07-28",
+        "server": "engineering-team-quality"
+      }
     },
     {
       "name": "Security model",
       "type": "generation",
-      "input": {
-        "system_prompt": "Role: Security. Evaluate OWASP controls; CRITICAL findings require HITL.\nReturn only one JSON object matching the supplied role-specific schema. Preserve all governed facts, findings, statuses, and evidence from the candidate artifact. Do not add prose or fields.",
-        "user_prompt": "Task: Security\nContextEnvelope: {\"agent\": \"Security\", \"current_task\": \"Security\", \"state_projection\": {\"run_id\": \"multimodel-863a10fc-679c-4572-b9b3-74d539f8d9ec\", \"specification\": \"present\", \"architecture\": \"present\", \"implementation\": \"present\"}, \"rag_evidence\": [{\"source\": \"security-guidelines.md\", \"section\": \"Security Guidelines\", \"chunk_id\": \"security-guidelines.md:f222ba16fc:0\", \"score\": 0.6121151447296143}, {\"source\": \"owasp-api-security.md\", \"section\": \"OWASP API Security\", \"chunk_id\": \"owasp-api-security.md:72a7d79810:0\", \"score\": 0.6005601584911346}], \"tool_results\": [{\"tool\": \"scan_dependencies\", \"status\": \"SUCCESS\"}, {\"tool\": \"run_security_scan\", \"status\": \"SUCCESS\"}], \"remediation_feedback\": null}\nCandidate artifact: {\"status\": \"PASS\", \"highest_severity\": \"INFO\", \"findings\": [], \"recommendations\": [], \"sources\": [\"security-guidelines.md\", \"owasp-api-security.md\"], \"checklist\": {\"authentication\": \"PASS\", \"authorization\": \"PASS\", \"input_validation\": \"PASS\", \"sensitive_information\": \"PASS\", \"secrets\": \"PASS\", \"injection\": \"PASS\", \"access_control\": \"PASS\", \"idor\": \"PASS\", \"logging\": \"PASS\", \"data_protection\": \"PASS\", \"api_abuse\": \"PASS\", \"rate_limiting\": \"PASS\", \"owasp\": \"PASS\"}, \"requires_hitl\": false}\nOutput schema: {\"$defs\": {\"SecurityFinding\": {\"additionalProperties\": false, \"properties\": {\"category\": {\"title\": \"Category\", \"type\": \"string\"}, \"severity\": {\"$ref\": \"#/$defs/SecuritySeverity\"}, \"description\": {\"title\": \"Description\", \"type\": \"string\"}, \"affected_evidence\": {\"items\": {\"type\": \"string\"}, \"title\": \"Affected Evidence\", \"type\": \"array\"}, \"recommendation\": {\"title\": \"Recommendation\", \"type\": \"string\"}, \"sources\": {\"items\": {\"type\": \"string\"}, \"title\": \"Sources\", \"type\": \"array\"}}, \"required\": [\"category\", \"severity\", \"description\", \"affected_evidence\", \"recommendation\"], \"title\": \"SecurityFinding\", \"type\": \"object\"}, \"SecuritySeverity\": {\"enum\": [\"INFO\", \"LOW\", \"MEDIUM\", \"HIGH\", \"CRITICAL\"], \"title\": \"SecuritySeverity\", \"type\": \"string\"}, \"SecurityStatus\": {\"enum\": [\"PASS\", \"FAIL\"], \"title\": \"SecurityStatus\", \"type\": \"string\"}}, \"additionalProperties\": false, \"properties\": {\"status\": {\"$ref\": \"#/$defs/SecurityStatus\"}, \"highest_severity\": {\"$ref\": \"#/$defs/SecuritySeverity\"}, \"findings\": {\"items\": {\"$ref\": \"#/$defs/SecurityFinding\"}, \"title\": \"Findings\", \"type\": \"array\"}, \"recommendations\": {\"items\": {\"type\": \"string\"}, \"title\": \"Recommendations\", \"type\": \"array\"}, \"sources\": {\"items\": {\"type\": \"string\"}, \"title\": \"Sources\", \"type\": \"array\"}, \"checklist\": {\"additionalProperties\": {\"type\": \"string\"}, \"title\": \"Checklist\", \"type\": \"object\"}, \"requires_hitl\": {\"default\": false, \"title\": \"Requires Hitl\", \"type\": \"boolean\"}}, \"required\": [\"status\", \"highest_severity\", \"findings\", \"recommendations\", \"sources\", \"checklist\"], \"title\": \"SecurityReview\", \"type\": \"object\"}"
-      },
-      "output": {
-        "response": "{\n  \"status\": \"PASS\",\n  \"highest_severity\": \"INFO\",\n  \"findings\": [],\n  \"recommendations\": [],\n  \"sources\": [\n    \"security-guidelines.md\",\n    \"owasp-api-security.md\"\n  ],\n  \"checklist\": {\n    \"authentication\": \"PASS\",\n    \"authorization\": \"PASS\",\n    \"input_validation\": \"PASS\",\n    \"sensitive_information\": \"PASS\",\n    \"secrets\": \"PASS\",\n    \"injection\": \"PASS\",\n    \"access_control\": \"PASS\",\n    \"idor\": \"PASS\",\n    \"logging\": \"PASS\",\n    \"data_protection\": \"PASS\",\n    \"api_abuse\": \"PASS\",\n    \"rate_limiting\": \"PASS\",\n    \"owasp\": \"PASS\"\n  },\n  \"requires_hitl\": false\n}"
-      },
+      "level": "DEFAULT",
+      "status_message": null,
       "metadata": {
         "agent": "Security",
         "provider": "ollama",
@@ -501,121 +323,62 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 80389,
+        "latency_ms": 87708,
         "usage": {
-          "prompt_eval_count": 914,
-          "eval_count": 197
+          "prompt_eval_count": 1026,
+          "eval_count": 107
         },
         "structured_output_success": true,
         "error": null,
         "retry": 0,
         "repair": 0
-      },
-      "level": "DEFAULT",
-      "status_message": null
+      }
     },
     {
       "name": "Security",
       "type": "agent",
-      "input": null,
-      "output": {
-        "status": "PASS",
-        "highest_severity": "INFO",
-        "findings": [],
-        "recommendations": [],
-        "sources": [
-          "security-guidelines.md",
-          "owasp-api-security.md"
-        ],
-        "checklist": {
-          "authentication": "PASS",
-          "authorization": "[REDACTED]",
-          "input_validation": "PASS",
-          "sensitive_information": "PASS",
-          "secrets": "PASS",
-          "injection": "PASS",
-          "access_control": "PASS",
-          "idor": "PASS",
-          "logging": "PASS",
-          "data_protection": "PASS",
-          "api_abuse": "PASS",
-          "rate_limiting": "PASS",
-          "owasp": "PASS"
-        },
-        "requires_hitl": false
-      },
+      "level": null,
+      "status_message": null,
       "metadata": {
         "iteration": 0
-      },
-      "level": null,
-      "status_message": null
+      }
     },
     {
       "name": "route",
       "type": "span",
-      "input": null,
-      "output": null,
+      "level": null,
+      "status_message": null,
       "metadata": {
         "from": "Security",
         "to": "Testing"
-      },
-      "level": null,
-      "status_message": null
+      }
     },
     {
       "name": "RAG retrieval",
       "type": "retriever",
-      "input": {
-        "query": "Provide a password-recovery link that expires after 15 minutes and can be used only once."
-      },
-      "output": [
-        {
-          "source": "testing-strategy.md",
-          "section": "Testing Strategy",
-          "version": "local",
-          "chunk_id": "testing-strategy.md:8412104a36:0",
-          "fragment": "Cover happy paths, failure paths, edge cases, business rules, and security controls.",
-          "domain": "testing",
-          "query": "Provide a password-recovery link that expires after 15 minutes and can be used only once.",
-          "score": 0.5762062072753906,
-          "retrieved_at": "2026-08-25T00:46:58.621851Z"
-        }
-      ],
+      "level": null,
+      "status_message": null,
       "metadata": {
         "agent": "Testing",
         "status": "OK"
-      },
-      "level": null,
-      "status_message": null
+      }
     },
     {
       "name": "MCP call",
       "type": "tool",
-      "input": null,
-      "output": {
-        "tool_name": "run_tests",
-        "allowed_role": "Testing",
-        "status": "SUCCESS",
-        "input_summary": "safe",
-        "output_summary": "============================= test session starts =============================\nplatform win32 -- Python 3.14.7, pytest-9.1.1, pluggy-1.6.0\nrootdir: C:\\Users\\AbrahamVillalobosUga\\AppData\\Local\\Temp\\pytest-of-AbrahamVillalobosUga\\pytest-535\\test_one_normal_run_invokes_bo0\\runs\\multimodel-863a10fc-679c-4572-b9b3-74d539f8d9ec\nplugins: anyio-4.14.2, langsmith-0.11.1, cov-7.1.0\ncollected 2 items\n\ntest_acceptance.py ..                                                    [100%]\n\n============================== 2 passed in 0.25s ==============================\n",
-        "duration_ms": 2277,
-        "evidence_reference": null,
-        "error": null
-      },
-      "metadata": {},
       "level": null,
-      "status_message": null
+      "status_message": null,
+      "metadata": {
+        "transport": "stdio",
+        "protocol_version": "2026-07-28",
+        "server": "engineering-team-quality"
+      }
     },
     {
       "name": "Testing model",
       "type": "generation",
-      "input": {
-        "system_prompt": "Role: Testing. Distinguish proposed, generated, executed tests and actual results.\nReturn only one JSON object matching the supplied role-specific schema. Preserve all governed facts, findings, statuses, and evidence from the candidate artifact. Do not add prose or fields.",
-        "user_prompt": "Task: Testing\nContextEnvelope: {\"agent\": \"Testing\", \"current_task\": \"Testing\", \"state_projection\": {\"run_id\": \"multimodel-863a10fc-679c-4572-b9b3-74d539f8d9ec\", \"specification\": \"present\", \"architecture\": \"present\", \"implementation\": \"present\", \"security_review\": \"present\"}, \"rag_evidence\": [{\"source\": \"testing-strategy.md\", \"section\": \"Testing Strategy\", \"chunk_id\": \"testing-strategy.md:8412104a36:0\", \"score\": 0.5762062072753906}], \"tool_results\": [{\"tool\": \"run_tests\", \"status\": \"SUCCESS\"}], \"remediation_feedback\": null}\nCandidate artifact: {\"proposed_tests\": [\"happy path\", \"error\", \"edge\", \"validation\", \"security\", \"business rules\"], \"generated_tests\": [], \"executed_tests\": [\"run_tests\"], \"actual_results\": [\"============================= test session starts =============================\\nplatform win32 -- Python 3.14.7, pytest-9.1.1, pluggy-1.6.0\\nrootdir: C:\\\\Users\\\\AbrahamVillalobosUga\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-AbrahamVillalobosUga\\\\pytest-535\\\\test_one_normal_run_invokes_bo0\\\\runs\\\\multimodel-863a10fc-679c-4572-b9b3-74d539f8d9ec\\nplugins: anyio-4.14.2, langsmith-0.11.1, cov-7.1.0\\ncollected 2 items\\n\\ntest_acceptance.py ..                                                    [100%]\\n\\n============================== 2 passed in 0.25s ==============================\\n\"], \"status\": \"SUCCESS\", \"failures\": [], \"coverage_mapping\": {\"happy_path\": [\"validated scenario checks\"], \"error_edge_validation_security_business\": [\"review matrix\"]}, \"evidence_references\": [\"run_tests\", \"testing-strategy.md:8412104a36:0\"]}\nOutput schema: {\"$defs\": {\"ToolStatus\": {\"enum\": [\"SUCCESS\", \"FAIL\", \"DENIED\", \"UNAVAILABLE\"], \"title\": \"ToolStatus\", \"type\": \"string\"}}, \"additionalProperties\": false, \"properties\": {\"proposed_tests\": {\"items\": {\"type\": \"string\"}, \"title\": \"Proposed Tests\", \"type\": \"array\"}, \"generated_tests\": {\"items\": {\"type\": \"string\"}, \"title\": \"Generated Tests\", \"type\": \"array\"}, \"executed_tests\": {\"items\": {\"type\": \"string\"}, \"title\": \"Executed Tests\", \"type\": \"array\"}, \"actual_results\": {\"items\": {\"type\": \"string\"}, \"title\": \"Actual Results\", \"type\": \"array\"}, \"status\": {\"$ref\": \"#/$defs/ToolStatus\"}, \"failures\": {\"items\": {\"type\": \"string\"}, \"title\": \"Failures\", \"type\": \"array\"}, \"coverage_mapping\": {\"additionalProperties\": {\"items\": {\"type\": \"string\"}, \"type\": \"array\"}, \"title\": \"Coverage Mapping\", \"type\": \"object\"}, \"evidence_references\": {\"items\": {\"type\": \"string\"}, \"title\": \"Evidence References\", \"type\": \"array\"}}, \"required\": [\"proposed_tests\", \"generated_tests\", \"executed_tests\", \"actual_results\", \"status\", \"failures\", \"coverage_mapping\", \"evidence_references\"], \"title\": \"TestResult\", \"type\": \"object\"}"
-      },
-      "output": {
-        "response": "{\"proposed_tests\": [\"happy path\", \"error\", \"edge\", \"validation\", \"security\", \"business rules\"], \"generated_tests\": [], \"executed_tests\": [\"run_tests\"], \"actual_results\": [\"============================= test session starts =============================\\nplatform win32 -- Python 3.14.7, pytest-9.1.1, pluggy-1.6.0\\nrootdir: C:\\\\Users\\\\AbrahamVillalobosUga\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-AbrahamVillalobosUga\\\\pytest-535\\\\test_one_normal_run_invokes_bo0\\\\runs\\\\multimodel-863a10fc-679c-4572-b9b3-74d539f8d9ec\\nplugins: anyio-4.14.2, langsmith-0.11.1, cov-7.1.0\\ncollected 2 items\\n\\ntest_acceptance.py ..                                                    [100%]\\n\\n============================== 2 passed in 0.25s ==============================\\n\"], \"status\": \"SUCCESS\", \"failures\": [], \"coverage_mapping\": {\"happy_path\": [\"validated scenario checks\"], \"error_edge_validation_security_business\": [\"review matrix\"]}, \"evidence_references\": [\"run_tests\", \"testing-strategy.md:8412104a36:0\"]}"
-      },
+      "level": "DEFAULT",
+      "status_message": null,
       "metadata": {
         "agent": "Testing",
         "provider": "ollama",
@@ -625,70 +388,31 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 62187,
+        "latency_ms": 66950,
         "usage": {
-          "prompt_eval_count": 883,
-          "eval_count": 311
+          "prompt_eval_count": 811,
+          "eval_count": 206
         },
         "structured_output_success": true,
         "error": null,
         "retry": 0,
         "repair": 0
-      },
-      "level": "DEFAULT",
-      "status_message": null
+      }
     },
     {
       "name": "Testing",
       "type": "agent",
-      "input": null,
-      "output": {
-        "proposed_tests": [
-          "happy path",
-          "error",
-          "edge",
-          "validation",
-          "security",
-          "business rules"
-        ],
-        "generated_tests": [],
-        "executed_tests": [
-          "run_tests"
-        ],
-        "actual_results": [
-          "============================= test session starts =============================\nplatform win32 -- Python 3.14.7, pytest-9.1.1, pluggy-1.6.0\nrootdir: C:\\Users\\AbrahamVillalobosUga\\AppData\\Local\\Temp\\pytest-of-AbrahamVillalobosUga\\pytest-535\\test_one_normal_run_invokes_bo0\\runs\\multimodel-863a10fc-679c-4572-b9b3-74d539f8d9ec\nplugins: anyio-4.14.2, langsmith-0.11.1, cov-7.1.0\ncollected 2 items\n\ntest_acceptance.py ..                                                    [100%]\n\n============================== 2 passed in 0.25s ==============================\n"
-        ],
-        "status": "SUCCESS",
-        "failures": [],
-        "coverage_mapping": {
-          "happy_path": [
-            "validated scenario checks"
-          ],
-          "error_edge_validation_security_business": [
-            "review matrix"
-          ]
-        },
-        "evidence_references": [
-          "run_tests",
-          "testing-strategy.md:8412104a36:0"
-        ]
-      },
+      "level": null,
+      "status_message": null,
       "metadata": {
         "iteration": 0
-      },
-      "level": null,
-      "status_message": null
+      }
     },
     {
       "name": "Reviewer model",
       "type": "generation",
-      "input": {
-        "system_prompt": "Role: Reviewer. Recommend only; deterministic routers validate every transition.\nReturn only one JSON object matching the supplied role-specific schema. Preserve all governed facts, findings, statuses, and evidence from the candidate artifact. Do not add prose or fields.",
-        "user_prompt": "Task: Reviewer\nContextEnvelope: {\"agent\": \"Reviewer\", \"current_task\": \"Reviewer\", \"state_projection\": {\"run_id\": \"multimodel-863a10fc-679c-4572-b9b3-74d539f8d9ec\", \"specification\": \"present\", \"architecture\": \"present\", \"implementation\": \"present\", \"security_review\": \"present\", \"test_results\": \"present\", \"model_usage\": \"present\", \"errors\": \"present\", \"iteration\": \"present\"}, \"rag_evidence\": [{\"source\": \"api-design-guidelines.md\", \"section\": \"API Design Guidelines\", \"chunk_id\": \"api-design-guidelines.md:a8af018f25:0\", \"score\": 0.5965772271156311}, {\"source\": \"security-guidelines.md\", \"section\": \"Security Guidelines\", \"chunk_id\": \"security-guidelines.md:f222ba16fc:0\", \"score\": 0.6121151447296143}, {\"source\": \"owasp-api-security.md\", \"section\": \"OWASP API Security\", \"chunk_id\": \"owasp-api-security.md:72a7d79810:0\", \"score\": 0.6005601584911346}, {\"source\": \"testing-strategy.md\", \"section\": \"Testing Strategy\", \"chunk_id\": \"testing-strategy.md:8412104a36:0\", \"score\": 0.5762062072753906}], \"tool_results\": [{\"tool\": \"list_files\", \"status\": \"SUCCESS\"}, {\"tool\": \"list_files\", \"status\": \"SUCCESS\"}, {\"tool\": \"scan_dependencies\", \"status\": \"SUCCESS\"}, {\"tool\": \"run_security_scan\", \"status\": \"SUCCESS\"}, {\"tool\": \"run_tests\", \"status\": \"SUCCESS\"}], \"remediation_feedback\": null}\nCandidate artifact: {\"status\": \"APPROVED\", \"score\": 100.0, \"subscores\": {\"requirements_completeness\": 100.0, \"architecture_correctness\": 100.0, \"security_compliance\": 100.0, \"testing_completeness\": 100.0, \"implementation_consistency\": 100.0, \"rag_grounding\": 100.0}, \"problems\": [], \"reason\": \"validated evidence satisfies acceptance checks\", \"remediation_category\": null, \"return_to\": null, \"confidence\": 1.0, \"evidence_references\": [\"api-design-guidelines.md:a8af018f25:0\", \"security-guidelines.md:f222ba16fc:0\", \"owasp-api-security.md:72a7d79810:0\", \"testing-strategy.md:8412104a36:0\", \"list_files\", \"list_files\", \"scan_dependencies\", \"run_security_scan\", \"run_tests\"]}\nOutput schema: {\"$defs\": {\"RemediationCategory\": {\"enum\": [\"ARCHITECTURE\", \"IMPLEMENTATION\", \"SECURITY\", \"TESTING\"], \"title\": \"RemediationCategory\", \"type\": \"string\"}, \"ReviewerStatus\": {\"enum\": [\"APPROVED\", \"REJECTED\"], \"title\": \"ReviewerStatus\", \"type\": \"string\"}, \"RouteTarget\": {\"enum\": [\"Architecture\", \"Developer\", \"Testing\", \"HUMAN_REVIEW_REQUIRED\"], \"title\": \"RouteTarget\", \"type\": \"string\"}}, \"additionalProperties\": false, \"properties\": {\"status\": {\"$ref\": \"#/$defs/ReviewerStatus\"}, \"score\": {\"maximum\": 100, \"minimum\": 0, \"title\": \"Score\", \"type\": \"number\"}, \"subscores\": {\"additionalProperties\": {\"type\": \"number\"}, \"title\": \"Subscores\", \"type\": \"object\"}, \"problems\": {\"items\": {\"type\": \"string\"}, \"title\": \"Problems\", \"type\": \"array\"}, \"reason\": {\"title\": \"Reason\", \"type\": \"string\"}, \"remediation_category\": {\"anyOf\": [{\"$ref\": \"#/$defs/RemediationCategory\"}, {\"type\": \"null\"}], \"default\": null}, \"return_to\": {\"anyOf\": [{\"$ref\": \"#/$defs/RouteTarget\"}, {\"type\": \"null\"}], \"default\": null}, \"confidence\": {\"maximum\": 1, \"minimum\": 0, \"title\": \"Confidence\", \"type\": \"number\"}, \"evidence_references\": {\"items\": {\"type\": \"string\"}, \"title\": \"Evidence References\", \"type\": \"array\"}}, \"required\": [\"status\", \"score\", \"subscores\", \"reason\", \"confidence\"], \"title\": \"ReviewerDecision\", \"type\": \"object\"}"
-      },
-      "output": {
-        "response": "{\n  \"status\": \"APPROVED\",\n  \"score\": 100.0,\n  \"subscores\": {\n    \"requirements_completeness\": 100.0,\n    \"architecture_correctness\": 100.0,\n    \"security_compliance\": 100.0,\n    \"testing_completeness\": 100.0,\n    \"implementation_consistency\": 100.0,\n    \"rag_grounding\": 100.0\n  },\n  \"reason\": \"validated evidence satisfies acceptance checks\",\n  \"confidence\": 1.0,\n  \"evidence_references\": [\n    \"api-design-guidelines.md:a8af018f25:0\",\n    \"security-guidelines.md:f222ba16fc:0\",\n    \"owasp-api-security.md:72a7d79810:0\",\n    \"testing-strategy.md:8412104a36:0\",\n    \"list_files\",\n    \"list_files\",\n    \"scan_dependencies\",\n    \"run_security_scan\",\n    \"run_tests\"\n  ]\n}"
-      },
+      "level": "DEFAULT",
+      "status_message": null,
       "metadata": {
         "agent": "Reviewer",
         "provider": "ollama",
@@ -698,108 +422,40 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 109839,
+        "latency_ms": 165656,
         "usage": {
-          "prompt_eval_count": 1145,
-          "eval_count": 266
+          "prompt_eval_count": 1315,
+          "eval_count": 311
         },
         "structured_output_success": true,
         "error": null,
         "retry": 0,
         "repair": 0
-      },
-      "level": "DEFAULT",
-      "status_message": null
+      }
     },
     {
       "name": "Reviewer",
       "type": "agent",
-      "input": null,
-      "output": {
-        "status": "APPROVED",
-        "score": 100.0,
-        "subscores": {
-          "requirements_completeness": 100.0,
-          "architecture_correctness": 100.0,
-          "security_compliance": 100.0,
-          "testing_completeness": 100.0,
-          "implementation_consistency": 100.0,
-          "rag_grounding": 100.0
-        },
-        "problems": [],
-        "reason": "validated evidence satisfies acceptance checks",
-        "remediation_category": null,
-        "return_to": null,
-        "confidence": 1.0,
-        "evidence_references": [
-          "api-design-guidelines.md:a8af018f25:0",
-          "security-guidelines.md:f222ba16fc:0",
-          "owasp-api-security.md:72a7d79810:0",
-          "testing-strategy.md:8412104a36:0",
-          "list_files",
-          "list_files",
-          "scan_dependencies",
-          "run_security_scan",
-          "run_tests"
-        ]
-      },
+      "level": null,
+      "status_message": null,
       "metadata": {
         "iteration": 0
-      },
-      "level": null,
-      "status_message": null
+      }
     },
     {
       "name": "route",
       "type": "span",
-      "input": null,
-      "output": null,
+      "level": null,
+      "status_message": null,
       "metadata": {
         "from": "Reviewer",
         "to": "FinalReport",
         "iteration": 0
-      },
-      "level": null,
-      "status_message": null
+      }
     },
     {
       "name": "FinalReport",
-      "type": "span",
-      "output": {
-        "feature": "Autonomous Software Engineering Team",
-        "status": "APPROVED",
-        "requirements": "Provide a password-recovery link that expires after 15 minutes and can be used only once.",
-        "architecture": "bounded",
-        "security": "PASS",
-        "testing": "SUCCESS",
-        "implementation": "not applied",
-        "risk": "INFO",
-        "iterations": 0,
-        "documentation_used": [
-          "api-design-guidelines.md",
-          "security-guidelines.md",
-          "owasp-api-security.md",
-          "testing-strategy.md"
-        ],
-        "tools_executed": [
-          "list_files",
-          "list_files",
-          "scan_dependencies",
-          "run_security_scan",
-          "run_tests"
-        ],
-        "models_used": [
-          "qwen3.5:9b",
-          "qwen3.5:4b",
-          "qwen3.5:9b",
-          "qwen3.5:9b",
-          "qwen3.5:4b",
-          "qwen3.5:9b"
-        ],
-        "errors_degradations": [],
-        "trace_id": "0d97ba01c9185caf94321c40a51e0485",
-        "next_action": "none"
-      }
+      "type": "span"
     }
   ]
 }

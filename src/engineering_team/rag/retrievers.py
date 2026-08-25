@@ -26,9 +26,9 @@ class SpecializedRetriever:
     """Apply agent domain filters, MMR, relevance, and provenance conversion."""
 
     pipeline: ClassVar[list[str]] = [
-        "Documents",
-        "loader",
-        "chunking",
+        "source documents",
+        "LangChain Document",
+        "LangChain text splitting",
         "Sentence Transformers",
         "embeddings",
         "Chroma",

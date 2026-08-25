@@ -24,6 +24,8 @@ from engineering_team.contracts.models import (
 )
 from engineering_team.graph.stategraph import build_engineering_graph
 from engineering_team.llm.cloud import CloudModelRuntime
+from engineering_team.mcp.client import MCPQualityClient
+from engineering_team.observability.langfuse import LangfuseTracer
 
 CHECKLIST = {key: "PASS" for key in (
     "authentication", "authorization", "input_validation", "sensitive_information",
@@ -140,6 +142,43 @@ def test_failed_mcp_test_result_changes_reviewer_route_and_is_remediated():
     assert result["iteration"] == 1
     assert result["route_history"].count("Reviewer") == 2
     assert result["route_history"][-4:] == ["Developer", "Testing", "Reviewer", "FinalReport"]
+
+
+def test_real_mcp_protocol_failure_changes_reviewer_route_and_is_remediated(tmp_path):
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "safe.py").write_text("value = 1\n", encoding="utf-8")
+    (tmp_path / "test_protocol_route.py").write_text(
+        "from pathlib import Path\n"
+        "def test_fail_once():\n"
+        "    marker = Path('.mcp-remediated')\n"
+        "    if not marker.exists():\n"
+        "        marker.write_text('remediated', encoding='utf-8')\n"
+        "        assert False\n",
+        encoding="utf-8",
+    )
+    quality = MCPQualityClient(tmp_path)
+    trace = LangfuseTracer(offline_directory=tmp_path / "traces").start_run(
+        "real-mcp", "safe bounded change"
+    )
+
+    result = build_engineering_graph(quality_mcp=quality, trace=trace).invoke(
+        {"run_id": "real-mcp", "requirement": "safe bounded change"}
+    )
+
+    failed = [item for item in result["tool_results"] if item.tool_name == "run_tests"]
+    assert failed[0].status is ToolStatus.FAIL
+    assert result["test_results"][0].status is ToolStatus.FAIL
+    first_reviewer = result["route_history"].index("Reviewer")
+    assert result["route_history"][first_reviewer + 1 : first_reviewer + 4] == [
+        "Developer", "Testing", "Reviewer"
+    ]
+    assert result["final_status"] == "APPROVED"
+    protocol_events = [
+        event for event in trace.events
+        if event["name"] == "MCP call" and event["metadata"].get("transport") == "stdio"
+    ]
+    assert protocol_events
+    assert all(event["metadata"]["protocol_version"] for event in protocol_events)
 
 
 class FailingLocalRuntime:

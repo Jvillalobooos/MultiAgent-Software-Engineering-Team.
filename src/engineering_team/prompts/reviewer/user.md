@@ -1,1 +1,2 @@
-Validated summaries: {state_projection}\nSchema: {output_schema}
+Validated artifact summaries: {state_projection}
+Output schema summary: {output_schema}

@@ -35,9 +35,17 @@
       "run_security_scan",
       "run_tests"
     ],
-    "trace_id": "4ae3b38b406151ec96003cf1783af891",
+    "tool_evidence": [
+      "mcp://repository/list_files",
+      "mcp://repository/list_files",
+      "mcp://quality/scan_dependencies",
+      "mcp://quality/run_security_scan",
+      "mcp://quality/run_tests"
+    ],
+    "trace_id": "031e49f316dd5154abdb9e89bf4afc4f",
+    "langfuse_live": false,
     "pass": true,
-    "duration": 1.8431007999461144,
+    "duration": 7.323815500014462,
     "llm_calls": 0,
     "tool_calls": 6,
     "retrievals": 4,
@@ -46,7 +54,8 @@
       "expiration=15_minutes",
       "first_use=accepted",
       "second_use=denied"
-    ]
+    ],
+    "model_usage": []
   },
   {
     "id": "SC-02",
@@ -84,9 +93,17 @@
       "run_security_scan",
       "run_tests"
     ],
-    "trace_id": "e99e6f474aa55d8283f35b7a2d356d8b",
+    "tool_evidence": [
+      "mcp://repository/list_files",
+      "mcp://repository/list_files",
+      "mcp://quality/scan_dependencies",
+      "mcp://quality/run_security_scan",
+      "mcp://quality/run_tests"
+    ],
+    "trace_id": "7ebf853f71b65ddbb3788e41a8d2677d",
+    "langfuse_live": false,
     "pass": true,
-    "duration": 1.7995051000034437,
+    "duration": 7.300625000032596,
     "llm_calls": 0,
     "tool_calls": 6,
     "retrievals": 5,
@@ -94,7 +111,8 @@
     "acceptance_evidence": [
       "attempts_1_to_4=unlocked",
       "attempt_5=locked"
-    ]
+    ],
+    "model_usage": []
   },
   {
     "id": "SC-03",
@@ -133,9 +151,17 @@
       "run_security_scan",
       "run_tests"
     ],
-    "trace_id": "20efcc5e9c9259648e849079aec68158",
+    "tool_evidence": [
+      "mcp://repository/list_files",
+      "mcp://repository/list_files",
+      "mcp://quality/scan_dependencies",
+      "mcp://quality/run_security_scan",
+      "mcp://quality/run_tests"
+    ],
+    "trace_id": "f075384239ff5912bd8a61ec8b80c0fe",
+    "langfuse_live": false,
     "pass": true,
-    "duration": 1.7539193000411615,
+    "duration": 7.365185600006953,
     "llm_calls": 0,
     "tool_calls": 6,
     "retrievals": 5,
@@ -143,7 +169,8 @@
     "acceptance_evidence": [
       "authorized_result_count=5",
       "cross_user_access=denied"
-    ]
+    ],
+    "model_usage": []
   },
   {
     "id": "SC-04",
@@ -189,9 +216,25 @@
       "run_security_scan",
       "run_tests"
     ],
-    "trace_id": "dbb6a93ade495d9aa52cbb3207468c0f",
+    "tool_evidence": [
+      "mcp://repository/list_files",
+      "mcp://repository/list_files",
+      "mcp://quality/scan_dependencies",
+      "mcp://quality/run_security_scan",
+      "mcp://quality/run_tests",
+      "mcp://repository/list_files",
+      "mcp://quality/scan_dependencies",
+      "mcp://quality/run_security_scan",
+      "mcp://quality/run_tests",
+      "mcp://repository/list_files",
+      "mcp://quality/scan_dependencies",
+      "mcp://quality/run_security_scan",
+      "mcp://quality/run_tests"
+    ],
+    "trace_id": "bc5f7acce49e5956bcacab02d6a15bf8",
+    "langfuse_live": false,
     "pass": true,
-    "duration": 5.214889199996833,
+    "duration": 19.579070799984038,
     "llm_calls": 0,
     "tool_calls": 14,
     "retrievals": 5,
@@ -199,7 +242,8 @@
     "acceptance_evidence": [
       "unsafe_non_expiring_requirement=must_reject",
       "secure_baseline=expires"
-    ]
+    ],
+    "model_usage": []
   },
   {
     "id": "SC-05",
@@ -246,9 +290,25 @@
       "run_security_scan",
       "run_tests"
     ],
-    "trace_id": "ee55978d59965f628bc3ee91b50e8cbf",
+    "tool_evidence": [
+      "mcp://repository/list_files",
+      "mcp://repository/list_files",
+      "mcp://quality/scan_dependencies",
+      "mcp://quality/run_security_scan",
+      "mcp://quality/run_tests",
+      "mcp://repository/list_files",
+      "mcp://quality/scan_dependencies",
+      "mcp://quality/run_security_scan",
+      "mcp://quality/run_tests",
+      "mcp://repository/list_files",
+      "mcp://quality/scan_dependencies",
+      "mcp://quality/run_security_scan",
+      "mcp://quality/run_tests"
+    ],
+    "trace_id": "6b31eb56dfbc5f259a34ead89bfe5004",
+    "langfuse_live": false,
     "pass": true,
-    "duration": 5.117323000042234,
+    "duration": 19.511978399998043,
     "llm_calls": 0,
     "tool_calls": 14,
     "retrievals": 6,
@@ -256,6 +316,7 @@
     "acceptance_evidence": [
       "authorization_failure=detected",
       "idor=cross_user_access_denied"
-    ]
+    ],
+    "model_usage": []
   }
 ]

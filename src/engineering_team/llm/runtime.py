@@ -54,7 +54,10 @@ class LocalModelRuntime:
         schema_type: type[BaseModel], candidate: dict[str, Any],
     ) -> tuple[BaseModel, ModelExecutionInfo]:
         selection = self.router.local_for(role)
-        system_prompt, user_prompt = self._prompts(role, envelope, schema_type, candidate)
+        output_schema = _governed_output_schema(schema_type)
+        system_prompt, user_prompt = self._prompts(
+            role, envelope, output_schema, candidate
+        )
         availability_attempt = 0
         repair_attempt = 0
         while True:
@@ -71,7 +74,7 @@ class LocalModelRuntime:
                         "prompt": user_prompt,
                         "stream": False,
                         "think": False,
-                        "format": schema_type.model_json_schema(),
+                        "format": output_schema,
                         "options": {"temperature": 0, "num_predict": 2048},
                     },
                 )
@@ -136,9 +139,10 @@ class LocalModelRuntime:
                 )
                 if repair_attempt < self.settings.max_local_repairs:
                     repair_attempt += 1
-                    user_prompt += (
-                        "\nRepair: the prior JSON contradicted governed facts. "
-                        "Return the candidate artifact exactly."
+                    user_prompt = (
+                        "Repair governed artifact contradiction. Return only this candidate "
+                        "artifact as JSON, preserving every key and value exactly:\n"
+                        f"{json.dumps(candidate, ensure_ascii=False)}"
                     )
                     continue
                 raise RuntimeError(info.error)
@@ -156,8 +160,10 @@ class LocalModelRuntime:
 
     def _prompts(
         self, role: AgentRole, envelope: ContextEnvelope,
-        schema_type: type[BaseModel], candidate: dict[str, Any],
+        output_schema: dict[str, Any] | type[BaseModel], candidate: dict[str, Any],
     ) -> tuple[str, str]:
+        if isinstance(output_schema, type) and issubclass(output_schema, BaseModel):
+            output_schema = _governed_output_schema(output_schema)
         directory = Path(__file__).parents[1] / "prompts" / role.value.lower()
         system = (directory / "system.md").read_text(encoding="utf-8").strip()
         system += (
@@ -193,8 +199,9 @@ class LocalModelRuntime:
         user = (
             f"Task: {envelope.current_task}\n"
             f"ContextEnvelope: {json.dumps(context, ensure_ascii=False)}\n"
+            f"Output schema: {json.dumps(output_schema)}\n"
             f"Candidate artifact: {json.dumps(candidate, ensure_ascii=False)}\n"
-            f"Output schema: {json.dumps(schema_type.model_json_schema())}"
+            "Copy every candidate key and value exactly; do not omit schema-optional keys."
         )
         return system, user
 
@@ -218,6 +225,13 @@ class LocalModelRuntime:
 
 def _contains_all(actual: list[Any], governed: list[Any]) -> bool:
     return all(item in actual for item in governed)
+
+
+def _governed_output_schema(schema_type: type[BaseModel]) -> dict[str, Any]:
+    """Require every governed candidate key in Ollama's structured output grammar."""
+    schema = schema_type.model_json_schema()
+    schema["required"] = list(schema.get("properties", {}))
+    return schema
 
 
 def _same_items(actual: list[Any], governed: list[Any]) -> bool:

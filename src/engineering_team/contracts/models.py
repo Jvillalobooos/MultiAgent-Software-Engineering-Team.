@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .enums import (
     ActionMode,
@@ -51,6 +51,21 @@ class ImplementationResult(StrictModel):
     evidence: list[str]
     validation_result: str
     security_surface_changed: bool = False
+
+    @model_validator(mode="after")
+    def require_detailed_proposal_or_justified_noop(self) -> "ImplementationResult":
+        if self.changed_files:
+            if not self.diff.strip() or not self.evidence or not self.validation_result.strip():
+                raise ValueError("implementation proposal requires diff, evidence, and validation")
+            return self
+        justified = (
+            self.diff.startswith("NO-OP:")
+            and bool(self.evidence)
+            and "no-op" in self.validation_result.lower()
+        )
+        if not justified:
+            raise ValueError("empty implementation requires a specific no-op justification")
+        return self
 
 
 class SecurityFinding(StrictModel):

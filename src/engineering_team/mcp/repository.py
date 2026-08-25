@@ -7,6 +7,10 @@ _READ_ROLES = {AgentRole.ARCHITECTURE, AgentRole.DEVELOPER}
 _WRITE_ROLES = {AgentRole.DEVELOPER}
 
 
+def _is_secret_path(path: Path) -> bool:
+    return any(part == ".env" or part.startswith(".env.") for part in path.parts)
+
+
 class RepositoryMCP:
     def __init__(self, root: str | Path) -> None:
         self.root = Path(root).resolve()
@@ -30,7 +34,8 @@ class RepositoryMCP:
         )
 
     def _path(self, relative: str) -> Path:
-        if ".." in Path(relative).parts:
+        requested = Path(relative)
+        if ".." in requested.parts or _is_secret_path(requested):
             raise ValueError("path traversal denied")
         target = (self.root / relative).resolve()
         if self.root not in target.parents and target != self.root:
@@ -44,7 +49,11 @@ class RepositoryMCP:
             role,
             "list_files",
             ToolStatus.SUCCESS,
-            "\n".join(str(p.relative_to(self.root)) for p in self.root.rglob("*") if p.is_file()),
+            "\n".join(
+                str(p.relative_to(self.root))
+                for p in self.root.rglob("*")
+                if p.is_file() and not p.is_symlink() and not _is_secret_path(p.relative_to(self.root))
+            ),
         )
 
     def read_file(self, role: AgentRole, relative: str) -> ToolResult:

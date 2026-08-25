@@ -42,7 +42,9 @@ class ScenarioRecord(StrictModel):
     models_used: list[str]
     rag_sources: list[str]
     tools_used: list[str]
+    tool_evidence: list[str] = Field(default_factory=list)
     trace_id: str
+    langfuse_live: bool = False
     pass_: bool = Field(alias="pass")
     duration: float
     llm_calls: int
@@ -50,6 +52,7 @@ class ScenarioRecord(StrictModel):
     retrievals: int
     errors: list[str]
     acceptance_evidence: list[str]
+    model_usage: list[dict[str, Any]] = Field(default_factory=list)
 
 
 SCENARIOS = [
@@ -114,16 +117,15 @@ class EvaluationHarness:
         trace = self.tracer.start_run(run_id, scenario.requirement)
         runtime = self.model_runtime_factory(trace) if self.model_runtime_factory else None
         started = time.perf_counter()
-        from engineering_team.mcp.quality import QualityMCP
-        from engineering_team.mcp.repository import RepositoryMCP
+        from engineering_team.mcp.client import MCPQualityClient, MCPRepositoryClient
         from engineering_team.workspace.isolation import create_run_copy
 
         run_workspace = create_run_copy(run_id, "sample_app", self.workspace_root)
         timeout = getattr(self.quality_mcp, "timeout_seconds", 60)
-        run_quality = QualityMCP(run_workspace, timeout_seconds=timeout)
+        run_quality = MCPQualityClient(run_workspace, timeout_seconds=timeout)
         graph = build_engineering_graph(
             quality_mcp=run_quality,
-            repository_mcp=RepositoryMCP(run_workspace),
+            repository_mcp=MCPRepositoryClient(run_workspace, timeout_seconds=timeout),
             retriever=self.retriever,
             model_runtime=runtime,
             trace=trace,
@@ -149,7 +151,14 @@ class EvaluationHarness:
         models = [item.actual_model or item.requested_model for item in state.get("model_usage", [])]
         sources = list(dict.fromkeys(item.source for item in state.get("rag_evidence", [])))
         tools = [item.tool_name for item in state.get("tool_results", [])]
+        tool_evidence = [
+            item.evidence_reference for item in state.get("tool_results", [])
+            if item.evidence_reference
+        ]
         errors = [item.code.value for item in state.get("errors", [])]
+        model_usage = [
+            item.model_dump(mode="json") for item in state.get("model_usage", [])
+        ]
         status_match = scenario.expected_status == observed
         expected_signal_observed = _signal_observed(scenario.identifier, acceptance_evidence, findings)
         return ScenarioRecord(
@@ -166,7 +175,9 @@ class EvaluationHarness:
             models_used=models,
             rag_sources=sources,
             tools_used=tools,
+            tool_evidence=tool_evidence,
             trace_id=trace.trace_id,
+            langfuse_live=trace.live,
             pass_=status_match and acceptance.status is ToolStatus.SUCCESS and expected_signal_observed,
             duration=duration,
             llm_calls=len(state.get("model_usage", [])),
@@ -174,6 +185,7 @@ class EvaluationHarness:
             retrievals=len(state.get("rag_evidence", [])),
             errors=errors,
             acceptance_evidence=acceptance_evidence,
+            model_usage=model_usage,
         )
 
     @staticmethod
@@ -284,8 +296,7 @@ def run_multimodel_acceptance(
     """Execute one normal six-agent run using the two configured Ollama tags."""
     from engineering_team.llm.cloud import CloudModelRuntime
     from engineering_team.llm.runtime import LocalModelRuntime
-    from engineering_team.mcp.quality import QualityMCP
-    from engineering_team.mcp.repository import RepositoryMCP
+    from engineering_team.mcp.client import MCPQualityClient, MCPRepositoryClient
     from engineering_team.rag import build_retriever
     from engineering_team.workspace.isolation import create_run_copy
 
@@ -304,8 +315,8 @@ def run_multimodel_acceptance(
     cloud_runtime = CloudModelRuntime(settings, trace=trace) if settings.cloud_enabled else None
     retriever = build_retriever(settings, settings.rag_persist_directory, reindex=True)
     state = build_engineering_graph(
-        repository_mcp=RepositoryMCP(run_workspace),
-        quality_mcp=QualityMCP(run_workspace),
+        repository_mcp=MCPRepositoryClient(run_workspace),
+        quality_mcp=MCPQualityClient(run_workspace),
         retriever=retriever,
         model_runtime=runtime,
         cloud_runtime=cloud_runtime,
@@ -345,7 +356,14 @@ def run_multimodel_acceptance(
         "tools_used": [item.tool_name for item in state.get("tool_results", [])],
         "cloud_used": any(item["provider"] != "ollama" for item in usage),
         "bonus_pass": bonus_pass,
-        "trace_events": trace.events,
+        "trace_events": [
+            {
+                key: event[key]
+                for key in ("name", "type", "level", "status_message", "metadata", "model")
+                if key in event
+            }
+            for event in trace.events
+        ],
     }
     if report_path is not None:
         path = Path(report_path)

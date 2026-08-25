@@ -1,1 +1,3 @@
-Evidence: {rag_evidence}\nTools: {tool_results}\nSchema: {output_schema}
+Relevant RAG evidence: {rag_evidence}
+Relevant ToolResults: {tool_results}
+Output schema summary: {output_schema}

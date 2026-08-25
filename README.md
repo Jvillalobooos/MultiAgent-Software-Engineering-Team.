@@ -8,9 +8,11 @@ routers determinísticos controlan remediación, límites e HITL.
 ## Arquitectura y stack
 
 El monolito modular separa contratos, agentes, grafo, Ollama, RAG, MCP,
-observabilidad y workspaces por corrida. Usa Python 3.10+, LangGraph, Pydantic,
-Ollama, Sentence Transformers, Chroma persistente, Langfuse, pytest,
-FastAPI/SQLite, Repository MCP y Quality MCP. Consulte
+observabilidad y workspaces por corrida. LangGraph es el único orquestador;
+LangChain aporta `Document` y text splitting al RAG; Sentence Transformers
+genera embeddings y Chroma los persiste. Repository y Quality se exponen como
+MCP Servers reales y el grafo los consume con un MCP Client oficial por stdio.
+Usa Python 3.10+, Pydantic, Ollama, Langfuse, pytest y FastAPI/SQLite. Consulte
 `docs/architecture/overview.md` y los diagramas de `docs/diagrams/`.
 
 ## Instalación
@@ -45,7 +47,8 @@ top_k 4, fetch_k 8 y relevancia normalizada 0.55. Cloud está desactivado por
 defecto. `GEMINI_API_KEY` y `GROQ_API_KEY` son opcionales y nunca se imprimen.
 Langfuse live requiere `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` y
 `LANGFUSE_BASE_URL`; sin credenciales el adapter conserva una
-traza local correlacionada y el core continúa.
+traza local correlacionada y el core continúa. Gemini/Groq son opcionales y no
+cuentan como evidencia multi-model local.
 
 ## Ejecución y evidencia
 
@@ -56,11 +59,16 @@ traza local correlacionada y el core continúa.
 # Cinco escenarios SC-01..SC-05 y agregado
 .\.venv\Scripts\python.exe scripts/run_evaluation.py
 
+# Los mismos cinco escenarios con ModelRouter/Ollama reales y Langfuse
+.\.venv\Scripts\python.exe scripts/run_evaluation.py --live-models
+
 # Corrida normal REAL con qwen3.5:4b y qwen3.5:9b
 .\.venv\Scripts\python.exe scripts/run_multimodel.py
 ```
 
-Los dos scripts escriben evidencia reproducible en `evaluation/reports/`.
+El modo rápido escribe `scenarios.json`/`aggregate.json`; el modo LIVE escribe
+por separado `scenarios-live.json`/`aggregate-live.json` y conserva llamadas,
+latencias y usage reales. Los scripts escriben evidencia en `evaluation/reports/`.
 La corrida multi-model usa la respuesta completa y validada de cada modelo
 como artefacto del nodo. Las trazas locales redacted quedan en
 `evaluation/reports/traces/`; Quality MCP valida la copia aislada de la corrida.

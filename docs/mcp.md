@@ -1,4 +1,15 @@
-# MCP adapters and routing effect
+# Real MCP Servers, client, and routing effect
+
+The production boundary is:
+
+`LangGraph → MCP Client adapter → official MCP protocol over stdio → MCP Server → bounded backend → isolated workspace/tools`.
+
+`engineering_team.mcp.server` uses the official Python MCP SDK and starts
+independent Repository or Quality tool surfaces. `engineering_team.mcp.client`
+opens real negotiated stdio sessions, discovers tools, calls them through the
+protocol, and converts structured results back to Pydantic `ToolResult`.
+The existing Python classes are bounded server backends; direct calls are not
+the primary protocol evidence.
 
 Repository MCP exposes `list_files`, `read_file`, `search_code`,
 `get_file_content`, `create_file`, `update_file` and `get_diff`. Architecture
@@ -18,10 +29,19 @@ Timeout is adapter-configurable. In the real multi-model run, Repository and
 Quality MCP both execute against the isolated run copy; its copied
 `test_acceptance.py` is the test target.
 
-MCP is not ornamental. The integration test executes:
+MCP is not ornamental. The real-protocol integration test executes:
 
 `run_tests FAILED → ToolResult FAIL → TestResult FAIL → Reviewer REJECTED → Developer → Testing → Reviewer`.
 
 The failed ToolResult remains in `EngineeringState.tool_results`; the second
 test execution can approve after remediation. `MCP_ERROR` and `TOOL_ERROR`
 remain dedicated graph errors and never activate cloud automatically.
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/mcp/test_protocol.py -q
+.\.venv\Scripts\python.exe -m pytest tests/integration/test_workflow.py -k real_mcp_protocol -q
+```
+
+Every protocol result carries an `mcp://repository/...` or `mcp://quality/...`
+evidence reference. `.env`, traversal, external resolutions and symlinks are
+not readable; role allowlists remain deny-by-default.
