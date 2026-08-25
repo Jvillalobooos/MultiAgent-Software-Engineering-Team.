@@ -330,6 +330,212 @@ def test_generated_search_hit_does_not_remove_source_fallback(tmp_path):
     assert result["implementation"].changed_files == ["app/service.py"]
 
 
+def test_structural_expansion_reaches_python_relative_import_target(tmp_path):
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "main.py").write_text(
+        "from .service import apply_update\n\n\n"
+        "def entrypoint(payload):\n    return apply_update(payload)\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "app" / "service.py").write_text(
+        "def apply_update(payload):\n"
+        "    if not payload.get('secreto'):\n"
+        "        raise ValueError('secreto requerido')\n"
+        "    return payload\n",
+        encoding="utf-8",
+    )
+
+    with MCPRepositoryClient(tmp_path) as repository:
+        result = build_engineering_graph(repository_mcp=repository).invoke({
+            "run_id": "structural-python",
+            "requirement": "Asegura que el modulo de entrada delegue la logica de negocio antes de responder.",
+        })
+
+    assert "app/service.py" in result["implementation"].changed_files
+
+
+def test_structural_expansion_reaches_typescript_relative_import_target(tmp_path):
+    (tmp_path / "src" / "routes").mkdir(parents=True)
+    (tmp_path / "src" / "domain").mkdir(parents=True)
+    (tmp_path / "src" / "routes" / "account.ts").write_text(
+        "import { promote } from \"../domain/account-manager\";\n\n"
+        "export function handleRequest(payload) {\n  return promote(payload);\n}\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "src" / "domain" / "account-manager.ts").write_text(
+        "export function promote(payload) {\n"
+        "  if (!payload.aprobado) {\n"
+        "    throw new Error('se requiere aprobacion');\n"
+        "  }\n  return payload;\n}\n",
+        encoding="utf-8",
+    )
+
+    with MCPRepositoryClient(tmp_path) as repository:
+        result = build_engineering_graph(repository_mcp=repository).invoke({
+            "run_id": "structural-typescript",
+            "requirement": "Aumenta el nivel de acceso solo cuando existe autorizacion previa.",
+        })
+
+    assert "src/domain/account-manager.ts" in result["implementation"].changed_files
+
+
+def test_structural_expansion_reaches_java_like_dotted_import_target(tmp_path):
+    entry = tmp_path / "src" / "main" / "java" / "com" / "example" / "api"
+    impl = tmp_path / "src" / "main" / "java" / "com" / "example" / "domain"
+    entry.mkdir(parents=True)
+    impl.mkdir(parents=True)
+    (entry / "AccountController.java").write_text(
+        "package com.example.api;\n\n"
+        "import com.example.domain.AccountService;\n\n"
+        "class AccountController {\n"
+        "    void handle() { new AccountService().run(); }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    (impl / "AccountService.java").write_text(
+        "package com.example.domain;\n\n"
+        "class AccountService {\n"
+        "    void run() { if (!authorized()) throw new RuntimeException('denied'); }\n"
+        "    boolean authorized() { return false; }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    with MCPRepositoryClient(tmp_path) as repository:
+        result = build_engineering_graph(repository_mcp=repository).invoke({
+            "run_id": "structural-java",
+            "requirement": "Bloquea la peticion entrante hasta validar el permiso correspondiente.",
+        })
+
+    assert any(
+        path.endswith("com/example/domain/AccountService.java")
+        for path in result["implementation"].changed_files
+    )
+
+
+def test_low_information_package_marker_never_outranks_real_source(tmp_path):
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "__init__.py").write_text("", encoding="utf-8")
+    (tmp_path / "app" / "service.py").write_text(
+        "def apply(payload):\n"
+        "    if not payload.get('clave'):\n"
+        "        raise ValueError('clave requerida')\n"
+        "    return payload\n",
+        encoding="utf-8",
+    )
+
+    with MCPRepositoryClient(tmp_path) as repository:
+        result = build_engineering_graph(repository_mcp=repository).invoke({
+            "run_id": "low-info-marker",
+            "requirement": "Rechaza cualquier solicitud sin credencial valida.",
+        })
+
+    assert result["implementation"].changed_files[0] == "app/service.py"
+
+
+def test_adaptive_remediation_expands_to_new_structural_evidence(tmp_path):
+    """Simulate a remediation cycle (iteration=1) that starts from a prior,
+    insufficient inspection (only the entrypoint was read). The bounded
+    remediation expansion must deterministically discover the referenced
+    implementation module before the Developer model is invoked again --
+    proving cycle 1 introduces materially new repository evidence, not a
+    repeat of the same insufficient context."""
+    (tmp_path / "app").mkdir()
+    main_content = (
+        "from .service import apply_update\n\n\n"
+        "def entrypoint(payload):\n    return apply_update(payload)\n"
+    )
+    (tmp_path / "app" / "main.py").write_text(main_content, encoding="utf-8")
+    (tmp_path / "app" / "service.py").write_text(
+        "def apply_update(payload):\n"
+        "    if not payload.get('secreto'):\n"
+        "        raise ValueError('secreto requerido')\n"
+        "    return payload\n",
+        encoding="utf-8",
+    )
+    developer_requests: list[dict] = []
+
+    def handler(request):
+        payload = json.loads(request.content)
+        properties = set(payload["format"]["properties"])
+        if properties == {"mutations", "no_mutation_reason"}:
+            developer_requests.append(payload)
+            response = {"mutations": [], "no_mutation_reason": "insufficient implementation context"}
+        else:
+            raw = payload["prompt"].split("Candidate artifact: ", 1)[1]
+            response, _ = json.JSONDecoder().raw_decode(raw)
+        return httpx.Response(200, json={"model": payload["model"], "response": json.dumps(response)})
+
+    runtime = LocalModelRuntime(
+        Settings(_env_file=None), client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    seeded_read = ToolResult(
+        tool_name="read_file", allowed_role=AgentRole.DEVELOPER, status=ToolStatus.SUCCESS,
+        input_summary="path=app/main.py", output_summary=main_content,
+        duration_ms=1, evidence_reference="mcp://repository/read_file",
+    )
+    with MCPRepositoryClient(tmp_path) as repository:
+        build_engineering_graph(repository_mcp=repository, model_runtime=runtime).invoke({
+            "run_id": "adaptive-remediation",
+            "requirement": "Asegura que el modulo de entrada delegue la logica de negocio antes de responder.",
+            "repository_context": {"implementation_required": True},
+            "iteration": 1,
+            "remediation_request": "insufficient implementation context",
+            "tool_results": [seeded_read],
+        })
+
+    assert developer_requests
+    first_request_prompt = developer_requests[0]["prompt"]
+    assert "app/main.py" in first_request_prompt
+    assert "app/service.py" in first_request_prompt
+
+
+def test_no_progress_skips_redundant_call_after_structural_frontier_is_exhausted(tmp_path):
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "main.py").write_text(
+        "from .service import apply_update\n\n\n"
+        "def entrypoint(payload):\n    return apply_update(payload)\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "app" / "service.py").write_text(
+        "def apply_update(payload):\n"
+        "    if not payload.get('secreto'):\n"
+        "        raise ValueError('secreto requerido')\n"
+        "    return payload\n",
+        encoding="utf-8",
+    )
+
+    class CountingRuntime:
+        def __init__(self):
+            self.attempts = []
+            self.developer_calls = 0
+
+        def invoke_artifact(self, role, envelope, candidate):
+            if role is AgentRole.DEVELOPER:
+                self.developer_calls += 1
+            return candidate, ModelExecutionInfo(
+                agent=role, provider="ollama", requested_model="test", actual_model="test",
+                model_profile="LOCAL", latency_ms=1, structured_output_success=True,
+            )
+
+    runtime = CountingRuntime()
+    with MCPRepositoryClient(tmp_path) as repository:
+        result = build_engineering_graph(
+            repository_mcp=repository, model_runtime=runtime,
+        ).invoke({
+            "run_id": "no-progress-exhausted",
+            "requirement": "Asegura que el modulo de entrada delegue la logica de negocio antes de responder.",
+            "repository_context": {"implementation_required": True},
+        })
+
+    assert runtime.developer_calls == 2
+    assert result["final_status"] == "HUMAN_REVIEW_REQUIRED"
+    assert any(
+        item.tool_name == "read_file" and item.input_summary == "path=app/service.py"
+        for item in result["tool_results"]
+    )
+
+
 def test_repeated_no_progress_skips_the_third_developer_model_call(tmp_path):
     (tmp_path / "app").mkdir()
     (tmp_path / "app" / "service.py").write_text(

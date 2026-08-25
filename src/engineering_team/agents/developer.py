@@ -26,6 +26,21 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
         "pyproject.toml", "package.json", "tsconfig.json", "cargo.toml", "go.mod",
         "pom.xml", "build.gradle", "build.gradle.kts", "composer.json", "gemfile",
     }
+    # Generic package/index markers that carry little standalone information.
+    # Weak signal only: real structural evidence always outranks this penalty.
+    _LOW_INFO_STEMS: ClassVar[set[str]] = {"__init__", "index", "mod", "package-info"}
+    # Generic cross-language architecture-role tokens used only as a weak scoring
+    # signal; never required and never sufficient on their own.
+    _ROLE_HINTS: ClassVar[set[str]] = {
+        "service", "controller", "domain", "repository", "handler",
+        "usecase", "manager", "logic", "model",
+    }
+    _IMPORT_PATTERNS: ClassVar[tuple[re.Pattern[str], ...]] = (
+        re.compile(r"(?m)^\s*from\s+([.\w]+)\s+import\b"),
+        re.compile(r"(?m)^\s*import\s+(?:static\s+)?([.\w]+)\s*;?"),
+        re.compile(r"""import\s+(?:[\w*{}\s,]+\s+from\s+)?['"]([^'"]+)['"]"""),
+        re.compile(r"""require\(\s*['"]([^'"]+)['"]\s*\)"""),
+    )
 
     _STOP_WORDS: ClassVar[set[str]] = {
         "after", "allow", "authorized", "belonging", "bounded", "change",
@@ -50,18 +65,40 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
                 terms.append(normalized)
         return list(dict.fromkeys(terms))
 
-    @staticmethod
-    def rank_paths(paths: list[str], search_hits: list[str], terms: list[str]) -> list[str]:
+    @classmethod
+    def rank_paths(
+        cls,
+        paths: list[str],
+        search_hits: list[str],
+        terms: list[str],
+        structural_boost: set[str] | None = None,
+    ) -> list[str]:
+        """Deterministically order candidates: structural evidence first, then
+        search/requirement signals, then weak generic role hints. Information
+        value -- never file length -- breaks ties, so a short package marker
+        cannot outrank a real implementation module."""
+        structural_boost = structural_boost or set()
         hit_counts = {path: search_hits.count(path) for path in paths}
 
-        def score(path: str) -> tuple[int, int, str]:
+        def score(path: str) -> int:
             folded = path.casefold()
+            stem = PurePosixPath(path).stem.casefold()
             term_score = sum(term in folded for term in terms)
             source_score = hit_counts[path]
             code_score = 1 if PurePosixPath(path).suffix in {".py", ".js", ".ts", ".java"} else 0
-            return (source_score * 10 + term_score * 4 + code_score, -len(path), path)
+            role_score = 1 if any(hint in stem for hint in cls._ROLE_HINTS) else 0
+            low_info_penalty = 1 if stem in cls._LOW_INFO_STEMS else 0
+            structural_score = 5 if path in structural_boost else 0
+            return (
+                structural_score * 20
+                + source_score * 10
+                + term_score * 4
+                + role_score
+                - low_info_penalty * 3
+                + code_score
+            )
 
-        return sorted(paths, key=score, reverse=True)
+        return sorted(paths, key=lambda path: (-score(path), path))
 
     @staticmethod
     def _safe_path(path: str) -> bool:
@@ -84,6 +121,97 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
         if parts & cls._GENERATED_PARTS:
             return False
         return candidate.suffix.casefold() in cls._SOURCE_SUFFIXES or candidate.name.casefold() in cls._PROJECT_FILES
+
+    @classmethod
+    def structural_references(
+        cls, content: str, source_path: str, candidate_paths: list[str]
+    ) -> list[str]:
+        """Return repository-local candidates that source_path's imports/references
+        point to, using a bounded conservative heuristic (no compiler/parser).
+
+        Supports common relative/absolute import syntaxes (Python, JS/TS, Java-like
+        dotted imports) and falls back to filename/basename matching when the exact
+        syntax is not recognized. Only ever returns paths already present in
+        candidate_paths, so it can never surface a generated, sandbox-unsafe, or
+        otherwise disqualified path.
+        """
+        candidates = set(candidate_paths)
+        raw_refs: list[str] = []
+        for pattern in cls._IMPORT_PATTERNS:
+            raw_refs.extend(pattern.findall(content))
+        references: list[str] = []
+        seen: set[str] = set()
+        for raw in raw_refs:
+            resolved = cls._resolve_reference(raw, source_path, candidates)
+            if resolved and resolved != source_path and resolved not in seen:
+                seen.add(resolved)
+                references.append(resolved)
+        return references
+
+    @classmethod
+    def _resolve_reference(cls, raw: str, source_path: str, candidates: set[str]) -> str | None:
+        ref = raw.strip()
+        if not ref:
+            return None
+        source_dir = PurePosixPath(source_path).parent
+        if ref.startswith(("./", "../")):
+            directory = source_dir
+            remainder = ref
+            while remainder.startswith("../"):
+                directory = directory.parent
+                remainder = remainder[3:]
+            remainder = remainder.removeprefix("./")
+            base = directory / remainder if remainder else directory
+            return cls._match_basename(base, candidates)
+        if ref.startswith("."):
+            dots = len(ref) - len(ref.lstrip("."))
+            module = ref[dots:]
+            directory = source_dir
+            for _ in range(dots - 1):
+                directory = directory.parent
+            parts = [part for part in module.split(".") if part]
+            base = directory
+            for part in parts:
+                base = base / part
+            return cls._match_basename(base, candidates)
+        parts = [part for part in ref.replace("/", ".").split(".") if part]
+        if not parts:
+            return None
+        match = cls._match_basename(PurePosixPath(*parts), candidates)
+        if match:
+            return match
+        # Dotted package path (e.g. Java-like) with an unknown source root:
+        # fall back to matching the referenced class/module name by basename.
+        # Fail closed on ambiguity -- a tail match is only trustworthy when it
+        # is the single candidate; two same-named classes in different
+        # packages must not be resolved by set-iteration order.
+        tail = parts[-1]
+        tail_matches = {
+            candidate for candidate in candidates
+            if PurePosixPath(candidate).stem == tail
+            and PurePosixPath(candidate).stem.casefold() not in cls._LOW_INFO_STEMS
+        }
+        return next(iter(tail_matches)) if len(tail_matches) == 1 else None
+
+    @classmethod
+    def _match_basename(cls, base: PurePosixPath, candidates: set[str]) -> str | None:
+        base_str = base.as_posix().lstrip("/")
+        if base_str in candidates:
+            return base_str
+        # Collect every suffix/marker variant that exists before deciding: if
+        # more than one distinct file could satisfy the same logical
+        # reference (e.g. foo.js and foo.ts both present), that is ambiguous
+        # and must fail closed rather than pick by set-iteration order.
+        matches: set[str] = set()
+        for suffix in cls._SOURCE_SUFFIXES:
+            direct = f"{base_str}{suffix}"
+            if direct in candidates:
+                matches.add(direct)
+            for marker in ("__init__", "index", "mod"):
+                nested = f"{base_str}/{marker}{suffix}"
+                if nested in candidates:
+                    matches.add(nested)
+        return next(iter(matches)) if len(matches) == 1 else None
 
     @staticmethod
     def _symbols(content: str) -> list[str]:
@@ -127,7 +255,12 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
         terms = self.relevance_terms(
             specification, architecture, str(envelope.state_projection.get("requirement", ""))
         )
-        ranked_paths = self.rank_paths(safe_listed, search_hits, terms)
+        structural_boost: set[str] = set()
+        for src_path, content in inspected_content.items():
+            structural_boost.update(
+                self.structural_references(content, src_path, safe_listed + list(inspected_content))
+            )
+        ranked_paths = self.rank_paths(safe_listed, search_hits, terms, structural_boost=structural_boost)
         inspected_paths = [
             path for path in ranked_paths
             if path in inspected_content and len(inspected_content[path]) <= self._MAX_EDITABLE_SOURCE_CHARS

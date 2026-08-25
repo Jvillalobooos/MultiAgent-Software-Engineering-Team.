@@ -384,6 +384,13 @@ def build_engineering_graph(
                     terms = DeveloperAgent.relevance_terms(
                         current.specification, current.architecture, current.requirement
                     )
+                    if fresh_remediation_selection and current.remediation_request:
+                        # Bounded remediation expansion: treat the rejection reason as a
+                        # search hint only, never as authority over path safety.
+                        terms = list(dict.fromkeys([
+                            *terms,
+                            *DeveloperAgent.relevance_terms(None, None, current.remediation_request),
+                        ]))
                     search_hits: list[str] = []
                     for term in terms[:3]:
                         searched = repository_mcp.search_code(role, term)
@@ -396,12 +403,60 @@ def build_engineering_graph(
                                 for line in searched.output_summary.splitlines()
                                 if DeveloperAgent.is_implementation_candidate(line.strip().replace("\\", "/"))
                             )
-                    ranked = DeveloperAgent.rank_paths(listed_paths, search_hits, terms)
-                    for path in ranked[:2]:
+                    already_read = {
+                        item.input_summary[5:].replace("\\", "/")
+                        for item in tool_results
+                        if item.allowed_role is AgentRole.DEVELOPER
+                        and item.tool_name in {"read_file", "get_file_content"}
+                        and item.status is ToolStatus.SUCCESS
+                        and item.input_summary.startswith("path=")
+                    }
+                    already_inspected_content = {
+                        item.input_summary[5:].replace("\\", "/"): item.output_summary
+                        for item in tool_results
+                        if item.allowed_role is AgentRole.DEVELOPER
+                        and item.tool_name in {"read_file", "get_file_content"}
+                        and item.status is ToolStatus.SUCCESS
+                        and item.input_summary.startswith("path=")
+                    }
+                    # Stage B: structural expansion. A file the Developer already
+                    # inspected (this cycle or an earlier one) may reference another
+                    # repository-local implementation module; that referenced module
+                    # becomes a high-priority, still-unexplored candidate.
+                    structural_frontier: list[str] = []
+                    for source_path, content in already_inspected_content.items():
+                        structural_frontier.extend(
+                            DeveloperAgent.structural_references(content, source_path, listed_paths)
+                        )
+                    structural_frontier = [
+                        path for path in dict.fromkeys(structural_frontier) if path not in already_read
+                    ]
+                    ranked = DeveloperAgent.rank_paths(
+                        listed_paths, search_hits, terms, structural_boost=set(structural_frontier)
+                    )
+                    read_order = [
+                        *structural_frontier,
+                        *[path for path in ranked if path not in already_read and path not in structural_frontier],
+                    ]
+                    reads_remaining = 2
+                    index = 0
+                    while reads_remaining > 0 and index < len(read_order):
+                        path = read_order[index]
+                        index += 1
                         read = repository_mcp.read_file(role, path)
                         required_mcp_missing |= preserve_tool_result(
                             read, role, errors, tool_results, repository_mcp
                         )
+                        reads_remaining -= 1
+                        if read.status is ToolStatus.SUCCESS and reads_remaining > 0:
+                            discovered = [
+                                ref for ref in DeveloperAgent.structural_references(
+                                    read.output_summary, path, listed_paths
+                                )
+                                if ref not in already_read and ref not in read_order[:index]
+                            ]
+                            if discovered:
+                                read_order[index:index] = discovered
             if quality_mcp is not None and role is AgentRole.SECURITY:
                 operations = [
                     getattr(quality_mcp, name) for name in (
