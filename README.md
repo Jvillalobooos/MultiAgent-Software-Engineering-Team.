@@ -67,6 +67,23 @@ chmod +x run.sh
 
 The project must already be configured before running these scripts.
 
+### Optional global command
+
+Windows:
+
+```powershell
+.\install-launcher.ps1
+nova-team
+```
+
+macOS:
+
+```sh
+chmod +x install-launcher.sh
+./install-launcher.sh
+nova-team
+```
+
 ## Ejecución y evidencia
 
 ```powershell
