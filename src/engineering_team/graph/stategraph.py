@@ -15,10 +15,12 @@ from engineering_team.agents.reviewer import ReviewerAgent
 from engineering_team.agents.security import SecurityAgent
 from engineering_team.agents.testing import TestingAgent
 from engineering_team.contracts.enums import (
+    ActionMode,
     AgentRole,
     ErrorCode,
     RemediationCategory,
     ReviewerStatus,
+    RouteTarget,
     ToolStatus,
 )
 from engineering_team.contracts.models import FinalReport, WorkflowError
@@ -60,6 +62,42 @@ class WorkflowState(TypedDict, total=False):
     route_history: list
     final_report: object
     human_decision: str
+
+
+def approval_problems(state: EngineeringState) -> list[str]:
+    """Return deterministic material-evidence gaps for an implementable run."""
+    if not state.repository_context.get("implementation_required", False):
+        return []
+    implementation = state.implementation
+    if implementation is None:
+        return ["implementation is missing"]
+    problems: list[str] = []
+    if implementation.action_mode.value != "APPLIED":
+        problems.append("implementation is not applied")
+    if not implementation.changed_files:
+        problems.append("implementation changed_files is empty")
+    writes = [
+        item for item in state.tool_results
+        if item.tool_name in {"create_file", "update_file"} and item.status is ToolStatus.SUCCESS
+    ]
+    if not writes:
+        problems.append("successful Repository MCP write evidence is missing")
+    diffs = [
+        item for item in state.tool_results
+        if item.tool_name == "get_diff" and item.status is ToolStatus.SUCCESS
+    ]
+    if not diffs or not implementation.diff.strip():
+        problems.append("successful non-empty Repository MCP diff is missing")
+    latest_test = state.test_results[-1] if state.test_results else None
+    if latest_test is None or latest_test.status is not ToolStatus.SUCCESS:
+        problems.append("successful workspace test validation is missing")
+    elif not latest_test.generated_tests:
+        problems.append("requirement-specific generated tests are missing")
+    if state.security_review is not None and state.security_review.status.value == "FAIL":
+        problems.append("security review failed")
+    if any(error.code in {ErrorCode.MCP_ERROR, ErrorCode.RAG_ERROR} for error in state.errors):
+        problems.append("required MCP or RAG evidence is unavailable")
+    return problems
 
 
 def _visit(role: str):
@@ -121,6 +159,7 @@ def build_engineering_graph(
     trace: Any | None = None,
     test_paths: list[str] | None = None,
     interactive_hitl: bool = False,
+    progress: Any | None = None,
 ):
     """Compile normal, remediation, MCP/RAG, and HITL routes as real nodes."""
     graph = StateGraph(WorkflowState)
@@ -182,9 +221,53 @@ def build_engineering_graph(
             )
         return result.status is ToolStatus.UNAVAILABLE
 
+    def apply_mutations(candidate: Any, role: AgentRole, adapter: Any, tool_results: list[Any], errors: list[WorkflowError]) -> Any:
+        """Apply only validated MCP mutations and derive evidence from returned tools."""
+        mutations = getattr(candidate, "mutations", []) if role is AgentRole.DEVELOPER else getattr(candidate, "test_mutations", [])
+        if adapter is None or not mutations:
+            return candidate
+        inspected = {
+            item.input_summary.removeprefix("path=").replace("\\", "/")
+            for item in tool_results
+            if item.tool_name in {"read_file", "get_file_content"}
+            and item.status is ToolStatus.SUCCESS and item.input_summary.startswith("path=")
+        }
+        writes: list[Any] = []
+        for mutation in mutations:
+            if role is AgentRole.DEVELOPER and mutation.path not in inspected:
+                errors.append(WorkflowError(
+                    code=ErrorCode.TOOL_ERROR, source_stage=role.value, retryable=False,
+                    detail=f"uninspected mutation path: {mutation.path}",
+                ))
+                continue
+            operation = adapter.create_file if mutation.operation == "create" else adapter.update_file
+            result = operation(role, mutation.path, mutation.content)
+            preserve_tool_result(result, role, errors, tool_results, adapter)
+            if result.status is ToolStatus.SUCCESS:
+                writes.append(result)
+        if role is not AgentRole.DEVELOPER or not writes:
+            return candidate
+        diff = adapter.get_diff(role)
+        preserve_tool_result(diff, role, errors, tool_results, adapter)
+        if diff.status is ToolStatus.SUCCESS and diff.output_summary.strip():
+            return candidate.model_copy(update={
+                "action_mode": ActionMode.APPLIED,
+                "changed_files": list(dict.fromkeys(item.output_summary for item in writes)),
+                "diff": diff.output_summary,
+                "evidence": list(dict.fromkeys([
+                    *candidate.evidence,
+                    *(item.evidence_reference or item.tool_name for item in writes),
+                    diff.evidence_reference or diff.tool_name,
+                ])),
+                "validation_result": "APPLIED from successful Repository MCP writes and real get_diff",
+            })
+        return candidate
+
     def make_node(role: AgentRole):
         def node(raw_state: dict[str, Any]) -> dict[str, Any]:
             current = EngineeringState.model_validate(raw_state)
+            if progress is not None:
+                progress(role, current.iteration)
             rag_evidence = list(current.rag_evidence)
             errors = list(current.errors)
             tool_results = list(current.tool_results)
@@ -237,11 +320,6 @@ def build_engineering_graph(
                         required_mcp_missing |= preserve_tool_result(
                             read, role, errors, tool_results, repository_mcp
                         )
-            if quality_mcp is not None and role is AgentRole.TESTING:
-                result = quality_mcp.run_tests(role, test_paths)
-                required_mcp_missing |= preserve_tool_result(
-                    result, role, errors, tool_results, quality_mcp
-                )
             if quality_mcp is not None and role is AgentRole.SECURITY:
                 operations = [
                     getattr(quality_mcp, name) for name in (
@@ -267,7 +345,7 @@ def build_engineering_graph(
                     "trace_id": trace.trace_id if trace is not None else current.trace_id,
                 }
             model_usage = list(current.model_usage)
-            envelope = build_context(role, current, role.value)
+            envelope = build_context(role, current, current.requirement)
             candidate = agents[role].execute(envelope)
             if model_runtime is not None:
                 attempt_start = len(model_runtime.attempts)
@@ -344,6 +422,46 @@ def build_engineering_graph(
                         }
             else:
                 output = candidate
+            if role is AgentRole.DEVELOPER:
+                output = apply_mutations(output, role, repository_mcp, tool_results, errors)
+            if role is AgentRole.TESTING:
+                output = apply_mutations(output, role, repository_mcp, tool_results, errors)
+                if quality_mcp is not None:
+                    result = quality_mcp.run_tests(role, output.generated_tests or test_paths)
+                    required_mcp_missing |= preserve_tool_result(
+                        result, role, errors, tool_results, quality_mcp
+                    )
+                    output = output.model_copy(update={
+                        "executed_tests": [*output.executed_tests, *output.generated_tests, result.tool_name],
+                        "actual_results": [*output.actual_results, result.output_summary],
+                        "status": result.status,
+                        "failures": ([*output.failures, result.output_summary] if result.status is not ToolStatus.SUCCESS else output.failures),
+                        "evidence_references": list(dict.fromkeys([
+                            *output.evidence_references, result.evidence_reference or result.tool_name,
+                        ])),
+                    })
+                if required_mcp_missing:
+                    return {
+                        "route_history": [*current.route_history, role.value],
+                        "rag_evidence": rag_evidence,
+                        "errors": errors,
+                        "tool_results": tool_results,
+                        "model_usage": model_usage,
+                        "human_review_required": True,
+                        "trace_id": trace.trace_id if trace is not None else current.trace_id,
+                    }
+            if role is AgentRole.REVIEWER and output.status is ReviewerStatus.APPROVED:
+                gaps = approval_problems(current)
+                if gaps:
+                    output = output.model_copy(update={
+                        "status": ReviewerStatus.REJECTED,
+                        "score": min(output.score, 45),
+                        "problems": list(dict.fromkeys([*output.problems, *gaps])),
+                        "reason": "deterministic delivery gate: " + "; ".join(gaps),
+                        "remediation_category": RemediationCategory.IMPLEMENTATION,
+                        "return_to": RouteTarget.DEVELOPER,
+                        "confidence": 1.0,
+                    })
             patch: dict[str, Any] = {
                 "route_history": [*current.route_history, role.value],
                 "rag_evidence": rag_evidence,

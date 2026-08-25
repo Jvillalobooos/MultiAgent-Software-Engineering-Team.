@@ -75,7 +75,7 @@ class LocalModelRuntime:
                         "stream": False,
                         "think": False,
                         "format": output_schema,
-                        "options": {"temperature": 0, "num_predict": 2048},
+                        "options": {"temperature": 0, "num_predict": self._output_limit(role)},
                     },
                 )
                 response.raise_for_status()
@@ -176,6 +176,13 @@ class LocalModelRuntime:
             "Preserve all governed facts, findings, statuses, and evidence from the "
             "candidate artifact. Do not add prose or fields."
         )
+        if role is AgentRole.DEVELOPER:
+            system += (
+                " You may add bounded mutations only for inspected paths. "
+                "Keep action_mode PROPOSED; graph code alone decides APPLIED."
+            )
+        if role is AgentRole.TESTING:
+            system += " You may add test_mutations only under test paths; never write production code."
         projection = {
             key: (
                 str(value)[:300]
@@ -196,7 +203,12 @@ class LocalModelRuntime:
                 for item in envelope.rag_evidence
             ],
             "tool_results": [
-                {"tool": item.tool_name, "status": item.status.value}
+                {
+                    "tool": item.tool_name, "status": item.status.value,
+                    **({"path": item.input_summary, "content": item.output_summary[:1200]}
+                       if role is AgentRole.DEVELOPER and item.tool_name in {"read_file", "get_file_content"}
+                       else {}),
+                }
                 for item in envelope.tool_results
             ],
             "remediation_feedback": envelope.remediation_feedback,
@@ -209,6 +221,14 @@ class LocalModelRuntime:
             "Copy every candidate key and value exactly; do not omit schema-optional keys."
         )
         return system, user
+
+    @staticmethod
+    def _output_limit(role: AgentRole) -> int:
+        return {
+            AgentRole.PRODUCT: 900, AgentRole.ARCHITECTURE: 800,
+            AgentRole.DEVELOPER: 1400, AgentRole.SECURITY: 900,
+            AgentRole.TESTING: 800, AgentRole.REVIEWER: 500,
+        }[role]
 
     def _record(
         self, role: AgentRole, system: str, user: str, response: Any,
@@ -248,7 +268,11 @@ def _preserves_governed_facts(candidate: dict[str, Any], parsed: BaseModel) -> b
     actual = parsed.model_dump(mode="json")
     model_name = type(parsed).__name__
     if model_name == "ImplementationResult":
-        return actual == candidate
+        governed = (
+            "action_mode", "changed_files", "diff", "evidence",
+            "validation_result", "security_surface_changed",
+        )
+        return all(actual.get(key) == candidate.get(key) for key in governed)
     guarded_lists: dict[str, tuple[str, ...]] = {
         "ProductSpecification": (
             "business_rules", "constraints", "acceptance_criteria", "nfrs",
@@ -256,7 +280,7 @@ def _preserves_governed_facts(candidate: dict[str, Any], parsed: BaseModel) -> b
         "ArchitectureProposal": ("risks", "evidence_references"),
         "ImplementationResult": ("evidence",),
         "SecurityReview": ("findings", "sources"),
-        "TestResult": ("failures", "evidence_references", "actual_results"),
+        "TestResult": ("failures", "evidence_references", "actual_results", "generated_tests", "test_mutations"),
         "ReviewerDecision": ("problems", "evidence_references"),
     }
     guarded_values: dict[str, tuple[str, ...]] = {

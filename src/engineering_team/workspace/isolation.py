@@ -16,5 +16,12 @@ def create_run_copy(run_id: str, source: str | Path, workspace_root: str | Path)
     destination = resolve_inside(root, run_id)
     if destination.exists():
         raise FileExistsError(f"run workspace already exists: {run_id}")
-    shutil.copytree(source_path, destination)
+    def ignored(current: str, names: list[str]) -> set[str]:
+        relative = Path(current).resolve().relative_to(source_path).as_posix()
+        blocked = {".venv", ".git", "__pycache__"}
+        if relative in {"workspace", "rag"}:
+            blocked.add("runs" if relative == "workspace" else "chroma")
+        return blocked.intersection(names)
+
+    shutil.copytree(source_path, destination, ignore=ignored)
     return destination

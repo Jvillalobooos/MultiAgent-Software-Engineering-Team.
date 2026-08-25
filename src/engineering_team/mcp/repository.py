@@ -5,11 +5,17 @@ from engineering_team.contracts.enums import AgentRole, ToolStatus
 from engineering_team.contracts.models import ToolResult
 
 _READ_ROLES = {AgentRole.ARCHITECTURE, AgentRole.DEVELOPER}
-_WRITE_ROLES = {AgentRole.DEVELOPER}
+_WRITE_ROLES = {AgentRole.DEVELOPER, AgentRole.TESTING}
 
 
 def _is_secret_path(path: Path) -> bool:
     return any(part == ".env" or part.startswith(".env.") for part in path.parts)
+
+
+def _is_test_path(relative: str) -> bool:
+    parts = Path(relative).parts
+    name = Path(relative).name
+    return "tests" in parts or name.startswith("test_") or name.endswith("_test.py")
 
 
 class RepositoryMCP:
@@ -113,6 +119,8 @@ class RepositoryMCP:
     ) -> ToolResult:
         if role not in _WRITE_ROLES:
             return self._result(role, tool, ToolStatus.DENIED, error="role denied")
+        if role is AgentRole.TESTING and not _is_test_path(relative):
+            return self._result(role, tool, ToolStatus.DENIED, error="testing may write only test paths")
         try:
             path = self._path(relative)
             if not create and not path.exists():

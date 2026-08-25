@@ -21,10 +21,20 @@ def run(
     report_path: Annotated[Path, typer.Option(help="Sanitized evidence output")] = Path(
         "evaluation/reports/cli-run.json"
     ),
+    project: Annotated[Path | None, typer.Option(help="Target project; defaults to the caller directory")] = None,
 ) -> None:
     """Execute a complete local-first run with real configured Ollama models."""
+    target = (project or Path.cwd()).resolve()
+    if not target.is_dir():
+        raise typer.BadParameter("project must be an existing directory", param_hint="--project")
+
+    def progress(role, iteration):
+        suffix = f"[cycle {iteration}] " if iteration else ""
+        typer.echo(f"{suffix}{role}...")
+
     evidence = run_multimodel_acceptance(
-        Settings(), requirement=requirement.strip(), report_path=report_path
+        Settings(), requirement=requirement.strip(), report_path=report_path,
+        project_target=target, progress=progress,
     )
     typer.echo(json.dumps(evidence, ensure_ascii=False))
 

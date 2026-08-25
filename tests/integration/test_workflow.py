@@ -17,6 +17,8 @@ from engineering_team.contracts.enums import (
     ToolStatus,
 )
 from engineering_team.contracts.models import (
+    FileMutation,
+    ImplementationResult,
     ModelExecutionInfo,
     ReviewerDecision,
     SecurityFinding,
@@ -33,6 +35,27 @@ CHECKLIST = {key: "PASS" for key in (
     "secrets", "injection", "access_control", "idor", "logging", "data_protection",
     "api_abuse", "rate_limiting", "owasp",
 )}
+
+
+class ApplyingDeveloper:
+    def execute(self, envelope):
+        return ImplementationResult(
+            action_mode="PROPOSED", changed_files=["app/email.py"], diff="proposed email change",
+            evidence=["mcp://repository/read_file#app/email.py"], validation_result="proposal",
+            mutations=[FileMutation(
+                path="app/email.py", operation="update",
+                content="def change_email(current_password, email):\n    return email\n",
+            )],
+        )
+
+
+class PassingQuality:
+    def run_tests(self, role, paths=None):
+        return ToolResult(
+            tool_name="run_tests", allowed_role=role, status=ToolStatus.SUCCESS,
+            input_summary="safe", output_summary="1 passed", duration_ms=1,
+            evidence_reference="mcp://quality/run_tests",
+        )
 
 
 def rejected(category, target):
@@ -233,6 +256,54 @@ def test_workflow_searches_and_reads_relevant_repository_files_for_developer(tmp
     assert "read_file" in [item.tool_name for item in developer_tools]
     assert result["implementation"].changed_files == ["app/transactions.py"]
     assert "transaction_history" in result["implementation"].diff
+
+
+def test_graph_derives_applied_only_from_mcp_write_and_real_diff(tmp_path):
+    (tmp_path / "app").mkdir()
+    original = "def change_email(current_password, email):\n    raise NotImplementedError\n"
+    (tmp_path / "app" / "email.py").write_text(original, encoding="utf-8")
+
+    with MCPRepositoryClient(tmp_path) as repository:
+        result = build_engineering_graph(
+            repository_mcp=repository, quality_mcp=PassingQuality(),
+            agent_overrides={AgentRole.DEVELOPER: ApplyingDeveloper()},
+        ).invoke({
+            "run_id": "applied", "requirement": "change email after current password confirmation",
+            "repository_context": {"implementation_required": True},
+        })
+
+    implementation = result["implementation"]
+    assert implementation.action_mode.value == "APPLIED"
+    assert "NotImplementedError" in implementation.diff
+    assert any(item.tool_name == "update_file" and item.status is ToolStatus.SUCCESS for item in result["tool_results"])
+    assert any(item.tool_name == "get_diff" and item.output_summary for item in result["tool_results"])
+    assert result["test_results"][-1].generated_tests == ["tests/test_nova_team_generated.py"]
+    assert result["final_status"] == "APPROVED"
+
+
+def test_generated_test_is_written_and_executed_in_isolated_workspace(tmp_path):
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "email.py").write_text(
+        "def change_email(current_password, email):\n    raise NotImplementedError\n",
+        encoding="utf-8",
+    )
+
+    with (
+        MCPRepositoryClient(tmp_path) as repository,
+        MCPQualityClient(tmp_path) as quality,
+    ):
+        result = build_engineering_graph(
+            repository_mcp=repository, quality_mcp=quality,
+            agent_overrides={AgentRole.DEVELOPER: ApplyingDeveloper()},
+        ).invoke({
+            "run_id": "generated-test", "requirement": "change email after current password confirmation",
+            "repository_context": {"implementation_required": True},
+        })
+
+    test_result = result["test_results"][-1]
+    assert test_result.generated_tests == ["tests/test_nova_team_generated.py"]
+    assert test_result.status is ToolStatus.SUCCESS
+    assert (tmp_path / "tests" / "test_nova_team_generated.py").exists()
 
 
 class FailingLocalRuntime:

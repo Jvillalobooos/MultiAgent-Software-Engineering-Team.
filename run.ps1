@@ -18,6 +18,16 @@ if ($LauncherArguments -contains "--help") {
 }
 
 $projectRoot = (Resolve-Path (Split-Path -Parent $MyInvocation.MyCommand.Path)).Path
+$targetProject = (Get-Location).Path
+if ($LauncherArguments.Count -gt 0) {
+    if ($LauncherArguments.Count -eq 2 -and $LauncherArguments[0] -eq "--project") {
+        $targetProject = $LauncherArguments[1]
+    }
+    else {
+        Write-Error "Usage: .\run.ps1 [--project <path>]"
+        exit 1
+    }
+}
 $python = Join-Path $projectRoot ".venv\Scripts\python.exe"
 
 if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
@@ -67,7 +77,7 @@ Write-Host "Starting engineering team..."
 
 Push-Location $projectRoot
 try {
-    & $python -m engineering_team.cli run $requirement
+    & $python -m engineering_team.cli run $requirement --project $targetProject
     $exitCode = $LASTEXITCODE
 }
 finally {

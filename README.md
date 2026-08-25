@@ -67,6 +67,14 @@ chmod +x run.sh
 
 The project must already be configured before running these scripts.
 
+Run against the current project directory, or select one explicitly; all
+automatic writes occur only in an isolated run copy:
+
+```powershell
+nova-team
+nova-team --project "C:\path\to\project"
+```
+
 ### Optional global command
 
 Windows:
