@@ -1,3 +1,4 @@
+import json
 from collections import deque
 
 import httpx
@@ -27,6 +28,7 @@ from engineering_team.contracts.models import (
 )
 from engineering_team.graph.stategraph import build_engineering_graph
 from engineering_team.llm.cloud import CloudModelRuntime
+from engineering_team.llm.runtime import LocalModelRuntime
 from engineering_team.mcp.client import MCPQualityClient, MCPRepositoryClient
 from engineering_team.observability.langfuse import LangfuseTracer
 
@@ -294,6 +296,72 @@ def test_workflow_searches_and_reads_relevant_repository_files_for_developer(tmp
     assert "transaction_history" in result["implementation"].diff
 
 
+def test_developer_never_uses_generated_trace_as_implementation_target(tmp_path):
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "service.py").write_text(
+        "def change_email(current_password, new_email):\n    return new_email\n", encoding="utf-8"
+    )
+    trace = tmp_path / "evaluation" / "reports" / "traces"
+    trace.mkdir(parents=True)
+    requirement = "change email after confirming the current password"
+    (trace / "old-run.json").write_text(requirement, encoding="utf-8")
+
+    with MCPRepositoryClient(tmp_path) as repository:
+        result = build_engineering_graph(repository_mcp=repository).invoke({
+            "run_id": "trace-noise", "requirement": requirement,
+        })
+
+    assert result["implementation"].changed_files == ["app/service.py"]
+    assert "evaluation/reports/traces/old-run.json" not in result["implementation"].diff
+
+
+def test_generated_search_hit_does_not_remove_source_fallback(tmp_path):
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "service.py").write_text("def execute():\n    return True\n", encoding="utf-8")
+    trace = tmp_path / "evaluation" / "reports"
+    trace.mkdir(parents=True)
+    (trace / "old-run.json").write_text("authorize transaction history", encoding="utf-8")
+
+    with MCPRepositoryClient(tmp_path) as repository:
+        result = build_engineering_graph(repository_mcp=repository).invoke({
+            "run_id": "search-fallback", "requirement": "authorize transaction history",
+        })
+
+    assert result["implementation"].changed_files == ["app/service.py"]
+
+
+def test_repeated_no_progress_skips_the_third_developer_model_call(tmp_path):
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "service.py").write_text(
+        "def change_email(current_password, new_email):\n    return new_email\n", encoding="utf-8"
+    )
+
+    class CountingRuntime:
+        def __init__(self):
+            self.attempts = []
+            self.developer_calls = 0
+
+        def invoke_artifact(self, role, envelope, candidate):
+            if role is AgentRole.DEVELOPER:
+                self.developer_calls += 1
+            return candidate, ModelExecutionInfo(
+                agent=role, provider="ollama", requested_model="test", actual_model="test",
+                model_profile="LOCAL", latency_ms=1, structured_output_success=True,
+            )
+
+    runtime = CountingRuntime()
+    with MCPRepositoryClient(tmp_path) as repository:
+        result = build_engineering_graph(
+            repository_mcp=repository, model_runtime=runtime,
+        ).invoke({
+            "run_id": "no-progress", "requirement": "change email after confirming current password",
+            "repository_context": {"implementation_required": True},
+        })
+
+    assert runtime.developer_calls == 2
+    assert result["final_status"] == "HUMAN_REVIEW_REQUIRED"
+
+
 def test_graph_derives_applied_only_from_mcp_write_and_real_diff(tmp_path):
     (tmp_path / "app").mkdir()
     original = "def change_email(current_password, email):\n    raise NotImplementedError\n"
@@ -315,6 +383,60 @@ def test_graph_derives_applied_only_from_mcp_write_and_real_diff(tmp_path):
     assert any(item.tool_name == "get_diff" and item.output_summary for item in result["tool_results"])
     assert result["test_results"][-1].generated_tests == ["tests/test_nova_team_generated.py"]
     assert result["final_status"] == "APPROVED"
+
+
+def test_real_developer_runtime_plan_applies_inspected_source_via_mcp(tmp_path):
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "email.py").write_text(
+        "def change_email(current_password, new_email):\n    raise NotImplementedError\n",
+        encoding="utf-8",
+    )
+    developer_requests: list[dict] = []
+
+    def handler(request):
+        payload = json.loads(request.content)
+        properties = set(payload["format"]["properties"])
+        if properties == {"mutations", "no_mutation_reason"}:
+            developer_requests.append(payload)
+            response = {
+                "mutations": [{
+                    "path": "app/email.py",
+                    "operation": "update",
+                    "content": (
+                        "def change_email(current_password, expected_password, new_email):\n"
+                        "    if current_password != expected_password:\n"
+                        "        raise ValueError('current password required')\n"
+                        "    return new_email\n"
+                    ),
+                }],
+                "no_mutation_reason": None,
+            }
+        else:
+            raw = payload["prompt"].split("Candidate artifact: ", 1)[1]
+            response, _ = json.JSONDecoder().raw_decode(raw)
+        return httpx.Response(200, json={"model": payload["model"], "response": json.dumps(response)})
+
+    runtime = LocalModelRuntime(
+        Settings(_env_file=None), client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    with MCPRepositoryClient(tmp_path) as repository:
+        result = build_engineering_graph(
+            repository_mcp=repository,
+            quality_mcp=PassingQuality(),
+            model_runtime=runtime,
+        ).invoke({
+            "run_id": "real-developer-plan",
+            "requirement": "change email after confirming the current password",
+            "repository_context": {"implementation_required": True},
+        })
+
+    assert developer_requests
+    assert result["implementation"].action_mode.value == "APPLIED"
+    assert any(item.tool_name == "update_file" and item.status is ToolStatus.SUCCESS for item in result["tool_results"])
+    assert any(item.tool_name == "get_diff" and item.output_summary for item in result["tool_results"])
+    assert result["route_history"][:6] == [
+        "Product", "Architecture", "Developer", "Security", "Testing", "Reviewer",
+    ]
 
 
 def test_unapplied_developer_fast_fails_without_security_testing_or_reviewer_work():

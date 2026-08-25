@@ -178,6 +178,37 @@ def test_developer_prompt_explicitly_allows_only_bounded_mutations() -> None:
     assert "Copy every candidate key and value exactly" not in prompt
 
 
+def test_developer_runtime_uses_a_small_mutation_plan_schema() -> None:
+    candidate = ImplementationResult(
+        action_mode=ActionMode.PROPOSED, changed_files=["app/service.py"],
+        diff="PROPOSED\n+change", evidence=["mcp://repository/read_file#app/service.py"],
+        validation_result="run tests",
+    )
+    requests: list[dict] = []
+
+    def handler(request):
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, json={
+            "model": "qwen3.5:9b",
+            "response": json.dumps({"mutations": [], "no_mutation_reason": "not enough context"}),
+        })
+
+    runtime = LocalModelRuntime(
+        Settings(_env_file=None), client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
+    envelope = build_context(
+        AgentRole.DEVELOPER,
+        EngineeringState(run_id="runtime", requirement="change email"),
+        "change email",
+    )
+
+    output, _ = runtime.invoke_artifact(AgentRole.DEVELOPER, envelope, candidate)
+
+    assert output.action_mode is ActionMode.PROPOSED
+    assert set(requests[0]["format"]["properties"]) == {"mutations", "no_mutation_reason"}
+    assert "PROPOSED TECHNICAL CHANGE" not in requests[0]["prompt"]
+
+
 def test_testing_runtime_accepts_behavioral_test_mutation_without_weakening_governed_fields() -> None:
     implementation = ImplementationResult(
         action_mode=ActionMode.APPLIED, changed_files=["app/email.py"],

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any, TypedDict
 
 from langgraph.checkpoint.memory import InMemorySaver
@@ -288,6 +289,18 @@ def build_engineering_graph(
             })
         return candidate
 
+    def developer_inspection_fingerprint(tool_results: list[Any]) -> str:
+        inspected = [
+            f"{item.input_summary}:{item.output_summary}"
+            for item in tool_results
+            if item.allowed_role is AgentRole.DEVELOPER
+            and item.tool_name in {"read_file", "get_file_content"}
+            and item.status is ToolStatus.SUCCESS
+            and item.input_summary.startswith("path=")
+            and DeveloperAgent.is_implementation_candidate(item.input_summary[5:])
+        ]
+        return hashlib.sha256("\n".join(inspected).encode()).hexdigest()
+
     def make_node(role: AgentRole):
         def node(raw_state: dict[str, Any]) -> dict[str, Any]:
             current = EngineeringState.model_validate(raw_state)
@@ -345,10 +358,19 @@ def build_engineering_graph(
                     item.allowed_role is AgentRole.DEVELOPER
                     and item.tool_name in {"read_file", "get_file_content"}
                     and item.status is ToolStatus.SUCCESS
+                    and item.input_summary.startswith("path=")
+                    and DeveloperAgent.is_implementation_candidate(item.input_summary[5:])
                     for item in tool_results
                 )
             )
-            if repository_mcp is not None and role in {AgentRole.ARCHITECTURE, AgentRole.DEVELOPER} and not prior_developer_inspection:
+            fresh_remediation_selection = (
+                role is AgentRole.DEVELOPER
+                and current.iteration == 1
+                and bool(current.remediation_request)
+            )
+            if repository_mcp is not None and role in {AgentRole.ARCHITECTURE, AgentRole.DEVELOPER} and (
+                not prior_developer_inspection or fresh_remediation_selection
+            ):
                 result = repository_mcp.list_files(role)
                 required_mcp_missing |= preserve_tool_result(
                     result, role, errors, tool_results, repository_mcp
@@ -357,7 +379,7 @@ def build_engineering_graph(
                     listed_paths = [
                         line.strip().replace("\\", "/")
                         for line in result.output_summary.splitlines()
-                        if DeveloperAgent._safe_path(line.strip().replace("\\", "/"))
+                        if DeveloperAgent.is_implementation_candidate(line.strip().replace("\\", "/"))
                     ]
                     terms = DeveloperAgent.relevance_terms(
                         current.specification, current.architecture, current.requirement
@@ -372,10 +394,9 @@ def build_engineering_graph(
                             search_hits.extend(
                                 line.strip().replace("\\", "/")
                                 for line in searched.output_summary.splitlines()
+                                if DeveloperAgent.is_implementation_candidate(line.strip().replace("\\", "/"))
                             )
                     ranked = DeveloperAgent.rank_paths(listed_paths, search_hits, terms)
-                    if search_hits:
-                        ranked = [path for path in ranked if path in set(search_hits)]
                     for path in ranked[:2]:
                         read = repository_mcp.read_file(role, path)
                         required_mcp_missing |= preserve_tool_result(
@@ -408,7 +429,31 @@ def build_engineering_graph(
             model_usage = list(current.model_usage)
             envelope = build_context(role, current, current.requirement)
             candidate = agents[role].execute(envelope)
-            if model_runtime is not None:
+            inspection_fingerprint = developer_inspection_fingerprint(tool_results) if role is AgentRole.DEVELOPER else ""
+            no_progress_signature = hashlib.sha256(
+                f"{inspection_fingerprint}\n{current.remediation_request or ''}".encode()
+            ).hexdigest()
+            skip_developer_model = (
+                role is AgentRole.DEVELOPER
+                and (
+                    not candidate.changed_files
+                    or (
+                        current.iteration >= 2
+                        and current.repository_context.get("_developer_no_progress_signature") == no_progress_signature
+                        and current.implementation is not None
+                        and current.implementation.action_mode is ActionMode.PROPOSED
+                        and implementation_pre_gate_problems(current)
+                    )
+                )
+            )
+            if skip_developer_model:
+                output = candidate
+                if trace is not None:
+                    trace.record(
+                        "Developer no-progress", as_type="agent", output=output.model_dump(mode="json"),
+                        metadata={"iteration": current.iteration, "llm_skipped": True},
+                    )
+            elif model_runtime is not None:
                 attempt_start = len(model_runtime.attempts)
                 try:
                     output, model_info = model_runtime.invoke_artifact(role, envelope, candidate)
@@ -531,6 +576,13 @@ def build_engineering_graph(
                 "model_usage": model_usage,
                 "trace_id": trace.trace_id if trace is not None else current.trace_id,
             }
+            if role is AgentRole.DEVELOPER:
+                repository_context = dict(current.repository_context)
+                if output.action_mode is ActionMode.APPLIED:
+                    repository_context.pop("_developer_no_progress_signature", None)
+                else:
+                    repository_context["_developer_no_progress_signature"] = no_progress_signature
+                patch["repository_context"] = repository_context
             if cloud_runtime is not None and hasattr(cloud_runtime, "budget"):
                 patch["cloud_escalations_by_agent"] = {
                     item.value: count for item, count in cloud_runtime.budget.by_agent.items()

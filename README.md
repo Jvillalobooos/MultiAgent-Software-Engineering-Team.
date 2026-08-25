@@ -73,6 +73,8 @@ automatic writes occur only in an isolated run copy:
 ```powershell
 nova-team
 nova-team --project "C:\path\to\project"
+# Controlled demo target
+nova-team --project ".\sample_app"
 ```
 
 ### Optional global command

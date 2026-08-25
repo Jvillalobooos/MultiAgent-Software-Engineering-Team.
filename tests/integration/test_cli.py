@@ -37,3 +37,12 @@ def test_cli_uses_explicit_project_target(monkeypatch, tmp_path) -> None:
 
     assert result.exit_code == 0
     assert captured["project_target"] == tmp_path.resolve()
+
+
+def test_cli_prints_resolved_target_before_running(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(cli, "run_multimodel_acceptance", lambda *args, **kwargs: {"final_status": "APPROVED"})
+
+    result = CliRunner().invoke(cli.app, ["run", "safe change", "--project", str(tmp_path)])
+
+    assert result.exit_code == 0
+    assert f"Target project: {tmp_path.resolve()}" in result.stdout

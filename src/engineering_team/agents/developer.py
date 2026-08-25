@@ -11,6 +11,21 @@ from .base import AgentBase
 
 class DeveloperAgent(AgentBase[ImplementationResult]):
     role = "Developer"
+    _MAX_EDITABLE_SOURCE_CHARS = 4_000
+    _GENERATED_PARTS: ClassVar[set[str]] = {
+        "workspace", "evaluation", "traces", "rag", "chroma", "__pycache__",
+        ".pytest_cache", ".ruff_cache", ".git", ".venv", "node_modules",
+        "dist", "build", "coverage", "htmlcov",
+    }
+    _SOURCE_SUFFIXES: ClassVar[set[str]] = {
+        ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".go", ".rs", ".rb",
+        ".php", ".cs", ".c", ".h", ".cpp", ".hpp", ".swift", ".kt", ".kts",
+        ".scala", ".vue", ".svelte",
+    }
+    _PROJECT_FILES: ClassVar[set[str]] = {
+        "pyproject.toml", "package.json", "tsconfig.json", "cargo.toml", "go.mod",
+        "pom.xml", "build.gradle", "build.gradle.kts", "composer.json", "gemfile",
+    }
 
     _STOP_WORDS: ClassVar[set[str]] = {
         "after", "allow", "authorized", "belonging", "bounded", "change",
@@ -59,6 +74,17 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
             and "__pycache__" not in candidate.parts
         )
 
+    @classmethod
+    def is_implementation_candidate(cls, path: str) -> bool:
+        """Separate sandbox-safe paths from files suitable for a bounded code change."""
+        if not cls._safe_path(path):
+            return False
+        candidate = PurePosixPath(path.replace("\\", "/"))
+        parts = {part.casefold() for part in candidate.parts}
+        if parts & cls._GENERATED_PARTS:
+            return False
+        return candidate.suffix.casefold() in cls._SOURCE_SUFFIXES or candidate.name.casefold() in cls._PROJECT_FILES
+
     @staticmethod
     def _symbols(content: str) -> list[str]:
         patterns = (
@@ -95,14 +121,25 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
                     path = item.input_summary[len(prefix):].replace("\\", "/")
                     if self._safe_path(path):
                         inspected_content[path] = item.output_summary
-        safe_listed = list(dict.fromkeys(path for path in listed_paths if self._safe_path(path)))
+        safe_listed = list(dict.fromkeys(
+            path for path in listed_paths if self.is_implementation_candidate(path)
+        ))
         terms = self.relevance_terms(
             specification, architecture, str(envelope.state_projection.get("requirement", ""))
         )
         ranked_paths = self.rank_paths(safe_listed, search_hits, terms)
-        inspected_paths = [path for path in ranked_paths if path in inspected_content]
-        if search_hits:
-            inspected_paths = [path for path in inspected_paths if path in set(search_hits)]
+        inspected_paths = [
+            path for path in ranked_paths
+            if path in inspected_content and len(inspected_content[path]) <= self._MAX_EDITABLE_SOURCE_CHARS
+        ]
+        search_hit_paths = set(search_hits)
+        relevant_inspected = [
+            path for path in inspected_paths
+            if path in search_hit_paths
+            or any(term in path.casefold() or term in inspected_content[path].casefold() for term in terms)
+        ]
+        if relevant_inspected:
+            inspected_paths = relevant_inspected
         evidence = list(dict.fromkeys(
             (
                 f"{item.evidence_reference}#{item.input_summary[5:]}"
@@ -137,7 +174,7 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
         )
         decisions = "; ".join(getattr(architecture, "decisions", [])) or "preserve design"
         objective = getattr(specification, "objective", envelope.current_task)
-        changed_files = inspected_paths[:4]
+        changed_files = inspected_paths[:2]
         proposal = [
             "PROPOSED TECHNICAL CHANGE",
             f"Objective: {objective}",

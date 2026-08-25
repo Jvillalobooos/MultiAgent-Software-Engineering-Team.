@@ -8,17 +8,29 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from engineering_team.config import Settings
 from engineering_team.contracts.enums import AgentRole
-from engineering_team.contracts.models import ModelExecutionInfo, StrictModel
+from engineering_team.contracts.models import (
+    FileMutation,
+    ImplementationResult,
+    ModelExecutionInfo,
+    StrictModel,
+)
 from engineering_team.llm.router import ModelRouter
 from engineering_team.models.context import ContextEnvelope
 
 
 class StructuredAgentObservation(StrictModel):
     acknowledged: bool
+
+
+class DeveloperMutationPlan(StrictModel):
+    """Internal, minimal schema for the only facts Developer may recommend."""
+
+    mutations: list[FileMutation] = Field(default_factory=list, max_length=2)
+    no_mutation_reason: str | None = None
 
 
 class LocalModelRuntime:
@@ -47,6 +59,16 @@ class LocalModelRuntime:
         self, role: AgentRole, envelope: ContextEnvelope, candidate: BaseModel
     ) -> tuple[BaseModel, ModelExecutionInfo]:
         """Return the role-specific, schema-validated artifact produced by Ollama."""
+        if role is AgentRole.DEVELOPER and isinstance(candidate, ImplementationResult):
+            plan, info = self._invoke_schema(
+                role,
+                envelope,
+                DeveloperMutationPlan,
+                {"mutations": [], "no_mutation_reason": None},
+            )
+            artifact = candidate.model_copy(update={"mutations": plan.mutations})
+            self.outputs[role] = artifact
+            return artifact, info
         return self._invoke_schema(role, envelope, type(candidate), candidate.model_dump(mode="json"))
 
     def _invoke_schema(
@@ -178,8 +200,8 @@ class LocalModelRuntime:
         )
         if role is AgentRole.DEVELOPER:
             system += (
-                " You may add bounded mutations only for inspected paths. "
-                "Keep action_mode PROPOSED; graph code alone decides APPLIED."
+                " Return only the bounded mutation plan for inspected paths. "
+                "Graph code owns action mode, writes, diffs, and all deterministic evidence."
             )
         if role is AgentRole.TESTING:
             system += " You may replace test_mutations only under test paths; never write production code."
@@ -196,7 +218,7 @@ class LocalModelRuntime:
             seen: set[tuple[str, str]] = set()
             bounded: list[Any] = []
             readable = 0
-            for item in tool_results:
+            for item in reversed(tool_results):
                 key = (item.tool_name, item.input_summary)
                 if key in seen:
                     continue
@@ -206,7 +228,7 @@ class LocalModelRuntime:
                     readable += 1
                 seen.add(key)
                 bounded.append(item)
-            tool_results = bounded
+            tool_results = list(reversed(bounded))
         context = {
             "agent": envelope.agent.value,
             "current_task": envelope.current_task,
@@ -238,8 +260,8 @@ class LocalModelRuntime:
         candidate_instruction = "Copy every candidate key and value exactly; do not omit schema-optional keys."
         if role is AgentRole.DEVELOPER:
             candidate_instruction = (
-                "Preserve every candidate field exactly except mutations: you MAY populate mutations "
-                "only for inspected paths, with complete bounded content. Keep action_mode PROPOSED."
+                "Return only mutations and no_mutation_reason. You MAY populate mutations (at most two) "
+                "for inspected paths with complete bounded content; otherwise return an empty list."
             )
         elif role is AgentRole.TESTING:
             candidate_instruction = (

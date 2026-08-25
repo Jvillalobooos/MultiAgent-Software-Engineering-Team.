@@ -27,6 +27,11 @@ def run(
     target = (project or Path.cwd()).resolve()
     if not target.is_dir():
         raise typer.BadParameter("project must be an existing directory", param_hint="--project")
+    typer.echo(f"Target project: {target}")
+    if target == Path(__file__).resolve().parents[2]:
+        typer.echo(
+            "Target is the engineering-team engine itself. Use --project <path> to work on a different application."
+        )
 
     def progress(role, iteration):
         suffix = f"[cycle {iteration}] " if iteration else ""
