@@ -50,6 +50,23 @@ Langfuse live requiere `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` y
 traza local correlacionada y el core continúa. Gemini/Groq son opcionales y no
 cuentan como evidencia multi-model local.
 
+## Run
+
+Windows:
+
+```powershell
+.\run.ps1
+```
+
+macOS:
+
+```sh
+chmod +x run.sh
+./run.sh
+```
+
+The project must already be configured before running these scripts.
+
 ## Ejecución y evidencia
 
 ```powershell
