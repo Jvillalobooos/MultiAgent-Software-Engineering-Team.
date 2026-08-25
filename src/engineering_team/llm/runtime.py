@@ -82,11 +82,16 @@ class LocalModelRuntime:
                 payload = response.json()
             except (httpx.HTTPError, ValueError) as exc:
                 latency = int((time.perf_counter() - started) * 1000)
+                code = (
+                    "AGENT_TIMEOUT"
+                    if isinstance(exc, httpx.TimeoutException)
+                    else "LLM_AVAILABILITY_ERROR"
+                )
                 info = ModelExecutionInfo(
                     agent=role, provider="ollama", requested_model=selection.model,
                     actual_model=payload.get("model"), model_profile=selection.model_profile,
                     degraded=True, latency_ms=latency, structured_output_success=False,
-                    error=f"LLM_AVAILABILITY_ERROR: {type(exc).__name__}",
+                    error=f"{code}: {type(exc).__name__}",
                 )
                 self.attempts.append(info)
                 self._record(role, system_prompt, user_prompt, payload.get("response"), info,

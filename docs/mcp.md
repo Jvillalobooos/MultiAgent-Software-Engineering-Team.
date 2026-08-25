@@ -6,8 +6,9 @@ The production boundary is:
 
 `engineering_team.mcp.server` uses the official Python MCP SDK and starts
 independent Repository or Quality tool surfaces. `engineering_team.mcp.client`
-opens real negotiated stdio sessions, discovers tools, calls them through the
-protocol, and converts structured results back to Pydantic `ToolResult`.
+opens a lifecycle-managed negotiated stdio session, discovers tools, performs
+related calls on that same session, then closes the process explicitly. It
+converts structured results back to Pydantic `ToolResult`.
 The existing Python classes are bounded server backends; direct calls are not
 the primary protocol evidence.
 
@@ -15,8 +16,10 @@ Repository MCP exposes `list_files`, `read_file`, `search_code`,
 `get_file_content`, `create_file`, `update_file` and `get_diff`. Architecture
 has read-only access; Developer has bounded read/write access inside the
 per-run copy. Resolved external paths and `..` traversal are denied.
-Symlinks are excluded from repository search so links cannot escape the run
-copy after traversal validation.
+Symlinks and `.env`/`.env.*` are excluded consistently from listing and search
+so secret paths and links cannot escape or leak from the run copy. Read calls
+apply the same resolved-path and secret policy. `get_diff` compares writes to
+their captured original content and returns a real unified diff.
 
 Quality MCP exposes `run_tests`, `get_test_results`, `run_build`,
 `get_build_status`, `run_linter`, `scan_dependencies`, `run_security_scan` and
@@ -24,7 +27,9 @@ Quality MCP exposes `run_tests`, `get_test_results`, `run_build`,
 build/lint; Security receives only dependency/security scans. Calls validate
 role, arguments, timeout and status and return a Pydantic `ToolResult` with
 safe input/output summaries, duration, evidence reference and normalized
-error. Access is deny-by-default.
+error. Access is deny-by-default. The persistent session makes `run_tests →
+get_test_results`, `run_build → get_build_status`, and `run_security_scan →
+get_security_report` preserve backend results across protocol calls.
 Timeout is adapter-configurable. In the real multi-model run, Repository and
 Quality MCP both execute against the isolated run copy; its copied
 `test_acceptance.py` is the test target.

@@ -122,24 +122,27 @@ class EvaluationHarness:
 
         run_workspace = create_run_copy(run_id, "sample_app", self.workspace_root)
         timeout = getattr(self.quality_mcp, "timeout_seconds", 60)
-        run_quality = MCPQualityClient(run_workspace, timeout_seconds=timeout)
-        graph = build_engineering_graph(
-            quality_mcp=run_quality,
-            repository_mcp=MCPRepositoryClient(run_workspace, timeout_seconds=timeout),
-            retriever=self.retriever,
-            model_runtime=runtime,
-            trace=trace,
-            test_paths=["test_acceptance.py"],
-        )
         acceptance, acceptance_evidence = _scenario_acceptance(scenario, run_workspace)
         trace.record(
             "scenario acceptance", as_type="tool",
             input={"scenario": scenario.identifier}, output=acceptance.model_dump(mode="json"),
         )
-        state = graph.invoke({
-            "run_id": run_id, "requirement": scenario.requirement,
-            "tool_results": [acceptance],
-        })
+        with (
+            MCPQualityClient(run_workspace, timeout_seconds=timeout) as run_quality,
+            MCPRepositoryClient(run_workspace, timeout_seconds=timeout) as run_repository,
+        ):
+            graph = build_engineering_graph(
+                quality_mcp=run_quality,
+                repository_mcp=run_repository,
+                retriever=self.retriever,
+                model_runtime=runtime,
+                trace=trace,
+                test_paths=["test_acceptance.py"],
+            )
+            state = graph.invoke({
+                "run_id": run_id, "requirement": scenario.requirement,
+                "tool_results": [acceptance],
+            })
         duration = time.perf_counter() - started
         review = state.get("review")
         observed = review.status.value if review is not None else state.get("final_status", "UNKNOWN")
@@ -314,15 +317,19 @@ def run_multimodel_acceptance(
     runtime = LocalModelRuntime(settings, trace=trace)
     cloud_runtime = CloudModelRuntime(settings, trace=trace) if settings.cloud_enabled else None
     retriever = build_retriever(settings, settings.rag_persist_directory, reindex=True)
-    state = build_engineering_graph(
-        repository_mcp=MCPRepositoryClient(run_workspace),
-        quality_mcp=MCPQualityClient(run_workspace),
-        retriever=retriever,
-        model_runtime=runtime,
-        cloud_runtime=cloud_runtime,
-        trace=trace,
-        test_paths=["test_acceptance.py"],
-    ).invoke({"run_id": run_id, "requirement": requirement})
+    with (
+        MCPRepositoryClient(run_workspace) as repository_mcp,
+        MCPQualityClient(run_workspace) as quality_mcp,
+    ):
+        state = build_engineering_graph(
+            repository_mcp=repository_mcp,
+            quality_mcp=quality_mcp,
+            retriever=retriever,
+            model_runtime=runtime,
+            cloud_runtime=cloud_runtime,
+            trace=trace,
+            test_paths=["test_acceptance.py"],
+        ).invoke({"run_id": run_id, "requirement": requirement})
     usage = [item.model_dump(mode="json") for item in state.get("model_usage", [])]
     expected = [
         ("Product", settings.deep_model),

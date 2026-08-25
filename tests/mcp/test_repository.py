@@ -30,3 +30,17 @@ def test_each_run_uses_an_isolated_source_copy(tmp_path: Path) -> None:
 
     assert (source / "app.py").read_text(encoding="utf-8") == "safe = True"
     assert (run / "app.py").read_text(encoding="utf-8") == "safe = False"
+
+
+def test_search_code_never_reads_secret_paths_but_keeps_allowed_matches(tmp_path: Path) -> None:
+    sentinel = "FICTIONAL_REPOSITORY_SENTINEL_77"
+    (tmp_path / ".env").write_text(sentinel, encoding="utf-8")
+    (tmp_path / ".env.audit").write_text(sentinel, encoding="utf-8")
+    (tmp_path / "allowed.py").write_text(sentinel, encoding="utf-8")
+    mcp = RepositoryMCP(tmp_path)
+
+    result = mcp.search_code(AgentRole.DEVELOPER, sentinel)
+
+    assert result.status is ToolStatus.SUCCESS
+    assert result.output_summary.splitlines() == ["allowed.py"]
+    assert sentinel not in result.output_summary

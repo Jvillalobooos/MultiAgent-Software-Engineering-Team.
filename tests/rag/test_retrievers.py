@@ -90,3 +90,29 @@ def test_context_isolates_rag_by_agent_domain() -> None:
 
     assert [item.chunk_id for item in arch_context.rag_evidence] == ["a:0"]
     assert [item.chunk_id for item in security_context.rag_evidence] == ["s:0"]
+
+
+def test_real_corpus_retrieval_is_differentiated_by_role_and_section(tmp_path) -> None:
+    index = ChromaIndex(tmp_path / "chroma", collection_name="domain-quality")
+    index.replace(chunk_documents(load_documents("knowledge"), chunk_size=800, overlap=160))
+    retriever = SpecializedRetriever(index, top_k=4, fetch_k=8, min_relevance=0.55)
+
+    architecture = retriever.retrieve(
+        "module boundaries dependencies data changes and architecture risks",
+        agent=AgentRole.ARCHITECTURE,
+    )
+    security = retriever.retrieve(
+        "prevent IDOR with ownership authorization and safe secret handling",
+        agent=AgentRole.SECURITY,
+    )
+    testing = retriever.retrieve(
+        "test happy path errors edge cases security and business rules",
+        agent=AgentRole.TESTING,
+    )
+
+    assert any(item.source == "architecture-guidelines.md" for item in architecture)
+    assert any(item.source == "owasp-api-security.md" for item in security)
+    assert any(item.source == "testing-strategy.md" for item in testing)
+    for evidence in (architecture, security, testing):
+        assert evidence
+        assert all(item.section and item.chunk_id and item.fragment for item in evidence)

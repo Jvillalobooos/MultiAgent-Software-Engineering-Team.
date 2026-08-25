@@ -34,7 +34,12 @@ class OllamaAdapter:
             response.raise_for_status()
             payload = response.json()
         except (httpx.HTTPError, ValueError) as exc:
-            raise RuntimeError(f"LLM_AVAILABILITY_ERROR: {exc}") from exc
+            code = (
+                "AGENT_TIMEOUT"
+                if isinstance(exc, httpx.TimeoutException)
+                else "LLM_AVAILABILITY_ERROR"
+            )
+            raise RuntimeError(f"{code}: {exc}") from exc
         finally:
             if owns_client:
                 await client.aclose()

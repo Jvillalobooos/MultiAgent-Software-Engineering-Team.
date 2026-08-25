@@ -32,16 +32,27 @@ def build_repository_server(root: str | Path) -> MCPServer:
 
     @server.tool()
     def read_file(role: str, relative: str) -> dict[str, Any]:
-        return _wire_result("repository", backend.read_file, AgentRole(role), relative)
+        result = backend.read_file(AgentRole(role), relative).model_copy(update={
+            "input_summary": f"path={relative}",
+            "evidence_reference": "mcp://repository/read_file",
+        })
+        return result.model_dump(mode="json")
 
     @server.tool()
     def search_code(role: str, query: str) -> dict[str, Any]:
-        return _wire_result("repository", backend.search_code, AgentRole(role), query)
+        result = backend.search_code(AgentRole(role), query).model_copy(update={
+            "input_summary": "query=bounded",
+            "evidence_reference": "mcp://repository/search_code",
+        })
+        return result.model_dump(mode="json")
 
     @server.tool()
     def get_file_content(role: str, relative: str) -> dict[str, Any]:
         result = backend.get_file_content(AgentRole(role), relative).model_copy(
-            update={"evidence_reference": "mcp://repository/get_file_content"}
+            update={
+                "input_summary": f"path={relative}",
+                "evidence_reference": "mcp://repository/get_file_content",
+            }
         )
         return result.model_dump(mode="json")
 

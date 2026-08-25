@@ -1,3 +1,5 @@
+from collections import Counter
+
 from langchain_core.documents import Document
 
 from engineering_team.rag.loaders import chunk_document, load_documents
@@ -17,6 +19,22 @@ def test_chunking_preserves_source_and_overlap() -> None:
 
 def test_corpus_has_at_least_six_real_documents() -> None:
     assert len(load_documents("knowledge")) >= 6
+
+
+def test_each_knowledge_source_is_substantive_and_sectioned() -> None:
+    documents = load_documents("knowledge")
+    sections = Counter(item.metadata["source"] for item in documents)
+    words = Counter()
+    for document in documents:
+        words[document.metadata["source"]] += len(document.page_content.split())
+
+    assert set(sections) == {
+        "api-design-guidelines.md", "architecture-guidelines.md",
+        "coding-standards.md", "owasp-api-security.md",
+        "security-guidelines.md", "testing-strategy.md",
+    }
+    assert all(count >= 4 for count in sections.values())
+    assert all(count >= 120 for count in words.values())
 
 
 def test_markdown_loader_preserves_sections(tmp_path) -> None:

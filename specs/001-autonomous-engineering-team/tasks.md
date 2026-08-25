@@ -575,6 +575,55 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** Todos los gates de Definition of Done pasan, secretos/caches
   quedan fuera de Git y el commit aprobado se publica en el branch actual.
 
+## FASE 10 — HARDENING FINAL POST-AUDITORÍA
+
+### [X] T034 — Frontera de secretos y errores operativos
+
+- **Objetivo:** Excluir secret paths de Repository MCP y propagar
+  `MCP_ERROR`, `TOOL_ERROR` y `AGENT_TIMEOUT` con efecto de grafo y Langfuse.
+- **FR/NFR:** FR-044, FR-065, FR-067, FR-069; NFR-012, NFR-014; AC-027–028.
+- **Validaciones/tests:** Sentinels ficticios, MCP unavailable, tool FAIL,
+  timeout controlado y disponibilidad no-timeout.
+- **Done When:** Un MCP requerido indisponible no puede terminar APPROVED y
+  ningún error operativo activa cloud fuera de su política.
+
+### [X] T035 — Sesión MCP persistente y diff real
+
+- **Objetivo:** Mantener lifecycle stdio explícito y estado real entre calls.
+- **FR/NFR:** FR-041–044; NFR-011, NFR-013–014.
+- **Validaciones/tests:** run/get para tests, build y security; update/create
+  seguidos de unified diff; cierre sin procesos huérfanos.
+- **Done When:** Getters y diff funcionan mediante MCP Client/Server real.
+
+### [X] T036 — Developer relevante y detallado
+
+- **Objetivo:** Seleccionar 2–4 paths por evidencia, buscar/leer contenido y
+  producir propuesta concreta sin paths ni símbolos inventados.
+- **FR/NFR:** FR-023–027, FR-044; NFR-006, NFR-011–013; AC-014.
+- **Validaciones/tests:** Primeros paths irrelevantes y módulo de transacciones
+  relevante, inspección MCP, pseudodiff, API/data, validación y seguridad.
+- **Done When:** Developer deja de seleccionar `safe_paths[:3]` y toda
+  propuesta normal queda respaldada por search/read MCP.
+
+### [X] T037 — Calidad del corpus RAG
+
+- **Objetivo:** Fortalecer los seis documentos existentes con secciones y
+  reglas diferenciadas sin alterar LangChain/Sentence Transformers/Chroma.
+- **FR/NFR:** FR-035–040, FR-074; NFR-004, NFR-008.
+- **Validaciones/tests:** Contenido sustantivo, retrieval especializado y
+  provenance intacta para Architecture, Security y Testing.
+- **Done When:** El corpus es útil y las consultas recuperan fuentes/secciones
+  pertinentes.
+
+### [X] T038 — Documentación, evidencia y regresión final
+
+- **Objetivo:** Corregir drift, ejecutar gates y preservar la evidencia LIVE
+  local/cloud ya validada sin repetir consumos o corridas largas.
+- **FR/NFR:** FR-060–061, FR-071–086; NFR-012, NFR-015–017.
+- **Validaciones/tests:** Suites focalizadas/completas, Ruff y secret scan;
+  consistencia de la evidencia Multi-model, escenarios y Langfuse existente.
+- **Done When:** Código, documentación y evidencia final son consistentes.
+
 ## MATRIZ DE TRAZABILIDAD FR/NFR → TASK(S)
 
 | FR/NFR | Task(s) |
@@ -584,30 +633,30 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 | FR-006–009 | T002–T004, T015 |
 | FR-010–020 | T008–T009, T022–T023 |
 | FR-021–022 | T002, T016–T017 |
-| FR-023–027 | T012, T018, T030 |
+| FR-023–027 | T012, T018, T030, T036 |
 | FR-028–029 | T002, T019 |
 | FR-030–031 | T002, T013, T020 |
 | FR-032–034 | T002, T009, T021 |
-| FR-035–040 | T010–T011, T017, T019–T020, T029 |
-| FR-041 | T012, T028 |
+| FR-035–040 | T010–T011, T017, T019–T020, T029, T037 |
+| FR-041 | T012, T028, T035 |
 | FR-042 | T014, T028 |
-| FR-043–045 | T012, T014, T018–T020, T023, T028 |
+| FR-043–045 | T012, T014, T018–T020, T023, T028, T034–T035 |
 | FR-046–050 | T001, T005–T006, T016–T021, T026 |
 | FR-051–059 | T001, T003, T007, T023 |
 | FR-060–061 | T006, T024 |
-| FR-062–069 | T003, T006–T007, T009, T023 |
+| FR-062–069 | T003, T006–T007, T009, T023, T034 |
 | FR-070 | T002, T021–T022 |
 | FR-071–073 | T013, T025, T031 |
 | FR-074 | T010–T011, T027, T029 |
 | FR-075–076 | T024–T027, T031 |
 | FR-077 | T007, T023 |
 | FR-078–086 | T024–T027, T032 |
-| Remediación MCP/LangChain/Developer/LIVE | T028–T033 |
+| Remediación MCP/LangChain/Developer/LIVE | T028–T038 |
 | NFR-001–003 | T001, T013 |
 | NFR-004 | T006, T011, T022, T029 |
 | NFR-005–006 | T002–T004, T008–T009 |
 | NFR-007–010 | T005–T007, T022, T026 |
-| NFR-011–014 | T003, T007, T012, T014, T023 |
+| NFR-011–014 | T003, T007, T012, T014, T023, T034–T036 |
 | NFR-015 | T024, T026 |
 | NFR-016 | T013–T014, T025, T027 |
 | NFR-017–018 | T001, T003, T007, T012, T023 |
@@ -621,12 +670,12 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 | ModelRegistry, Router, Ollama y cloud | T005–T007 |
 | StateGraph, routers, remediation y HITL | T008–T009, T022–T023 |
 | Seis agentes y prompts | T015–T021 |
-| Corpus, Chroma y retrievers RAG | T010–T011 |
-| Workspace, Repository MCP y Quality MCP | T012–T014 |
+| Corpus, Chroma y retrievers RAG | T010–T011, T037 |
+| Workspace, Repository MCP y Quality MCP | T012–T014, T034–T035 |
 | Langfuse, métricas y reportes | T024–T026 |
 | Sample app, escenarios y E2E | T013, T025–T026 |
-| Documentación, diagramas y demo | T027 |
-| MCP protocol, LangChain RAG y evaluación LIVE | T028–T033 |
+| Documentación, diagramas y demo | T027, T038 |
+| MCP protocol, LangChain RAG y evaluación LIVE | T028–T038 |
 
 ## REQUISITOS SIN COBERTURA
 
@@ -634,7 +683,7 @@ Ninguno.
 
 ## SELF-REVIEW
 
-- Las 27 Tasks derivan de Constitution, Spec y Plan; no introducen requisitos
+- Las 38 Tasks derivan de Constitution, Spec y Plan; no introducen requisitos
   ni decisiones de arquitectura nuevas.
 - Todas las Tasks incluyen validación, evidencia y condición de terminación.
 - Multi-model local tiene implementación explícita (T005–T006) y prueba E2E

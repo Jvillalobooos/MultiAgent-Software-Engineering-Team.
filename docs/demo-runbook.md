@@ -75,12 +75,12 @@ When Langfuse variables are configured, open the trace ID emitted by the run
 and verify root/child completeness. Never print credential values.
 
 ```powershell
-.\.venv\Scripts\python.exe -m ruff check src tests evaluation sample_app
+.\.venv\Scripts\python.exe -m ruff check src tests evaluation sample_app scripts
 .\.venv\Scripts\python.exe -m pytest
 ```
 
 Absent Langfuse or cloud credentials are reported as credential status only;
-local execution remains valid.
-Cloud adapters use provider-shaped mocked responses in the suite. Without
-keys, live Gemini/Groq is `NOT_EXECUTED_NO_CREDENTIALS`; retry, repair,
+local execution remains valid. Sanitized evidence records that Gemini and
+Groq fallback were demonstrated LIVE previously. Routine regression uses
+provider-shaped responses and does not repeat paid cloud calls; retry, repair,
 provider mapping, budgets and graph-integrated fallback/HITL remain tested.

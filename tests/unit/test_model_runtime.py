@@ -1,6 +1,7 @@
 import json
 
 import httpx
+import pytest
 
 from engineering_team.config import Settings
 from engineering_team.contracts.enums import (
@@ -155,3 +156,47 @@ def test_semantic_guard_rejects_invented_source_and_material_developer_change() 
 
     assert not _preserves_governed_facts(architecture.model_dump(mode="json"), invented)
     assert not _preserves_governed_facts(implementation.model_dump(mode="json"), fabricated)
+
+
+def test_runtime_classifies_configured_http_timeout_as_agent_timeout() -> None:
+    state = EngineeringState(run_id="timeout", requirement="safe change")
+    envelope = build_context(AgentRole.PRODUCT, state, "Product")
+    from engineering_team.agents.product import ProductAgent
+
+    candidate = ProductAgent().execute(envelope)
+
+    def timeout(request):
+        raise httpx.ReadTimeout("controlled timeout", request=request)
+
+    trace = LangfuseTracer().start_run("timeout", "safe change")
+    runtime = LocalModelRuntime(
+        Settings(_env_file=None, max_local_retries=1),
+        client=httpx.Client(transport=httpx.MockTransport(timeout)),
+        trace=trace,
+    )
+
+    with pytest.raises(RuntimeError, match="^AGENT_TIMEOUT"):
+        runtime.invoke_artifact(AgentRole.PRODUCT, envelope, candidate)
+
+    assert len(runtime.attempts) == 2
+    assert all(item.error and item.error.startswith("AGENT_TIMEOUT") for item in runtime.attempts)
+    assert all(event["status_message"].startswith("AGENT_TIMEOUT") for event in trace.events)
+
+
+def test_runtime_keeps_connectivity_failure_distinct_from_agent_timeout() -> None:
+    state = EngineeringState(run_id="unavailable", requirement="safe change")
+    envelope = build_context(AgentRole.PRODUCT, state, "Product")
+    from engineering_team.agents.product import ProductAgent
+
+    candidate = ProductAgent().execute(envelope)
+
+    def unavailable(request):
+        raise httpx.ConnectError("controlled unavailable", request=request)
+
+    runtime = LocalModelRuntime(
+        Settings(_env_file=None, max_local_retries=1),
+        client=httpx.Client(transport=httpx.MockTransport(unavailable)),
+    )
+
+    with pytest.raises(RuntimeError, match="^LLM_AVAILABILITY_ERROR"):
+        runtime.invoke_artifact(AgentRole.PRODUCT, envelope, candidate)

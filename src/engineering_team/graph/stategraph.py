@@ -19,6 +19,7 @@ from engineering_team.contracts.enums import (
     ErrorCode,
     RemediationCategory,
     ReviewerStatus,
+    ToolStatus,
 )
 from engineering_team.contracts.models import FinalReport, WorkflowError
 from engineering_team.contracts.state import EngineeringState
@@ -142,12 +143,52 @@ def build_engineering_graph(
             "server": getattr(adapter, "last_server_name", type(adapter).__name__),
         }
 
+    def preserve_tool_result(
+        result: Any,
+        role: AgentRole,
+        errors: list[WorkflowError],
+        tool_results: list[Any],
+        adapter: Any,
+    ) -> bool:
+        """Preserve one MCP result and return whether required MCP evidence is unavailable."""
+        tool_results.append(result)
+        if trace is not None:
+            trace.record(
+                "MCP call", as_type="tool", output=result.model_dump(mode="json"),
+                metadata=mcp_trace_metadata(adapter),
+            )
+        if result.status not in {ToolStatus.UNAVAILABLE, ToolStatus.FAIL}:
+            return False
+        code = (
+            ErrorCode.MCP_ERROR
+            if result.status is ToolStatus.UNAVAILABLE
+            else ErrorCode.TOOL_ERROR
+        )
+        error = WorkflowError(
+            code=code,
+            source_stage=role.value,
+            retryable=False,
+            detail=f"{result.tool_name}: {result.error or result.status.value}",
+            evidence_reference=result.evidence_reference,
+        )
+        errors.append(error)
+        if trace is not None:
+            trace.record(
+                code.value,
+                level="ERROR",
+                status_message=error.detail,
+                output=result.model_dump(mode="json"),
+                metadata={"agent": role.value, "tool": result.tool_name},
+            )
+        return result.status is ToolStatus.UNAVAILABLE
+
     def make_node(role: AgentRole):
         def node(raw_state: dict[str, Any]) -> dict[str, Any]:
             current = EngineeringState.model_validate(raw_state)
             rag_evidence = list(current.rag_evidence)
             errors = list(current.errors)
             tool_results = list(current.tool_results)
+            required_mcp_missing = False
             if retriever is not None and role in {
                 AgentRole.ARCHITECTURE, AgentRole.SECURITY, AgentRole.TESTING
             }:
@@ -165,20 +206,42 @@ def build_engineering_graph(
                     )
             if repository_mcp is not None and role in {AgentRole.ARCHITECTURE, AgentRole.DEVELOPER}:
                 result = repository_mcp.list_files(role)
-                tool_results.append(result)
-                if trace is not None:
-                    trace.record(
-                        "MCP call", as_type="tool", output=result.model_dump(mode="json"),
-                        metadata=mcp_trace_metadata(repository_mcp),
+                required_mcp_missing |= preserve_tool_result(
+                    result, role, errors, tool_results, repository_mcp
+                )
+                if role is AgentRole.DEVELOPER and result.status is ToolStatus.SUCCESS:
+                    listed_paths = [
+                        line.strip().replace("\\", "/")
+                        for line in result.output_summary.splitlines()
+                        if DeveloperAgent._safe_path(line.strip().replace("\\", "/"))
+                    ]
+                    terms = DeveloperAgent.relevance_terms(
+                        current.specification, current.architecture, current.requirement
                     )
+                    search_hits: list[str] = []
+                    for term in terms[:3]:
+                        searched = repository_mcp.search_code(role, term)
+                        required_mcp_missing |= preserve_tool_result(
+                            searched, role, errors, tool_results, repository_mcp
+                        )
+                        if searched.status is ToolStatus.SUCCESS:
+                            search_hits.extend(
+                                line.strip().replace("\\", "/")
+                                for line in searched.output_summary.splitlines()
+                            )
+                    ranked = DeveloperAgent.rank_paths(listed_paths, search_hits, terms)
+                    if search_hits:
+                        ranked = [path for path in ranked if path in set(search_hits)]
+                    for path in ranked[:4]:
+                        read = repository_mcp.read_file(role, path)
+                        required_mcp_missing |= preserve_tool_result(
+                            read, role, errors, tool_results, repository_mcp
+                        )
             if quality_mcp is not None and role is AgentRole.TESTING:
                 result = quality_mcp.run_tests(role, test_paths)
-                tool_results.append(result)
-                if trace is not None:
-                    trace.record(
-                        "MCP call", as_type="tool", output=result.model_dump(mode="json"),
-                        metadata=mcp_trace_metadata(quality_mcp),
-                    )
+                required_mcp_missing |= preserve_tool_result(
+                    result, role, errors, tool_results, quality_mcp
+                )
             if quality_mcp is not None and role is AgentRole.SECURITY:
                 operations = [
                     getattr(quality_mcp, name) for name in (
@@ -187,15 +250,22 @@ def build_engineering_graph(
                 ]
                 for operation in operations:
                     result = operation(role)
-                    tool_results.append(result)
-                    if trace is not None:
-                        trace.record(
-                            "MCP call", as_type="tool", output=result.model_dump(mode="json"),
-                            metadata=mcp_trace_metadata(quality_mcp),
-                        )
+                    required_mcp_missing |= preserve_tool_result(
+                        result, role, errors, tool_results, quality_mcp
+                    )
             current = current.model_copy(
                 update={"rag_evidence": rag_evidence, "errors": errors, "tool_results": tool_results}
             )
+            if required_mcp_missing:
+                return {
+                    "route_history": [*current.route_history, role.value],
+                    "rag_evidence": rag_evidence,
+                    "errors": errors,
+                    "tool_results": tool_results,
+                    "model_usage": list(current.model_usage),
+                    "human_review_required": True,
+                    "trace_id": trace.trace_id if trace is not None else current.trace_id,
+                }
             model_usage = list(current.model_usage)
             envelope = build_context(role, current, role.value)
             candidate = agents[role].execute(envelope)
@@ -208,14 +278,20 @@ def build_engineering_graph(
                 except RuntimeError as exc:
                     model_usage.extend(model_runtime.attempts[attempt_start:])
                     message = str(exc)
-                    code = (
-                        ErrorCode.LLM_QUALITY_ERROR
-                        if message.startswith(ErrorCode.LLM_QUALITY_ERROR.value)
-                        else ErrorCode.LLM_AVAILABILITY_ERROR
-                    )
+                    if message.startswith(ErrorCode.LLM_QUALITY_ERROR.value):
+                        code = ErrorCode.LLM_QUALITY_ERROR
+                    elif message.startswith(ErrorCode.AGENT_TIMEOUT.value):
+                        code = ErrorCode.AGENT_TIMEOUT
+                    else:
+                        code = ErrorCode.LLM_AVAILABILITY_ERROR
                     errors.append(WorkflowError(
                         code=code, source_stage=role.value, retryable=True, detail=message,
                     ))
+                    if trace is not None:
+                        trace.record(
+                            code.value, level="ERROR", status_message=message,
+                            metadata={"agent": role.value},
+                        )
                     if cloud_runtime is not None:
                         cloud_attempt_start = len(getattr(cloud_runtime, "attempts", []))
                         try:

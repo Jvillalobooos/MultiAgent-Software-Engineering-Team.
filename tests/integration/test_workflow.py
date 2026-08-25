@@ -8,6 +8,7 @@ from engineering_team.agents.security import SecurityAgent
 from engineering_team.config import Settings
 from engineering_team.contracts.enums import (
     AgentRole,
+    ErrorCode,
     RemediationCategory,
     ReviewerStatus,
     RouteTarget,
@@ -24,7 +25,7 @@ from engineering_team.contracts.models import (
 )
 from engineering_team.graph.stategraph import build_engineering_graph
 from engineering_team.llm.cloud import CloudModelRuntime
-from engineering_team.mcp.client import MCPQualityClient
+from engineering_team.mcp.client import MCPQualityClient, MCPRepositoryClient
 from engineering_team.observability.langfuse import LangfuseTracer
 
 CHECKLIST = {key: "PASS" for key in (
@@ -156,14 +157,14 @@ def test_real_mcp_protocol_failure_changes_reviewer_route_and_is_remediated(tmp_
         "        assert False\n",
         encoding="utf-8",
     )
-    quality = MCPQualityClient(tmp_path)
     trace = LangfuseTracer(offline_directory=tmp_path / "traces").start_run(
         "real-mcp", "safe bounded change"
     )
 
-    result = build_engineering_graph(quality_mcp=quality, trace=trace).invoke(
-        {"run_id": "real-mcp", "requirement": "safe bounded change"}
-    )
+    with MCPQualityClient(tmp_path) as quality:
+        result = build_engineering_graph(quality_mcp=quality, trace=trace).invoke(
+            {"run_id": "real-mcp", "requirement": "safe bounded change"}
+        )
 
     failed = [item for item in result["tool_results"] if item.tool_name == "run_tests"]
     assert failed[0].status is ToolStatus.FAIL
@@ -179,6 +180,59 @@ def test_real_mcp_protocol_failure_changes_reviewer_route_and_is_remediated(tmp_
     ]
     assert protocol_events
     assert all(event["metadata"]["protocol_version"] for event in protocol_events)
+    assert any(item.code is ErrorCode.TOOL_ERROR for item in result["errors"])
+    assert any(event["name"] == "TOOL_ERROR" for event in trace.events)
+
+
+def test_required_repository_mcp_unavailable_is_recorded_and_cannot_approve(tmp_path):
+    missing_root = tmp_path / "missing-workspace"
+    repository = MCPRepositoryClient(missing_root, timeout_seconds=2)
+    trace = LangfuseTracer(offline_directory=tmp_path / "traces").start_run(
+        "mcp-unavailable", "safe bounded change"
+    )
+
+    try:
+        result = build_engineering_graph(repository_mcp=repository, trace=trace).invoke(
+            {"run_id": "mcp-unavailable", "requirement": "safe bounded change"}
+        )
+    finally:
+        repository.close()
+
+    assert any(item.status is ToolStatus.UNAVAILABLE for item in result["tool_results"])
+    assert any(item.code is ErrorCode.MCP_ERROR for item in result["errors"])
+    assert result["final_status"] == "HUMAN_REVIEW_REQUIRED"
+    assert result.get("review") is None
+    assert any(event["name"] == "MCP_ERROR" for event in trace.events)
+    assert not any(item.fallback_used for item in result["model_usage"])
+
+
+def test_workflow_searches_and_reads_relevant_repository_files_for_developer(tmp_path):
+    (tmp_path / "README.md").write_text("general notes\n", encoding="utf-8")
+    (tmp_path / "__init__.py").write_text("", encoding="utf-8")
+    (tmp_path / "misc.py").write_text("value = 1\n", encoding="utf-8")
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "transactions.py").write_text(
+        "def transaction_history(connection, owner_id):\n"
+        "    return connection.execute('SELECT * FROM transactions').fetchall()\n",
+        encoding="utf-8",
+    )
+
+    with MCPRepositoryClient(tmp_path) as repository:
+        result = build_engineering_graph(repository_mcp=repository).invoke({
+            "run_id": "developer-relevance",
+            "requirement": (
+                "Return only the latest five transactions belonging to the authorized user."
+            ),
+        })
+
+    developer_tools = [
+        item for item in result["tool_results"]
+        if item.allowed_role is AgentRole.DEVELOPER
+    ]
+    assert "search_code" in [item.tool_name for item in developer_tools]
+    assert "read_file" in [item.tool_name for item in developer_tools]
+    assert result["implementation"].changed_files == ["app/transactions.py"]
+    assert "transaction_history" in result["implementation"].diff
 
 
 class FailingLocalRuntime:
@@ -190,6 +244,17 @@ class FailingLocalRuntime:
             agent=role, provider="ollama", requested_model="local", actual_model=None,
             model_profile="LOCAL", degraded=True, latency_ms=1,
             structured_output_success=False, error="LLM_AVAILABILITY_ERROR: unavailable",
+        )
+        self.attempts.append(info)
+        raise RuntimeError(info.error)
+
+
+class TimingOutLocalRuntime(FailingLocalRuntime):
+    def invoke_artifact(self, role, envelope, candidate):
+        info = ModelExecutionInfo(
+            agent=role, provider="ollama", requested_model="local", actual_model=None,
+            model_profile="LOCAL", degraded=True, latency_ms=1,
+            structured_output_success=False, error="AGENT_TIMEOUT: controlled",
         )
         self.attempts.append(info)
         raise RuntimeError(info.error)
@@ -223,6 +288,18 @@ def test_local_failure_without_cloud_routes_to_terminal_hitl_instead_of_crashing
 
     assert result["final_status"] == "HUMAN_REVIEW_REQUIRED"
     assert result["route_history"] == ["Product", "HUMAN_REVIEW_REQUIRED"]
+
+
+def test_agent_timeout_is_preserved_in_workflow_and_langfuse():
+    trace = LangfuseTracer().start_run("agent-timeout", "safe bounded change")
+    result = build_engineering_graph(
+        model_runtime=TimingOutLocalRuntime(), trace=trace
+    ).invoke({"run_id": "agent-timeout", "requirement": "safe bounded change"})
+
+    assert result["final_status"] == "HUMAN_REVIEW_REQUIRED"
+    assert result["errors"][0].code is ErrorCode.AGENT_TIMEOUT
+    assert result["model_usage"][0].error.startswith("AGENT_TIMEOUT")
+    assert any(event["name"] == "AGENT_TIMEOUT" for event in trace.events)
 
 
 def test_failed_cloud_attempt_preserves_budget_model_attempt_and_completed_evidence():

@@ -24,6 +24,8 @@ identified independent Repository and Quality surfaces. ToolResults preserved
 `mcp://repository/...` and `mcp://quality/...` evidence. The focused integration
 test demonstrates `run_tests FAIL → TestResult FAIL → Reviewer REJECTED →
 Developer/Testing remediation → Reviewer` through the real server process.
+Protocol tests also verify persistent stateful getters, real create/update
+diffs, and synthetic `.env`/`.env.*` search exclusion without using secrets.
 
 ## LangChain and RAG
 
@@ -66,5 +68,5 @@ Reviewer, routing/HITL when applicable, and FinalReport.
 
 ## Final static and test gates
 
-- Pytest: `103 passed, 1 warning in 118.52s`; zero failures.
+- Pytest: `115 passed, 1 external dependency warning`; zero failures.
 - Ruff: `All checks passed!` for `src tests evaluation sample_app scripts`.
