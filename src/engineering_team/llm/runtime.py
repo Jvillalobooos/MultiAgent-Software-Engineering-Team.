@@ -182,7 +182,7 @@ class LocalModelRuntime:
                 "Keep action_mode PROPOSED; graph code alone decides APPLIED."
             )
         if role is AgentRole.TESTING:
-            system += " You may add test_mutations only under test paths; never write production code."
+            system += " You may replace test_mutations only under test paths; never write production code."
         projection = {
             key: (
                 str(value)[:300]
@@ -191,6 +191,22 @@ class LocalModelRuntime:
             )
             for key, value in envelope.state_projection.items()
         }
+        tool_results = envelope.tool_results
+        if role is AgentRole.DEVELOPER:
+            seen: set[tuple[str, str]] = set()
+            bounded: list[Any] = []
+            readable = 0
+            for item in tool_results:
+                key = (item.tool_name, item.input_summary)
+                if key in seen:
+                    continue
+                if item.tool_name in {"read_file", "get_file_content"}:
+                    if readable >= 2:
+                        continue
+                    readable += 1
+                seen.add(key)
+                bounded.append(item)
+            tool_results = bounded
         context = {
             "agent": envelope.agent.value,
             "current_task": envelope.current_task,
@@ -209,16 +225,33 @@ class LocalModelRuntime:
                        if role is AgentRole.DEVELOPER and item.tool_name in {"read_file", "get_file_content"}
                        else {}),
                 }
-                for item in envelope.tool_results
+                for item in tool_results
             ],
             "remediation_feedback": envelope.remediation_feedback,
         }
+        if role is AgentRole.TESTING:
+            implementation = envelope.state_projection.get("implementation")
+            context["implementation_basis"] = {
+                "changed_files": getattr(implementation, "changed_files", []),
+                "diff": getattr(implementation, "diff", "")[:2000],
+            }
+        candidate_instruction = "Copy every candidate key and value exactly; do not omit schema-optional keys."
+        if role is AgentRole.DEVELOPER:
+            candidate_instruction = (
+                "Preserve every candidate field exactly except mutations: you MAY populate mutations "
+                "only for inspected paths, with complete bounded content. Keep action_mode PROPOSED."
+            )
+        elif role is AgentRole.TESTING:
+            candidate_instruction = (
+                "Preserve every candidate field exactly except test_mutations: you MAY replace them "
+                "with one bounded behavioral test file derived from the task and implementation basis."
+            )
         user = (
             f"Task: {envelope.current_task}\n"
             f"ContextEnvelope: {json.dumps(context, ensure_ascii=False)}\n"
             f"Output schema: {json.dumps(output_schema)}\n"
             f"Candidate artifact: {json.dumps(candidate, ensure_ascii=False)}\n"
-            "Copy every candidate key and value exactly; do not omit schema-optional keys."
+            f"{candidate_instruction}"
         )
         return system, user
 
@@ -280,7 +313,7 @@ def _preserves_governed_facts(candidate: dict[str, Any], parsed: BaseModel) -> b
         "ArchitectureProposal": ("risks", "evidence_references"),
         "ImplementationResult": ("evidence",),
         "SecurityReview": ("findings", "sources"),
-        "TestResult": ("failures", "evidence_references", "actual_results", "generated_tests", "test_mutations"),
+        "TestResult": ("failures", "evidence_references", "actual_results", "generated_tests"),
         "ReviewerDecision": ("problems", "evidence_references"),
     }
     guarded_values: dict[str, tuple[str, ...]] = {

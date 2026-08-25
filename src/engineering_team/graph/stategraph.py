@@ -23,7 +23,7 @@ from engineering_team.contracts.enums import (
     RouteTarget,
     ToolStatus,
 )
-from engineering_team.contracts.models import FinalReport, WorkflowError
+from engineering_team.contracts.models import FinalReport, ReviewerDecision, WorkflowError
 from engineering_team.contracts.state import EngineeringState
 from engineering_team.models.context import build_context
 
@@ -97,6 +97,31 @@ def approval_problems(state: EngineeringState) -> list[str]:
         problems.append("security review failed")
     if any(error.code in {ErrorCode.MCP_ERROR, ErrorCode.RAG_ERROR} for error in state.errors):
         problems.append("required MCP or RAG evidence is unavailable")
+    return problems
+
+
+def implementation_pre_gate_problems(state: EngineeringState) -> list[str]:
+    """Return evidence gaps that make downstream validation futile."""
+    if not state.repository_context.get("implementation_required", False):
+        return []
+    implementation = state.implementation
+    if implementation is None:
+        return ["implementation is missing"]
+    problems: list[str] = []
+    if implementation.action_mode is not ActionMode.APPLIED:
+        problems.append("implementation is not applied")
+    if not implementation.changed_files:
+        problems.append("implementation changed_files is empty")
+    if not any(
+        item.tool_name in {"create_file", "update_file"} and item.status is ToolStatus.SUCCESS
+        for item in state.tool_results
+    ):
+        problems.append("successful Repository MCP write evidence is missing")
+    if not any(
+        item.tool_name == "get_diff" and item.status is ToolStatus.SUCCESS
+        for item in state.tool_results
+    ) or not implementation.diff.strip():
+        problems.append("successful non-empty Repository MCP diff is missing")
     return problems
 
 
@@ -268,6 +293,33 @@ def build_engineering_graph(
             current = EngineeringState.model_validate(raw_state)
             if progress is not None:
                 progress(role, current.iteration)
+            if role is AgentRole.REVIEWER:
+                gaps = approval_problems(current)
+                if gaps:
+                    decision = ReviewerDecision(
+                        status=ReviewerStatus.REJECTED,
+                        score=45,
+                        subscores={},
+                        problems=gaps,
+                        reason="deterministic delivery gate: " + "; ".join(gaps),
+                        remediation_category=RemediationCategory.IMPLEMENTATION,
+                        return_to=RouteTarget.DEVELOPER,
+                        confidence=1.0,
+                        evidence_references=[],
+                    )
+                    if trace is not None:
+                        trace.record(
+                            "Reviewer pre-gate", as_type="agent", output=decision.model_dump(mode="json"),
+                            metadata={"iteration": current.iteration, "llm_skipped": True},
+                        )
+                    return {
+                        "route_history": [*current.route_history, role.value],
+                        "review": decision,
+                        "iteration": current.iteration + 1,
+                        "remediation_request": decision.reason,
+                        "next_validation_path": "full",
+                        "trace_id": trace.trace_id if trace is not None else current.trace_id,
+                    }
             rag_evidence = list(current.rag_evidence)
             errors = list(current.errors)
             tool_results = list(current.tool_results)
@@ -287,7 +339,16 @@ def build_engineering_graph(
                         output=[item.model_dump(mode="json") for item in retrieved],
                         metadata={"agent": role.value, "status": retriever.last_status},
                     )
-            if repository_mcp is not None and role in {AgentRole.ARCHITECTURE, AgentRole.DEVELOPER}:
+            prior_developer_inspection = (
+                role is AgentRole.DEVELOPER
+                and any(
+                    item.allowed_role is AgentRole.DEVELOPER
+                    and item.tool_name in {"read_file", "get_file_content"}
+                    and item.status is ToolStatus.SUCCESS
+                    for item in tool_results
+                )
+            )
+            if repository_mcp is not None and role in {AgentRole.ARCHITECTURE, AgentRole.DEVELOPER} and not prior_developer_inspection:
                 result = repository_mcp.list_files(role)
                 required_mcp_missing |= preserve_tool_result(
                     result, role, errors, tool_results, repository_mcp
@@ -315,7 +376,7 @@ def build_engineering_graph(
                     ranked = DeveloperAgent.rank_paths(listed_paths, search_hits, terms)
                     if search_hits:
                         ranked = [path for path in ranked if path in set(search_hits)]
-                    for path in ranked[:4]:
+                    for path in ranked[:2]:
                         read = repository_mcp.read_file(role, path)
                         required_mcp_missing |= preserve_tool_result(
                             read, role, errors, tool_results, repository_mcp
@@ -503,6 +564,11 @@ def build_engineering_graph(
             if trace is not None:
                 trace.record("route", metadata={"from": "Developer", "to": route})
             return route
+        if implementation_pre_gate_problems(state):
+            route = "Reviewer"
+            if trace is not None:
+                trace.record("route", metadata={"from": "Developer", "to": route, "pre_gate": True})
+            return route
         if (
             state.next_validation_path == "testing_only"
             and state.implementation is not None
@@ -594,7 +660,7 @@ def build_engineering_graph(
     )
     graph.add_conditional_edges(
         "Developer", developer_next,
-        {"Security": "Security", "Testing": "Testing", "HUMAN_REVIEW_REQUIRED": "HUMAN_REVIEW_REQUIRED"},
+        {"Security": "Security", "Testing": "Testing", "Reviewer": "Reviewer", "HUMAN_REVIEW_REQUIRED": "HUMAN_REVIEW_REQUIRED"},
     )
     graph.add_conditional_edges(
         "Security", security_next,

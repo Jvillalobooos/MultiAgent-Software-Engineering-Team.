@@ -13,6 +13,7 @@ from engineering_team.contracts.enums import (
 )
 from engineering_team.contracts.models import (
     ArchitectureProposal,
+    FileMutation,
     ImplementationResult,
     ReviewerDecision,
 )
@@ -156,6 +157,58 @@ def test_semantic_guard_rejects_invented_source_and_material_developer_change() 
 
     assert not _preserves_governed_facts(architecture.model_dump(mode="json"), invented)
     assert not _preserves_governed_facts(implementation.model_dump(mode="json"), fabricated)
+
+
+def test_developer_prompt_explicitly_allows_only_bounded_mutations() -> None:
+    candidate = ImplementationResult(
+        action_mode=ActionMode.PROPOSED, changed_files=["app/email.py"],
+        diff="PROPOSED\n+ change", evidence=["mcp://repository/read_file#app/email.py"],
+        validation_result="run tests", security_surface_changed=False,
+    )
+    runtime = LocalModelRuntime(Settings(_env_file=None))
+    envelope = build_context(
+        AgentRole.DEVELOPER,
+        EngineeringState(run_id="runtime", requirement="change email"),
+        "change email",
+    )
+
+    _, prompt = runtime._prompts(AgentRole.DEVELOPER, envelope, type(candidate), candidate.model_dump(mode="json"))
+
+    assert "MAY populate mutations" in prompt
+    assert "Copy every candidate key and value exactly" not in prompt
+
+
+def test_testing_runtime_accepts_behavioral_test_mutation_without_weakening_governed_fields() -> None:
+    implementation = ImplementationResult(
+        action_mode=ActionMode.APPLIED, changed_files=["app/email.py"],
+        diff="--- a/app/email.py\n+++ b/app/email.py\n+def change_email(current_password, email):\n",
+        evidence=["mcp://repository/get_diff"], validation_result="applied",
+    )
+    state = EngineeringState(
+        run_id="runtime", requirement="change email after confirming the current password",
+        implementation=implementation,
+    )
+    from engineering_team.agents.testing import TestingAgent
+
+    envelope = build_context(AgentRole.TESTING, state, state.requirement)
+    candidate = TestingAgent().execute(envelope)
+    behavioral = candidate.model_copy(update={
+        "test_mutations": [FileMutation(
+            path="tests/test_email_change.py", operation="create",
+            content=(
+                "def test_correct_password_changes_email():\n    assert True\n\n"
+                "def test_wrong_password_is_rejected():\n    assert True\n"
+            ),
+        )],
+    })
+    client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(
+        200, json={"model": "qwen3.5:4b", "response": behavioral.model_dump_json()}
+    )))
+    runtime = LocalModelRuntime(Settings(_env_file=None), client=client)
+
+    output, _ = runtime.invoke_artifact(AgentRole.TESTING, envelope, candidate)
+
+    assert output.test_mutations[0].path == "tests/test_email_change.py"
 
 
 def test_runtime_classifies_configured_http_timeout_as_agent_timeout() -> None:

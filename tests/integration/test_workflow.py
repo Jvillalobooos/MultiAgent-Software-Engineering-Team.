@@ -58,6 +58,42 @@ class PassingQuality:
         )
 
 
+class ProposedDeveloper:
+    def execute(self, envelope):
+        return ImplementationResult(
+            action_mode="PROPOSED", changed_files=["app/email.py"], diff="PROPOSED\n+change",
+            evidence=["mcp://repository/read_file#app/email.py"], validation_result="proposal",
+        )
+
+
+class CountingSecurity(SecurityAgent):
+    def __init__(self):
+        self.calls = 0
+
+    def execute(self, envelope):
+        self.calls += 1
+        return super().execute(envelope)
+
+
+class CountingTesting:
+    def __init__(self):
+        self.calls = 0
+
+    def execute(self, envelope):
+        self.calls += 1
+        from engineering_team.agents.testing import TestingAgent
+        return TestingAgent().execute(envelope)
+
+
+class CountingReviewer(ReviewerAgent):
+    def __init__(self):
+        self.calls = 0
+
+    def execute(self, envelope):
+        self.calls += 1
+        return super().execute(envelope)
+
+
 def rejected(category, target):
     return ReviewerDecision(
         status=ReviewerStatus.REJECTED, score=40, subscores={}, problems=["fix"],
@@ -279,6 +315,49 @@ def test_graph_derives_applied_only_from_mcp_write_and_real_diff(tmp_path):
     assert any(item.tool_name == "get_diff" and item.output_summary for item in result["tool_results"])
     assert result["test_results"][-1].generated_tests == ["tests/test_nova_team_generated.py"]
     assert result["final_status"] == "APPROVED"
+
+
+def test_unapplied_developer_fast_fails_without_security_testing_or_reviewer_work():
+    security = CountingSecurity()
+    testing = CountingTesting()
+    reviewer = CountingReviewer()
+    result = build_engineering_graph(agent_overrides={
+        AgentRole.DEVELOPER: ProposedDeveloper(),
+        AgentRole.SECURITY: security,
+        AgentRole.TESTING: testing,
+        AgentRole.REVIEWER: reviewer,
+    }).invoke({
+        "run_id": "fast-fail", "requirement": "change email",
+        "repository_context": {"implementation_required": True},
+    })
+
+    assert security.calls == 0
+    assert testing.calls == 0
+    assert reviewer.calls == 0
+    assert result["iteration"] == 3
+    assert result["final_status"] == "HUMAN_REVIEW_REQUIRED"
+
+
+def test_uninspected_developer_mutation_is_not_written_or_approved(tmp_path):
+    class UninspectedDeveloper:
+        def execute(self, envelope):
+            return ImplementationResult(
+                action_mode="PROPOSED", changed_files=["app/unknown.py"], diff="PROPOSED\n+change",
+                evidence=["mcp://repository/list_files"], validation_result="proposal",
+                mutations=[FileMutation(path="app/unknown.py", operation="update", content="value = 1\n")],
+            )
+
+    with MCPRepositoryClient(tmp_path) as repository:
+        result = build_engineering_graph(
+            repository_mcp=repository,
+            agent_overrides={AgentRole.DEVELOPER: UninspectedDeveloper()},
+        ).invoke({
+            "run_id": "uninspected", "requirement": "change email",
+            "repository_context": {"implementation_required": True},
+        })
+
+    assert not (tmp_path / "app" / "unknown.py").exists()
+    assert any("uninspected mutation path" in error.detail for error in result["errors"])
 
 
 def test_generated_test_is_written_and_executed_in_isolated_workspace(tmp_path):
