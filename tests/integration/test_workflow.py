@@ -157,11 +157,11 @@ class FailingLocalRuntime:
 
 
 class SuccessfulCloudRuntime:
-    def invoke_artifact(self, role, envelope, candidate):
+    def invoke_artifact(self, role, envelope, candidate, *, fallback_reason):
         return candidate, ModelExecutionInfo(
             agent=role, provider="google", requested_model="gemini-3.7-flash",
             actual_model="gemini-3.7-flash", model_profile="CLOUD_FALLBACK",
-            fallback_used=True, fallback_reason="LLM_AVAILABILITY_ERROR", latency_ms=2,
+            fallback_used=True, fallback_reason=fallback_reason, latency_ms=2,
             structured_output_success=True,
         )
 
@@ -174,6 +174,7 @@ def test_local_failure_uses_graph_integrated_cloud_fallback_and_preserves_error(
     assert result["final_status"] == "APPROVED"
     assert result["errors"][0].code.value == "LLM_AVAILABILITY_ERROR"
     assert any(item.fallback_used for item in result["model_usage"])
+    assert result["model_usage"][1].fallback_reason == "LLM_AVAILABILITY_ERROR"
 
 
 def test_local_failure_without_cloud_routes_to_terminal_hitl_instead_of_crashing():

@@ -131,7 +131,12 @@ class CloudModelRuntime:
         self.attempts: list[ModelExecutionInfo] = []
 
     def invoke_artifact(
-        self, role: AgentRole, envelope: ContextEnvelope, candidate: BaseModel
+        self,
+        role: AgentRole,
+        envelope: ContextEnvelope,
+        candidate: BaseModel,
+        *,
+        fallback_reason: str,
     ) -> tuple[BaseModel, ModelExecutionInfo]:
         selection = self.router.for_role(role)
         if not self.router.enabled_for(role) or not self.budget.consume(role):
@@ -191,7 +196,7 @@ class CloudModelRuntime:
             info = ModelExecutionInfo(
                 agent=role, provider=selection.provider, requested_model=selection.model,
                 actual_model=None, model_profile=selection.model_profile,
-                fallback_used=True, fallback_reason="local model exhausted", degraded=True,
+                fallback_used=True, fallback_reason=fallback_reason, degraded=True,
                 latency_ms=int((time.perf_counter() - started) * 1000),
                 structured_output_success=False, error=error,
             )
@@ -209,7 +214,7 @@ class CloudModelRuntime:
         info = ModelExecutionInfo(
             agent=role, provider=selection.provider, requested_model=selection.model,
             actual_model=selection.model, model_profile=selection.model_profile,
-            fallback_used=True, fallback_reason="local model exhausted",
+            fallback_used=True, fallback_reason=fallback_reason,
             latency_ms=int((time.perf_counter() - started) * 1000), usage=usage,
             structured_output_success=True,
         )

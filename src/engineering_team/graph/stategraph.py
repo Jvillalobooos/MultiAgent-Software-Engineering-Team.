@@ -205,7 +205,10 @@ def build_engineering_graph(
                         cloud_attempt_start = len(getattr(cloud_runtime, "attempts", []))
                         try:
                             output, cloud_info = cloud_runtime.invoke_artifact(
-                                role, envelope, candidate
+                                role,
+                                envelope,
+                                candidate,
+                                fallback_reason=code.value,
                             )
                             model_usage.append(cloud_info)
                         except RuntimeError as cloud_exc:

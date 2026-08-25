@@ -87,11 +87,17 @@ def test_cloud_runtime_validates_provider_response_and_marks_fallback() -> None:
     runtime = CloudModelRuntime(
         settings, client=httpx.Client(transport=httpx.MockTransport(handler))
     )
-    artifact, info = runtime.invoke_artifact(AgentRole.PRODUCT, envelope, candidate)
+    artifact, info = runtime.invoke_artifact(
+        AgentRole.PRODUCT,
+        envelope,
+        candidate,
+        fallback_reason=ErrorCode.LLM_QUALITY_ERROR.value,
+    )
 
     assert artifact == candidate
     assert info.provider == "google"
     assert info.fallback_used is True
+    assert info.fallback_reason == "LLM_QUALITY_ERROR"
 
 
 def test_groq_cloud_runtime_uses_fixed_model_and_validates_response() -> None:
@@ -116,7 +122,12 @@ def test_groq_cloud_runtime_uses_fixed_model_and_validates_response() -> None:
     runtime = CloudModelRuntime(
         settings, client=httpx.Client(transport=httpx.MockTransport(handler))
     )
-    artifact, info = runtime.invoke_artifact(AgentRole.DEVELOPER, envelope, candidate)
+    artifact, info = runtime.invoke_artifact(
+        AgentRole.DEVELOPER,
+        envelope,
+        candidate,
+        fallback_reason=ErrorCode.LLM_QUALITY_ERROR.value,
+    )
 
     assert artifact == candidate
     assert info.provider == "groq"
@@ -135,7 +146,12 @@ def test_cloud_provider_outage_is_normalized_without_secret_exposure() -> None:
     )
 
     with pytest.raises(RuntimeError, match="CLOUD_FALLBACK_UNAVAILABLE") as error:
-        runtime.invoke_artifact(AgentRole.PRODUCT, envelope, candidate)
+        runtime.invoke_artifact(
+            AgentRole.PRODUCT,
+            envelope,
+            candidate,
+            fallback_reason=ErrorCode.LLM_AVAILABILITY_ERROR.value,
+        )
 
     assert "never-print-this" not in str(error.value)
     assert runtime.budget.run_count == 1
