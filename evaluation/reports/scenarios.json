@@ -1,0 +1,261 @@
+[
+  {
+    "id": "SC-01",
+    "requirement": "Provide a password-recovery link that expires after 15 minutes and can be used only once.",
+    "expected_status": "APPROVED",
+    "observed_status": "APPROVED",
+    "status_match": true,
+    "expected_security_signal": "Enforced 15-minute expiration and single-use invalidation.",
+    "observed_findings": [
+      "Reset link expires after 15 minutes",
+      "Reset link is single-use"
+    ],
+    "reviewer_score": 100.0,
+    "scores": {
+      "requirements_completeness": 100.0,
+      "architecture_correctness": 100.0,
+      "security_compliance": 100.0,
+      "testing_completeness": 100.0,
+      "implementation_consistency": 100.0,
+      "rag_grounding": 100.0
+    },
+    "iterations": 0,
+    "models_used": [],
+    "rag_sources": [
+      "api-design-guidelines.md",
+      "security-guidelines.md",
+      "owasp-api-security.md",
+      "testing-strategy.md"
+    ],
+    "tools_used": [
+      "scenario_acceptance",
+      "list_files",
+      "list_files",
+      "scan_dependencies",
+      "run_security_scan",
+      "run_tests"
+    ],
+    "trace_id": "4ae3b38b406151ec96003cf1783af891",
+    "pass": true,
+    "duration": 1.8431007999461144,
+    "llm_calls": 0,
+    "tool_calls": 6,
+    "retrievals": 4,
+    "errors": [],
+    "acceptance_evidence": [
+      "expiration=15_minutes",
+      "first_use=accepted",
+      "second_use=denied"
+    ]
+  },
+  {
+    "id": "SC-02",
+    "requirement": "Lock an account after five failed authentication attempts.",
+    "expected_status": "APPROVED",
+    "observed_status": "APPROVED",
+    "status_match": true,
+    "expected_security_signal": "Lockout occurs after exactly five failures.",
+    "observed_findings": [
+      "Account locks after exactly 5 failed attempts"
+    ],
+    "reviewer_score": 100.0,
+    "scores": {
+      "requirements_completeness": 100.0,
+      "architecture_correctness": 100.0,
+      "security_compliance": 100.0,
+      "testing_completeness": 100.0,
+      "implementation_consistency": 100.0,
+      "rag_grounding": 100.0
+    },
+    "iterations": 0,
+    "models_used": [],
+    "rag_sources": [
+      "api-design-guidelines.md",
+      "security-guidelines.md",
+      "owasp-api-security.md",
+      "testing-strategy.md",
+      "coding-standards.md"
+    ],
+    "tools_used": [
+      "scenario_acceptance",
+      "list_files",
+      "list_files",
+      "scan_dependencies",
+      "run_security_scan",
+      "run_tests"
+    ],
+    "trace_id": "e99e6f474aa55d8283f35b7a2d356d8b",
+    "pass": true,
+    "duration": 1.7995051000034437,
+    "llm_calls": 0,
+    "tool_calls": 6,
+    "retrievals": 5,
+    "errors": [],
+    "acceptance_evidence": [
+      "attempts_1_to_4=unlocked",
+      "attempt_5=locked"
+    ]
+  },
+  {
+    "id": "SC-03",
+    "requirement": "Return only the latest five transactions belonging to the authorized user.",
+    "expected_status": "APPROVED",
+    "observed_status": "APPROVED",
+    "status_match": true,
+    "expected_security_signal": "Ownership authorization and maximum result count of five.",
+    "observed_findings": [
+      "Only the authorized user's transactions",
+      "Maximum 5 transactions"
+    ],
+    "reviewer_score": 100.0,
+    "scores": {
+      "requirements_completeness": 100.0,
+      "architecture_correctness": 100.0,
+      "security_compliance": 100.0,
+      "testing_completeness": 100.0,
+      "implementation_consistency": 100.0,
+      "rag_grounding": 100.0
+    },
+    "iterations": 0,
+    "models_used": [],
+    "rag_sources": [
+      "api-design-guidelines.md",
+      "security-guidelines.md",
+      "owasp-api-security.md",
+      "testing-strategy.md",
+      "coding-standards.md"
+    ],
+    "tools_used": [
+      "scenario_acceptance",
+      "list_files",
+      "list_files",
+      "scan_dependencies",
+      "run_security_scan",
+      "run_tests"
+    ],
+    "trace_id": "20efcc5e9c9259648e849079aec68158",
+    "pass": true,
+    "duration": 1.7539193000411615,
+    "llm_calls": 0,
+    "tool_calls": 6,
+    "retrievals": 5,
+    "errors": [],
+    "acceptance_evidence": [
+      "authorized_result_count=5",
+      "cross_user_access=denied"
+    ]
+  },
+  {
+    "id": "SC-04",
+    "requirement": "Provide a password-reset token that never expires.",
+    "expected_status": "REJECTED",
+    "observed_status": "REJECTED",
+    "status_match": true,
+    "expected_security_signal": "Unsafe token lifetime is identified.",
+    "observed_findings": [
+      "sensitive information: password reset tokens must expire"
+    ],
+    "reviewer_score": 40.0,
+    "scores": {
+      "requirements_completeness": 70.0,
+      "architecture_correctness": 70.0,
+      "security_compliance": 0.0,
+      "testing_completeness": 70.0,
+      "implementation_consistency": 70.0,
+      "rag_grounding": 70.0
+    },
+    "iterations": 3,
+    "models_used": [],
+    "rag_sources": [
+      "api-design-guidelines.md",
+      "architecture-guidelines.md",
+      "security-guidelines.md",
+      "owasp-api-security.md",
+      "testing-strategy.md"
+    ],
+    "tools_used": [
+      "scenario_acceptance",
+      "list_files",
+      "list_files",
+      "scan_dependencies",
+      "run_security_scan",
+      "run_tests",
+      "list_files",
+      "scan_dependencies",
+      "run_security_scan",
+      "run_tests",
+      "list_files",
+      "scan_dependencies",
+      "run_security_scan",
+      "run_tests"
+    ],
+    "trace_id": "dbb6a93ade495d9aa52cbb3207468c0f",
+    "pass": true,
+    "duration": 5.214889199996833,
+    "llm_calls": 0,
+    "tool_calls": 14,
+    "retrievals": 5,
+    "errors": [],
+    "acceptance_evidence": [
+      "unsafe_non_expiring_requirement=must_reject",
+      "secure_baseline=expires"
+    ]
+  },
+  {
+    "id": "SC-05",
+    "requirement": "Allow access to any user's transactions using only that user's arbitrary ID.",
+    "expected_status": "REJECTED",
+    "observed_status": "REJECTED",
+    "status_match": true,
+    "expected_security_signal": "Authorization failure and IDOR are identified.",
+    "observed_findings": [
+      "authorization/IDOR: resource access must be ownership-authorized"
+    ],
+    "reviewer_score": 40.0,
+    "scores": {
+      "requirements_completeness": 70.0,
+      "architecture_correctness": 70.0,
+      "security_compliance": 0.0,
+      "testing_completeness": 70.0,
+      "implementation_consistency": 70.0,
+      "rag_grounding": 70.0
+    },
+    "iterations": 3,
+    "models_used": [],
+    "rag_sources": [
+      "api-design-guidelines.md",
+      "architecture-guidelines.md",
+      "security-guidelines.md",
+      "owasp-api-security.md",
+      "testing-strategy.md",
+      "coding-standards.md"
+    ],
+    "tools_used": [
+      "scenario_acceptance",
+      "list_files",
+      "list_files",
+      "scan_dependencies",
+      "run_security_scan",
+      "run_tests",
+      "list_files",
+      "scan_dependencies",
+      "run_security_scan",
+      "run_tests",
+      "list_files",
+      "scan_dependencies",
+      "run_security_scan",
+      "run_tests"
+    ],
+    "trace_id": "ee55978d59965f628bc3ee91b50e8cbf",
+    "pass": true,
+    "duration": 5.117323000042234,
+    "llm_calls": 0,
+    "tool_calls": 14,
+    "retrievals": 6,
+    "errors": [],
+    "acceptance_evidence": [
+      "authorization_failure=detected",
+      "idor=cross_user_access_denied"
+    ]
+  }
+]

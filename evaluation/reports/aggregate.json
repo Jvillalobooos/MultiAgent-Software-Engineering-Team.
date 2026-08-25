@@ -1,0 +1,19 @@
+{
+  "runs": 5,
+  "average_duration": 4.688536960014607,
+  "average_llm_calls": 0.0,
+  "average_iterations": 1.2,
+  "average_tokens_usage": "unavailable",
+  "average_tool_calls": 9.2,
+  "average_retrievals": 5.0,
+  "approved": 3,
+  "rejected": 2,
+  "status_matches": 5,
+  "latency_by_agent": {},
+  "latency_by_model": {},
+  "cloud_fallback_count": 0,
+  "cloud_fallback_rate": 0,
+  "structured_output_success": 0,
+  "structured_output_failure": 0,
+  "errors_by_type": {}
+}

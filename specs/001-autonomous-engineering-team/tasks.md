@@ -9,7 +9,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 
 ## FASE 1 — FOUNDATION
 
-### T001 — Estructura base, configuración y entrada CLI
+### [X] T001 — Estructura base, configuración y entrada CLI
 
 - **Objetivo:** Crear el esqueleto del monolito modular, configuración externa,
   `.env.example` y entrada CLI sin ejecutar aún el workflow completo.
@@ -28,7 +28,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** El paquete arranca mediante CLI sin llamar LLM/cloud y toda
   configuración sensible procede externamente.
 
-### T002 — Contratos Pydantic y enums de dominio
+### [X] T002 — Contratos Pydantic y enums de dominio
 
 - **Objetivo:** Implementar todos los contratos estructurados y valores
   permitidos que usarán estado, agentes, herramientas y reportes.
@@ -47,7 +47,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** Ninguna salida que afecte decisiones puede existir fuera de un
   contrato Pydantic validado.
 
-### T003 [P] — Guardrails base y protección de secretos
+### [X] T003 [P] — Guardrails base y protección de secretos
 
 - **Objetivo:** Establecer validación de salidas, rutas, timeouts y secretos
   reutilizable por todos los adaptadores y nodos.
@@ -65,7 +65,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** Las políticas pueden ser invocadas sin depender de LLM, MCP o
   LangGraph.
 
-### T004 — EngineeringState, reducers y ContextEnvelope
+### [X] T004 — EngineeringState, reducers y ContextEnvelope
 
 - **Objetivo:** Implementar estado compartido, reducers y proyecciones mínimas
   de contexto sin exponer el estado completo a agentes.
@@ -85,16 +85,17 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 
 ## FASE 2 — MULTI-MODEL LOCAL
 
-### T005 [P] — ModelRegistry y ModelRouter determinísticos
+### [X] T005 [P] — ModelRegistry y ModelRouter determinísticos
 
 - **Objetivo:** Fijar selección local de modelo por rol desde configuración,
   sin IDs hardcodeados dentro de agentes.
 - **FR/NFR:** FR-046, FR-047, FR-050; NFR-007, NFR-010.
 - **Dependencias:** T001, T002.
 - **Módulos/archivos:** `llm/{registry.py,router.py}`, `tests/unit/test_model_router.py`.
-- **Acciones principales:** Registrar FAST_MODEL, DEEP_MODEL y CODING_MODEL;
-  mapear Product/Developer/Security/Reviewer a 9B, Architecture/Testing a 4B,
-  y validar que Security usa perfil DEEP_MODEL.
+- **Acciones principales:** Registrar externamente `FAST_MODEL=qwen3.5:4b`,
+  `DEEP_MODEL=qwen3.5:9b` y `CODING_MODEL=qwen3.5:9b`; fijar Product y
+  Reviewer a DEEP/9B, Architecture y Testing a FAST/4B, Developer a
+  CODING/9B y Security a DEEP/9B; validar que ningún agente selecciona modelo.
 - **Validaciones/tests:** Mapeo de los seis roles, repetibilidad, configuración
   ausente e intento de selección por agente.
 - **Evidencia esperada:** Registros de decisión de router con requested model y
@@ -102,7 +103,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** El router es la única autoridad de modelo local y devuelve el
   mapeo aprobado `qwen3.5:4b`/`qwen3.5:9b`.
 
-### T006 — Adaptador Ollama y ModelExecutionInfo
+### [X] T006 — Adaptador Ollama y ModelExecutionInfo
 
 - **Objetivo:** Integrar generación local estructurada y registrar cada intento
   de inferencia.
@@ -121,7 +122,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 
 ## FASE 3 — FALLBACK CLOUD
 
-### T007 — Fallback cloud, retry/repair y CloudFallbackContext
+### [X] T007 — Fallback cloud, retry/repair y CloudFallbackContext
 
 - **Objetivo:** Implementar contingencia cloud separada, acotada y saneada.
 - **FR/NFR:** FR-051–059, FR-062–064, FR-068–069, FR-077; NFR-009, NFR-012,
@@ -129,9 +130,12 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Dependencias:** T003, T005, T006.
 - **Módulos/archivos:** `llm/cloud.py`, extensiones `llm/repair.py`,
   `tests/unit/test_cloud_fallback.py`.
-- **Acciones principales:** Implementar adaptadores Google/Groq, mapeo cloud
-  aprobado, CloudFallbackContext mínimo, retry para disponibilidad y repair
-  para calidad; aplicar límites por agente y por run.
+- **Acciones principales:** Implementar adaptadores Google/Groq: Product,
+  Architecture y Reviewer → Gemini 3.7 Flash; Developer y Security → Groq
+  `openai/gpt-oss-120b`; Testing → Groq `openai/gpt-oss-20b`. Construir
+  CloudFallbackContext mínimo; aplicar `MAX_LOCAL_RETRIES=1` para
+  disponibilidad, `MAX_LOCAL_REPAIRS=1` para calidad,
+  `MAX_CLOUD_ESCALATIONS_PER_AGENT=1` y `MAX_CLOUD_ESCALATIONS_PER_RUN=3`.
 - **Validaciones/tests:** Una retry por unavailable/timeout, una repair por
   schema/Pydantic failure, mapeos de providers, cloud sin claves, 429/outage,
   sanitización y ausencia de cloud por MCP_ERROR/TOOL_ERROR/RAG_ERROR.
@@ -142,7 +146,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 
 ## FASE 4 — LANGGRAPH WALKING SKELETON
 
-### T008 [P] — StateGraph mínimo verificable
+### [X] T008 [P] — StateGraph mínimo verificable
 
 - **Objetivo:** Construir un StateGraph real con nodos stub y flujo normal
   antes de conectar LLM, RAG o MCP reales.
@@ -157,7 +161,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** No existe cadena manual de llamadas y el path normal termina
   tras FinalReport.
 
-### T009 — Routers determinísticos, remediación, HITL y errores
+### [X] T009 — Routers determinísticos, remediación, HITL y errores
 
 - **Objetivo:** Completar conditional edges y política de transición sin que un
   LLM controle rutas.
@@ -177,7 +181,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 
 ## FASE 5 — RAG Y MCP
 
-### T010 [P] — Corpus RAG, loaders y chunking configurado
+### [X] T010 [P] — Corpus RAG, loaders y chunking configurado
 
 - **Objetivo:** Crear el corpus mínimo real y pipeline de ingesta con los
   parámetros congelados por el Plan.
@@ -194,7 +198,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** La ingesta conserva provenance y no fija valores fuera del
   Plan.
 
-### T011 — Chroma, embeddings y retrievers especializados
+### [X] T011 — Chroma, embeddings y retrievers especializados
 
 - **Objetivo:** Indexar corpus con Sentence Transformers/Chroma y exponer
   evidence filtrada por dominio.
@@ -211,7 +215,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** Solo evidencia recuperada puede llegar a agentes y un no-match
   queda explícitamente registrado.
 
-### T012 [P] — Workspace aislado y Repository MCP
+### [X] T012 — Workspace aislado y Repository MCP
 
 - **Objetivo:** Proveer operaciones de repositorio seguras sobre una copia por
   run con permisos mínimos.
@@ -228,7 +232,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** Architecture solo lee cuando corresponde y Developer trabaja
   únicamente dentro de la copia aislada.
 
-### T013 — Sample app mínima y fixtures de seguridad
+### [X] T013 — Sample app mínima y fixtures de seguridad
 
 - **Objetivo:** Implementar la aplicación FastAPI/SQLite mínima aprobada para
   demostrar los cinco escenarios sin vulnerabilidades intencionales.
@@ -245,7 +249,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** Existe un objetivo aislable suficiente para evaluación sin UI
   compleja ni tecnologías adicionales.
 
-### T014 — Quality MCP y ToolResult con efecto de grafo
+### [X] T014 — Quality MCP y ToolResult con efecto de grafo
 
 - **Objetivo:** Implementar calidad/seguridad operativa y propagar resultados
   reales hacia Testing, Security y Reviewer.
@@ -265,7 +269,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 
 ## FASE 6 — AGENTES Y PROMPTS
 
-### T015 — Base de agentes y renderizado de prompts
+### [X] T015 — Base de agentes y renderizado de prompts
 
 - **Objetivo:** Establecer el puerto común, ContextEnvelope builder y doce
   prompt assets separados antes de agentes concretos.
@@ -282,7 +286,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** Los seis agentes pueden heredar un contrato uniforme sin
   compartir contexto innecesario.
 
-### T016 [P] — Product Agent
+### [X] T016 — Product Agent
 
 - **Objetivo:** Implementar análisis de requerimiento y ProductSpecification.
 - **FR/NFR:** FR-004, FR-021, FR-023, FR-049; NFR-006, NFR-010.
@@ -297,7 +301,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Evidencia esperada:** ProductSpecification validada y ModelExecutionInfo.
 - **Done When:** Product no usa MCP ni selecciona modelo/ruta por sí mismo.
 
-### T017 [P] — Architecture Agent
+### [X] T017 — Architecture Agent
 
 - **Objetivo:** Implementar diseño contextual con RAG especializado y lectura
   limitada del repositorio.
@@ -315,7 +319,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** Architecture entrega componentes/APIs/datos/riesgos sin
   implementar ni acceder a contexto prohibido.
 
-### T018 [P] — Developer Agent
+### [X] T018 — Developer Agent
 
 - **Objetivo:** Implementar inspección y cambio/propuesta en workspace aislado
   con evidencia de diff y validación.
@@ -332,7 +336,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** Developer no usa cloud por MCP/filesystem failure y declara
   si cambió superficie de seguridad.
 
-### T019 [P] — Security Agent
+### [X] T019 — Security Agent
 
 - **Objetivo:** Implementar revisión de seguridad completa, scans y second
   opinion cloud gobernada.
@@ -349,7 +353,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
   CRITICAL.
 - **Done When:** Security no aprueba evidencia contradictoria ni evita HITL.
 
-### T020 [P] — Testing Agent
+### [X] T020 — Testing Agent
 
 - **Objetivo:** Implementar evaluación de pruebas y resultados reales con
   separación de propuesta, generación, ejecución y resultado.
@@ -366,7 +370,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** Testing entrega resultados actuales sin convertir un bug real
   en trigger cloud.
 
-### T021 [P] — Reviewer Agent
+### [X] T021 — Reviewer Agent
 
 - **Objetivo:** Implementar evaluación final estructurada sin autoridad para
   cambiar transiciones.
@@ -384,7 +388,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 
 ## FASE 7 — INTEGRACIÓN, OBSERVABILIDAD Y GUARDRAILS
 
-### T022 — Composición CLI, nodos reales y FinalReport
+### [X] T022 — Composición CLI, nodos reales y FinalReport
 
 - **Objetivo:** Conectar adaptadores y seis agentes al StateGraph para una
   ejecución completa local-first.
@@ -400,7 +404,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** El CLI ejecuta una corrida completa sin arquitectura paralela
   ni modelos/rutas elegidos por agentes.
 
-### T023 — Integración de errores y guardrails de workflow
+### [X] T023 — Integración de errores y guardrails de workflow
 
 - **Objetivo:** Validar extremo a extremo todas las rutas de fallo y controles
   de seguridad alrededor de nodos, tools, RAG y cloud.
@@ -417,7 +421,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** Todos los fallos definidos terminan en remediación permitida o
   HUMAN_REVIEW_REQUIRED sin exposición de secretos.
 
-### T024 — Langfuse, métricas y reporte agregado
+### [X] T024 — Langfuse, métricas y reporte agregado
 
 - **Objetivo:** Instrumentar evidencia end-to-end y derivar métricas reales de
   runs/evaluaciones.
@@ -436,7 +440,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 
 ## FASE 8 — EVALUACIÓN, BONUS Y DOCUMENTACIÓN
 
-### T025 — Harness de evaluación de cinco escenarios
+### [X] T025 — Harness de evaluación de cinco escenarios
 
 - **Objetivo:** Ejecutar exactamente SC-01 a SC-05 y conservar los registros
   comparables requeridos.
@@ -455,7 +459,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** Los dos REJECTED demuestran controles security/IDOR sin cambiar
   outcomes para hacer pasar pruebas.
 
-### T026 — Evaluación E2E del bonus Multi-model local
+### [X] T026 — Evaluación E2E del bonus Multi-model local
 
 - **Objetivo:** Demostrar el único bonus MVP+ mediante una corrida normal local
   de seis agentes y comparación 4B vs 9B.
@@ -472,7 +476,7 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 - **Done When:** El reporte prueba el bonus con ambos modelos Ollama, no con
   fallback cloud.
 
-### T027 — Documentación, diagramas y demo reproducible
+### [X] T027 — Documentación, diagramas y demo reproducible
 
 - **Objetivo:** Entregar documentación de operación, gobernanza, evidencia y
   una demo observable de extremo a extremo.
