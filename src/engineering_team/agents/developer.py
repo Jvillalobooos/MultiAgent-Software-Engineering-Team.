@@ -18,6 +18,28 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
         "that", "their", "this", "using", "with",
     }
 
+    _TARGET_EXTENSIONS: ClassVar[set[str]] = {
+        "py", "ts", "tsx", "js", "jsx", "java", "go", "rb", "md", "json",
+        "yaml", "yml", "toml", "txt", "cfg", "ini", "sql", "html", "css",
+        "c", "cpp", "h", "hpp", "rs", "kt", "swift",
+    }
+
+    @classmethod
+    def requested_targets(cls, requirement: str) -> list[str]:
+        """File paths the requirement text explicitly names, in order of first mention.
+
+        Used only when the caller opts into apply mode — a deterministic,
+        auditable way to decide *which* files may be written, independent of
+        whatever the LLM later proposes as content.
+        """
+        targets: list[str] = []
+        for token in re.findall(r"[A-Za-z0-9_][A-Za-z0-9_./-]*\.[A-Za-z]+", requirement):
+            cleaned = token.rstrip(".,;:()")
+            extension = cleaned.rsplit(".", 1)[-1].lower()
+            if extension in cls._TARGET_EXTENSIONS and cls._safe_path(cleaned):
+                targets.append(cleaned)
+        return list(dict.fromkeys(targets))
+
     @classmethod
     def relevance_terms(cls, specification: Any, architecture: Any, requirement: str) -> list[str]:
         values = [
@@ -68,6 +90,65 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
         symbols = [match for pattern in patterns for match in re.findall(pattern, content)]
         return list(dict.fromkeys(symbols))[:6]
 
+    def _apply_candidate(
+        self,
+        requested: list[str],
+        repository_results: list[Any],
+        specification: Any,
+        architecture: Any,
+        envelope: ContextEnvelope,
+    ) -> ImplementationResult:
+        """Deterministic APPLY-mode candidate: decide *which* files change and why.
+
+        The LLM elaborates *what* to write (real file content) — see
+        ``_preserves_governed_facts`` in ``llm/runtime.py``, which only governs
+        this structural decision (changed_files/evidence/security signal), not
+        the code text itself.
+        """
+        evidence = list(dict.fromkeys(
+            (
+                f"{item.evidence_reference}#{item.input_summary[5:]}"
+                if item.evidence_reference
+                and item.tool_name in {"read_file", "get_file_content"}
+                and item.input_summary.startswith("path=")
+                else item.evidence_reference or f"repository:{item.tool_name}"
+            )
+            for item in repository_results
+            if item.status is ToolStatus.SUCCESS
+        )) or [f"requirement:target:{path}" for path in requested]
+        objective = getattr(specification, "objective", envelope.current_task)
+        apis = ", ".join(getattr(architecture, "apis", [])) or "no API change declared"
+        data_changes = (
+            ", ".join(getattr(architecture, "data_changes", []))
+            or "no data change declared"
+        )
+        security_terms = " ".join((
+            getattr(specification, "source_requirement", ""),
+            apis,
+            data_changes,
+            " ".join(getattr(architecture, "risks", [])),
+            str(envelope.state_projection.get("requirement", "")),
+        )).lower()
+        return ImplementationResult(
+            action_mode=ActionMode.APPLIED,
+            changed_files=requested,
+            diff=(
+                "APPLY REQUESTED: author complete replacement content for each path in "
+                f"changed_files honoring the requirement. Objective: {objective}."
+            ),
+            evidence=evidence,
+            validation_result=(
+                "APPLY validation strategy: write file_contents via Repository MCP, then "
+                "run_build/run_linter/run_tests against the target project before Reviewer "
+                "sign-off."
+            ),
+            security_surface_changed=any(
+                term in security_terms
+                for term in ("api", "auth", "owner", "security", "token", "password", "idor")
+            ),
+            file_contents={},
+        )
+
     def execute(self, envelope: ContextEnvelope) -> ImplementationResult:
         specification = envelope.state_projection.get("specification")
         architecture = envelope.state_projection.get("architecture")
@@ -75,6 +156,15 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
             item for item in envelope.tool_results
             if item.tool_name in {"list_files", "read_file", "search_code", "get_file_content"}
         ]
+        repository_context = envelope.state_projection.get("repository_context") or {}
+        if repository_context.get("apply_changes"):
+            requested = self.requested_targets(
+                str(envelope.state_projection.get("requirement", ""))
+            )
+            if requested:
+                return self._apply_candidate(
+                    requested, repository_results, specification, architecture, envelope
+                )
         listed_paths: list[str] = []
         search_hits: list[str] = []
         inspected_content: dict[str, str] = {}

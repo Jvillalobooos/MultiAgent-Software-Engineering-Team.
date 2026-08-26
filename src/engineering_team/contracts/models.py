@@ -51,6 +51,7 @@ class ImplementationResult(StrictModel):
     evidence: list[str]
     validation_result: str
     security_surface_changed: bool = False
+    file_contents: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def require_detailed_proposal_or_justified_noop(self) -> "ImplementationResult":

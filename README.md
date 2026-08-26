@@ -50,6 +50,20 @@ Langfuse live requiere `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` y
 traza local correlacionada y el core continúa. Gemini/Groq son opcionales y no
 cuentan como evidencia multi-model local.
 
+### Cloud-first (opcional)
+
+Con `CLOUD_ENABLED=true` y `LOCAL_FIRST=false` en `.env`, el runtime se
+invierte: `CloudModelRuntime` (Gemini/Groq, ruteado por rol vía `_CLOUD_MAP`
+en `llm/cloud.py`) pasa a ser el runtime primario para los seis agentes, y
+Ollama (`LocalModelRuntime`) queda como fallback local si una llamada cloud
+falla. El límite de presupuesto de cloud (`max_cloud_escalations_per_run/agent`)
+solo aplica cuando cloud es fallback; como primario no está acotado por esos
+contadores, ya que atender seis agentes por corrida es el caso normal, no una
+contingencia. Ambos runtimes construyen el prompt desde los mismos archivos
+`prompts/<rol>/system.md` (vía `engineering_team.llm.prompting`), así que el
+proveedor nunca cambia las boundaries o el contrato de salida de un agente.
+Requiere `GEMINI_API_KEY` y/o `GROQ_API_KEY` configuradas.
+
 ## Run
 
 Windows:

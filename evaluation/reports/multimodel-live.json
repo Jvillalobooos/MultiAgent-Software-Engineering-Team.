@@ -1,6 +1,6 @@
 {
-  "run_id": "multimodel-a501bda3-0329-42ea-a533-3dae6f97f878",
-  "trace_id": "1280ac70ae1e333303afbd376dc2b359",
+  "run_id": "multimodel-41e2741a-56d9-4922-8008-8cb30499f1b9",
+  "trace_id": "a24e6aba9c9dbf225854f040b71ebee4",
   "langfuse_live": true,
   "langfuse_error": null,
   "final_status": "APPROVED",
@@ -16,6 +16,20 @@
   "model_usage": [
     {
       "agent": "Product",
+      "provider": "google",
+      "requested_model": "gemini-3.7-flash",
+      "actual_model": null,
+      "model_profile": "CLOUD_FALLBACK",
+      "fallback_used": true,
+      "fallback_reason": "CLOUD_FIRST",
+      "degraded": true,
+      "latency_ms": 25277,
+      "usage": null,
+      "structured_output_success": false,
+      "error": "CLOUD_FALLBACK_UNAVAILABLE: HTTPStatusError"
+    },
+    {
+      "agent": "Product",
       "provider": "ollama",
       "requested_model": "qwen3.5:9b",
       "actual_model": "qwen3.5:9b",
@@ -23,13 +37,27 @@
       "fallback_used": false,
       "fallback_reason": null,
       "degraded": false,
-      "latency_ms": 30117,
+      "latency_ms": 90348,
       "usage": {
-        "prompt_eval_count": 689,
+        "prompt_eval_count": 694,
         "eval_count": 165
       },
       "structured_output_success": true,
       "error": null
+    },
+    {
+      "agent": "Architecture",
+      "provider": "google",
+      "requested_model": "gemini-3.7-flash",
+      "actual_model": null,
+      "model_profile": "CLOUD_FALLBACK",
+      "fallback_used": true,
+      "fallback_reason": "CLOUD_FIRST",
+      "degraded": true,
+      "latency_ms": 27524,
+      "usage": null,
+      "structured_output_success": false,
+      "error": "CLOUD_FALLBACK_UNAVAILABLE: HTTPStatusError"
     },
     {
       "agent": "Architecture",
@@ -40,9 +68,9 @@
       "fallback_used": false,
       "fallback_reason": null,
       "degraded": false,
-      "latency_ms": 14094,
+      "latency_ms": 31317,
       "usage": {
-        "prompt_eval_count": 978,
+        "prompt_eval_count": 983,
         "eval_count": 126
       },
       "structured_output_success": true,
@@ -50,54 +78,92 @@
     },
     {
       "agent": "Developer",
-      "provider": "ollama",
-      "requested_model": "qwen3.5:9b",
-      "actual_model": "qwen3.5:9b",
-      "model_profile": "CODING_MODEL",
-      "fallback_used": false,
-      "fallback_reason": null,
+      "provider": "groq",
+      "requested_model": "openai/gpt-oss-120b",
+      "actual_model": "openai/gpt-oss-120b",
+      "model_profile": "CLOUD_FALLBACK",
+      "fallback_used": true,
+      "fallback_reason": "CLOUD_FIRST",
       "degraded": false,
-      "latency_ms": 69458,
+      "latency_ms": 5061,
       "usage": {
-        "prompt_eval_count": 1217,
-        "eval_count": 644
+        "queue_time": 0.204131314,
+        "prompt_tokens": 1284,
+        "prompt_time": 0.121972713,
+        "completion_tokens": 1968,
+        "completion_time": 4.099758016,
+        "total_tokens": 3252,
+        "total_time": 4.221730729,
+        "completion_tokens_details": {
+          "reasoning_tokens": 1359
+        }
       },
       "structured_output_success": true,
       "error": null
     },
     {
       "agent": "Security",
-      "provider": "ollama",
-      "requested_model": "qwen3.5:9b",
-      "actual_model": "qwen3.5:9b",
-      "model_profile": "DEEP_MODEL",
-      "fallback_used": false,
-      "fallback_reason": null,
+      "provider": "groq",
+      "requested_model": "openai/gpt-oss-120b",
+      "actual_model": "openai/gpt-oss-120b",
+      "model_profile": "CLOUD_FALLBACK",
+      "fallback_used": true,
+      "fallback_reason": "CLOUD_FIRST",
       "degraded": false,
-      "latency_ms": 20131,
+      "latency_ms": 1217,
       "usage": {
-        "prompt_eval_count": 1178,
-        "eval_count": 107
+        "queue_time": 0.092198999,
+        "prompt_tokens": 1188,
+        "prompt_time": 0.047203291,
+        "completion_tokens": 347,
+        "completion_time": 0.721541994,
+        "total_tokens": 1535,
+        "total_time": 0.768745285,
+        "completion_tokens_details": {
+          "reasoning_tokens": 230
+        }
       },
       "structured_output_success": true,
       "error": null
     },
     {
       "agent": "Testing",
-      "provider": "ollama",
-      "requested_model": "qwen3.5:4b",
-      "actual_model": "qwen3.5:4b",
-      "model_profile": "FAST_MODEL",
-      "fallback_used": false,
-      "fallback_reason": null,
+      "provider": "groq",
+      "requested_model": "openai/gpt-oss-20b",
+      "actual_model": "openai/gpt-oss-20b",
+      "model_profile": "CLOUD_FALLBACK",
+      "fallback_used": true,
+      "fallback_reason": "CLOUD_FIRST",
       "degraded": false,
-      "latency_ms": 30573,
+      "latency_ms": 1314,
       "usage": {
-        "prompt_eval_count": 1069,
-        "eval_count": 266
+        "queue_time": 0.059905532,
+        "prompt_tokens": 1072,
+        "prompt_time": 0.059376305,
+        "completion_tokens": 716,
+        "completion_time": 0.788745739,
+        "total_tokens": 1788,
+        "total_time": 0.848122044,
+        "completion_tokens_details": {
+          "reasoning_tokens": 553
+        }
       },
       "structured_output_success": true,
       "error": null
+    },
+    {
+      "agent": "Reviewer",
+      "provider": "google",
+      "requested_model": "gemini-3.7-flash",
+      "actual_model": null,
+      "model_profile": "CLOUD_FALLBACK",
+      "fallback_used": true,
+      "fallback_reason": "CLOUD_FIRST",
+      "degraded": true,
+      "latency_ms": 11018,
+      "usage": null,
+      "structured_output_success": false,
+      "error": "CLOUD_FALLBACK_UNAVAILABLE: HTTPStatusError"
     },
     {
       "agent": "Reviewer",
@@ -108,9 +174,9 @@
       "fallback_used": false,
       "fallback_reason": null,
       "degraded": false,
-      "latency_ms": 112042,
+      "latency_ms": 163505,
       "usage": {
-        "prompt_eval_count": 2128,
+        "prompt_eval_count": 2133,
         "eval_count": 524
       },
       "structured_output_success": true,
@@ -137,9 +203,39 @@
     "run_security_scan",
     "run_tests"
   ],
-  "cloud_used": false,
-  "bonus_pass": true,
+  "cloud_used": true,
+  "cloud_first": true,
+  "bonus_pass": false,
   "trace_events": [
+    {
+      "name": "Product cloud primary",
+      "type": "generation",
+      "level": "ERROR",
+      "status_message": "CLOUD_FALLBACK_UNAVAILABLE: HTTPStatusError",
+      "metadata": {
+        "agent": "Product",
+        "provider": "google",
+        "requested_model": "gemini-3.7-flash",
+        "actual_model": null,
+        "model_profile": "CLOUD_FALLBACK",
+        "fallback_used": true,
+        "fallback_reason": "CLOUD_FIRST",
+        "degraded": true,
+        "latency_ms": 25277,
+        "usage": null,
+        "structured_output_success": false,
+        "error": "CLOUD_FALLBACK_UNAVAILABLE: HTTPStatusError"
+      }
+    },
+    {
+      "name": "LLM_AVAILABILITY_ERROR",
+      "type": "span",
+      "level": "ERROR",
+      "status_message": "CLOUD_FALLBACK_UNAVAILABLE: HTTPStatusError",
+      "metadata": {
+        "agent": "Product"
+      }
+    },
     {
       "name": "Product model",
       "type": "generation",
@@ -154,9 +250,9 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 30117,
+        "latency_ms": 90348,
         "usage": {
-          "prompt_eval_count": 689,
+          "prompt_eval_count": 694,
           "eval_count": 165
         },
         "structured_output_success": true,
@@ -196,6 +292,35 @@
       }
     },
     {
+      "name": "Architecture cloud primary",
+      "type": "generation",
+      "level": "ERROR",
+      "status_message": "CLOUD_FALLBACK_UNAVAILABLE: HTTPStatusError",
+      "metadata": {
+        "agent": "Architecture",
+        "provider": "google",
+        "requested_model": "gemini-3.7-flash",
+        "actual_model": null,
+        "model_profile": "CLOUD_FALLBACK",
+        "fallback_used": true,
+        "fallback_reason": "CLOUD_FIRST",
+        "degraded": true,
+        "latency_ms": 27524,
+        "usage": null,
+        "structured_output_success": false,
+        "error": "CLOUD_FALLBACK_UNAVAILABLE: HTTPStatusError"
+      }
+    },
+    {
+      "name": "LLM_AVAILABILITY_ERROR",
+      "type": "span",
+      "level": "ERROR",
+      "status_message": "CLOUD_FALLBACK_UNAVAILABLE: HTTPStatusError",
+      "metadata": {
+        "agent": "Architecture"
+      }
+    },
+    {
       "name": "Architecture model",
       "type": "generation",
       "level": "DEFAULT",
@@ -209,9 +334,9 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 14094,
+        "latency_ms": 31317,
         "usage": {
-          "prompt_eval_count": 978,
+          "prompt_eval_count": 983,
           "eval_count": 126
         },
         "structured_output_success": true,
@@ -296,28 +421,61 @@
       }
     },
     {
-      "name": "Developer model",
+      "name": "Developer cloud primary",
       "type": "generation",
-      "level": "DEFAULT",
+      "level": null,
       "status_message": null,
       "metadata": {
         "agent": "Developer",
-        "provider": "ollama",
-        "requested_model": "qwen3.5:9b",
-        "actual_model": "qwen3.5:9b",
-        "model_profile": "CODING_MODEL",
-        "fallback_used": false,
-        "fallback_reason": null,
+        "provider": "groq",
+        "requested_model": "openai/gpt-oss-120b",
+        "actual_model": "openai/gpt-oss-120b",
+        "model_profile": "CLOUD_FALLBACK",
+        "fallback_used": true,
+        "fallback_reason": "CLOUD_FIRST",
         "degraded": false,
-        "latency_ms": 69458,
+        "latency_ms": 5061,
         "usage": {
-          "prompt_eval_count": 1217,
-          "eval_count": 644
+          "queue_time": 0.204131314,
+          "prompt_tokens": 1284,
+          "prompt_time": 0.121972713,
+          "completion_tokens": 1968,
+          "completion_time": 4.099758016,
+          "total_tokens": 3252,
+          "total_time": 4.221730729,
+          "completion_tokens_details": {
+            "reasoning_tokens": 1359
+          }
         },
         "structured_output_success": true,
         "error": null,
-        "retry": 0,
-        "repair": 0
+        "safe_context": {
+          "agent": "Developer",
+          "task": "Developer",
+          "relevant_requirement": "Provide a password-recovery link that expires after 15 minutes and can be used only once.",
+          "structured_input": {
+            "candidate": {
+              "action_mode": "PROPOSED",
+              "changed_files": [
+                "app/service.py",
+                "test_acceptance.py"
+              ],
+              "diff": "PROPOSED TECHNICAL CHANGE\nObjective: Provide a password-recovery link that expires after 15 minutes and can be used only once.\nComponents: modular monolith\nAPIs: no API change declared\nData: no data change declared\nDesign decisions: preserve modular boundaries\nFILE: app/service.py\nObserved symbols: __init__(self, database: str | Path), issue_reset_token(self, user_id: str), use_reset_token(self, token=[REDACTED], record_failed_login(self, user_id: str), is_locked(self, user_id: str), add_transactions(self, user_id: str, count: int)\nTechnical change: adapt __init__(self, database: str | Path), issue_reset_token(self, user_id: str), use_reset_token(self, token=[REDACTED], record_failed_login(self, user_id: str), is_locked(self, user_id: str), add_transactions(self, user_id: str, count: int) to satisfy Provide a password-recovery link that expires after 15 minutes and can be used only once..\nAPI implications: no API change declared.\nData implications: no data change declared.\n--- a/app/service.py\n+++ b/app/service.py\n@@ proposed @@\n+ Update __init__(self, database: str | Path), issue_reset_token(self, user_id: str), use_reset_token(self, token=[REDACTED], record_failed_login(self, user_id: str), is_locked(self, user_id: str), add_transactions(self, user_id: str, count: int) while preserving: preserve modular boundaries.\nFILE: test_acceptance.py\nObserved symbols: test_password_recovery_is_exactly_fifteen_minutes_and_single_use(tmp_path), test_lockout_ownership_and_transaction_limit(tmp_path)\nTechnical change: adapt test_password_recovery_is_exactly_fifteen_minutes_and_single_use(tmp_path), test_lockout_ownership_and_transaction_limit(tmp_path) to satisfy Provide a password-recovery link that expires after 15 minutes and can be used only once..\nAPI implications: no API change declared.\nData implications: no data change declared.\n--- a/test_acceptance.py\n+++ b/test_acceptance.py\n@@ proposed @@\n+ Update test_password_recovery_is_exactly_fifteen_minutes_and_single_use(tmp_path), test_lockout_ownership_and_transaction_limit(tmp_path) while preserving: preserve modular boundaries.",
+              "evidence": [
+                "mcp://repository/list_files",
+                "mcp://repository/search_code",
+                "mcp://repository/read_file#app/service.py",
+                "mcp://repository/read_file#test_acceptance.py"
+              ],
+              "validation_result": "PROPOSED validation strategy: run_build, run_linter, and run_tests in the isolated workspace after applying changes to 2 inspected path(s).",
+              "security_surface_changed": true
+            }
+          },
+          "validation_error": null,
+          "rag_fragments": [],
+          "code_fragments": [],
+          "deterministic_evidence": []
+        }
       }
     },
     {
@@ -372,28 +530,76 @@
       }
     },
     {
-      "name": "Security model",
+      "name": "Security cloud primary",
       "type": "generation",
-      "level": "DEFAULT",
+      "level": null,
       "status_message": null,
       "metadata": {
         "agent": "Security",
-        "provider": "ollama",
-        "requested_model": "qwen3.5:9b",
-        "actual_model": "qwen3.5:9b",
-        "model_profile": "DEEP_MODEL",
-        "fallback_used": false,
-        "fallback_reason": null,
+        "provider": "groq",
+        "requested_model": "openai/gpt-oss-120b",
+        "actual_model": "openai/gpt-oss-120b",
+        "model_profile": "CLOUD_FALLBACK",
+        "fallback_used": true,
+        "fallback_reason": "CLOUD_FIRST",
         "degraded": false,
-        "latency_ms": 20131,
+        "latency_ms": 1217,
         "usage": {
-          "prompt_eval_count": 1178,
-          "eval_count": 107
+          "queue_time": 0.092198999,
+          "prompt_tokens": 1188,
+          "prompt_time": 0.047203291,
+          "completion_tokens": 347,
+          "completion_time": 0.721541994,
+          "total_tokens": 1535,
+          "total_time": 0.768745285,
+          "completion_tokens_details": {
+            "reasoning_tokens": 230
+          }
         },
         "structured_output_success": true,
         "error": null,
-        "retry": 0,
-        "repair": 0
+        "safe_context": {
+          "agent": "Security",
+          "task": "Security",
+          "relevant_requirement": "",
+          "structured_input": {
+            "candidate": {
+              "status": "PASS",
+              "highest_severity": "INFO",
+              "findings": [],
+              "recommendations": [],
+              "sources": [
+                "security-guidelines.md",
+                "owasp-api-security.md"
+              ],
+              "checklist": {
+                "authentication": "PASS",
+                "authorization": "[REDACTED]",
+                "input_validation": "PASS",
+                "sensitive_information": "PASS",
+                "secrets": "PASS",
+                "injection": "PASS",
+                "access_control": "PASS",
+                "idor": "PASS",
+                "logging": "PASS",
+                "data_protection": "PASS",
+                "api_abuse": "PASS",
+                "rate_limiting": "PASS",
+                "owasp": "PASS"
+              },
+              "requires_hitl": false
+            }
+          },
+          "validation_error": null,
+          "rag_fragments": [],
+          "code_fragments": [],
+          "deterministic_evidence": [
+            "security-guidelines.md:5c85774592:0",
+            "security-guidelines.md:4b06fa0828:0",
+            "owasp-api-security.md:8b796a9dec:0",
+            "owasp-api-security.md:85211ec717:0"
+          ]
+        }
       }
     },
     {
@@ -437,28 +643,84 @@
       }
     },
     {
-      "name": "Testing model",
+      "name": "Testing cloud primary",
       "type": "generation",
-      "level": "DEFAULT",
+      "level": null,
       "status_message": null,
       "metadata": {
         "agent": "Testing",
-        "provider": "ollama",
-        "requested_model": "qwen3.5:4b",
-        "actual_model": "qwen3.5:4b",
-        "model_profile": "FAST_MODEL",
-        "fallback_used": false,
-        "fallback_reason": null,
+        "provider": "groq",
+        "requested_model": "openai/gpt-oss-20b",
+        "actual_model": "openai/gpt-oss-20b",
+        "model_profile": "CLOUD_FALLBACK",
+        "fallback_used": true,
+        "fallback_reason": "CLOUD_FIRST",
         "degraded": false,
-        "latency_ms": 30573,
+        "latency_ms": 1314,
         "usage": {
-          "prompt_eval_count": 1069,
-          "eval_count": 266
+          "queue_time": 0.059905532,
+          "prompt_tokens": 1072,
+          "prompt_time": 0.059376305,
+          "completion_tokens": 716,
+          "completion_time": 0.788745739,
+          "total_tokens": 1788,
+          "total_time": 0.848122044,
+          "completion_tokens_details": {
+            "reasoning_tokens": 553
+          }
         },
         "structured_output_success": true,
         "error": null,
-        "retry": 0,
-        "repair": 0
+        "safe_context": {
+          "agent": "Testing",
+          "task": "Testing",
+          "relevant_requirement": "",
+          "structured_input": {
+            "candidate": {
+              "proposed_tests": [
+                "happy path",
+                "error",
+                "edge",
+                "validation",
+                "security",
+                "business rules"
+              ],
+              "generated_tests": [],
+              "executed_tests": [
+                "run_tests"
+              ],
+              "actual_results": [
+                "..                                                                       [100%]\n2 passed in 0.04s\n"
+              ],
+              "status": "SUCCESS",
+              "failures": [],
+              "coverage_mapping": {
+                "happy_path": [
+                  "validated scenario checks"
+                ],
+                "error_edge_validation_security_business": [
+                  "review matrix"
+                ]
+              },
+              "evidence_references": [
+                "mcp://quality/run_tests",
+                "testing-strategy.md:f560bc5b58:0",
+                "testing-strategy.md:1640477e49:0",
+                "testing-strategy.md:5342c5693f:0",
+                "coding-standards.md:5ac6da9d76:0"
+              ]
+            }
+          },
+          "validation_error": null,
+          "rag_fragments": [],
+          "code_fragments": [],
+          "deterministic_evidence": [
+            "testing-strategy.md:f560bc5b58:0",
+            "testing-strategy.md:1640477e49:0",
+            "testing-strategy.md:5342c5693f:0",
+            "coding-standards.md:5ac6da9d76:0"
+          ]
+        }
       }
     },
     {
@@ -468,6 +730,35 @@
       "status_message": null,
       "metadata": {
         "iteration": 0
+      }
+    },
+    {
+      "name": "Reviewer cloud primary",
+      "type": "generation",
+      "level": "ERROR",
+      "status_message": "CLOUD_FALLBACK_UNAVAILABLE: HTTPStatusError",
+      "metadata": {
+        "agent": "Reviewer",
+        "provider": "google",
+        "requested_model": "gemini-3.7-flash",
+        "actual_model": null,
+        "model_profile": "CLOUD_FALLBACK",
+        "fallback_used": true,
+        "fallback_reason": "CLOUD_FIRST",
+        "degraded": true,
+        "latency_ms": 11018,
+        "usage": null,
+        "structured_output_success": false,
+        "error": "CLOUD_FALLBACK_UNAVAILABLE: HTTPStatusError"
+      }
+    },
+    {
+      "name": "LLM_AVAILABILITY_ERROR",
+      "type": "span",
+      "level": "ERROR",
+      "status_message": "CLOUD_FALLBACK_UNAVAILABLE: HTTPStatusError",
+      "metadata": {
+        "agent": "Reviewer"
       }
     },
     {
@@ -484,9 +775,9 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 112042,
+        "latency_ms": 163505,
         "usage": {
-          "prompt_eval_count": 2128,
+          "prompt_eval_count": 2133,
           "eval_count": 524
         },
         "structured_output_success": true,

@@ -1,0 +1,6 @@
+__pycache__/
+.pytest_cache/
+.qa-backup/
+.qa_sessions/
+*.jsonl
+.DS_Store

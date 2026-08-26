@@ -15,6 +15,7 @@ from engineering_team.agents.reviewer import ReviewerAgent
 from engineering_team.agents.security import SecurityAgent
 from engineering_team.agents.testing import TestingAgent
 from engineering_team.contracts.enums import (
+    ActionMode,
     AgentRole,
     ErrorCode,
     RemediationCategory,
@@ -23,6 +24,7 @@ from engineering_team.contracts.enums import (
 )
 from engineering_team.contracts.models import FinalReport, WorkflowError
 from engineering_team.contracts.state import EngineeringState
+from engineering_team.guardrails.validation import require_explicit_destructive_authorization
 from engineering_team.models.context import build_context
 
 from .routers import review_route, security_route
@@ -108,8 +110,10 @@ def _report(state: EngineeringState, status: str) -> FinalReport:
         trace_id=state.trace_id or state.run_id,
         next_action="none" if status == "APPROVED" else "human review",
     )
+# Orquestación LangGraph
 
-
+# el sistema utiliza una "memoria central" o estado con reglas estrictas (el TypedDict).
+# En lugar de pasarse mensajes de texto desordenados, todos los agentes leen y escriben sobre un mismo formato estructurado
 def build_engineering_graph(
     *,
     agent_overrides: dict[AgentRole, Any] | None = None,
@@ -122,6 +126,7 @@ def build_engineering_graph(
     test_paths: list[str] | None = None,
     interactive_hitl: bool = False,
 ):
+    # StateGraph(WorkflowState) real con TypedDict, un nodo por agente y edges condicionales.
     """Compile normal, remediation, MCP/RAG, and HITL routes as real nodes."""
     graph = StateGraph(WorkflowState)
     agents: dict[AgentRole, Any] = {
@@ -149,15 +154,27 @@ def build_engineering_graph(
         errors: list[WorkflowError],
         tool_results: list[Any],
         adapter: Any,
+        *,
+        strict: bool = False,
     ) -> bool:
-        """Preserve one MCP result and return whether required MCP evidence is unavailable."""
+        """Preserve one MCP result and return whether required MCP evidence is unavailable.
+
+        ``strict`` treats any non-SUCCESS status (including DENIED) as blocking —
+        used for write calls, where a silently-ignored denial would leave a
+        change set partially applied.
+        """
         tool_results.append(result)
         if trace is not None:
             trace.record(
                 "MCP call", as_type="tool", output=result.model_dump(mode="json"),
                 metadata=mcp_trace_metadata(adapter),
             )
-        if result.status not in {ToolStatus.UNAVAILABLE, ToolStatus.FAIL}:
+        blocking = (
+            result.status is not ToolStatus.SUCCESS
+            if strict
+            else result.status in {ToolStatus.UNAVAILABLE, ToolStatus.FAIL}
+        )
+        if not blocking:
             return False
         code = (
             ErrorCode.MCP_ERROR
@@ -180,7 +197,7 @@ def build_engineering_graph(
                 output=result.model_dump(mode="json"),
                 metadata={"agent": role.value, "tool": result.tool_name},
             )
-        return result.status is ToolStatus.UNAVAILABLE
+        return blocking if strict else result.status is ToolStatus.UNAVAILABLE
 
     def make_node(role: AgentRole):
         def node(raw_state: dict[str, Any]) -> dict[str, Any]:
@@ -189,6 +206,7 @@ def build_engineering_graph(
             errors = list(current.errors)
             tool_results = list(current.tool_results)
             required_mcp_missing = False
+            existing_repo_paths: set[str] = set()
             if retriever is not None and role in {
                 AgentRole.ARCHITECTURE, AgentRole.SECURITY, AgentRole.TESTING
             }:
@@ -229,14 +247,27 @@ def build_engineering_graph(
                                 line.strip().replace("\\", "/")
                                 for line in searched.output_summary.splitlines()
                             )
+                    existing_repo_paths = set(listed_paths)
                     ranked = DeveloperAgent.rank_paths(listed_paths, search_hits, terms)
                     if search_hits:
                         ranked = [path for path in ranked if path in set(search_hits)]
+                    already_read = set(ranked[:4])
                     for path in ranked[:4]:
                         read = repository_mcp.read_file(role, path)
                         required_mcp_missing |= preserve_tool_result(
                             read, role, errors, tool_results, repository_mcp
                         )
+                    if current.repository_context.get("apply_changes"):
+                        # Guarantee the LLM sees the current content of every file the
+                        # requirement explicitly names, not just the heuristically
+                        # ranked ones, before it authors real replacement content.
+                        for target_path in DeveloperAgent.requested_targets(current.requirement):
+                            if target_path in existing_repo_paths and target_path not in already_read:
+                                read = repository_mcp.read_file(role, target_path)
+                                required_mcp_missing |= preserve_tool_result(
+                                    read, role, errors, tool_results, repository_mcp
+                                )
+                                already_read.add(target_path)
             if quality_mcp is not None and role is AgentRole.TESTING:
                 result = quality_mcp.run_tests(role, test_paths)
                 required_mcp_missing |= preserve_tool_result(
@@ -344,6 +375,56 @@ def build_engineering_graph(
                         }
             else:
                 output = candidate
+            if (
+                role is AgentRole.DEVELOPER
+                and repository_mcp is not None
+                and output.action_mode is ActionMode.APPLIED
+                and output.file_contents
+            ):
+                try:
+                    require_explicit_destructive_authorization(
+                        bool(current.repository_context.get("authorized"))
+                    )
+                except PermissionError as exc:
+                    errors.append(WorkflowError(
+                        code=ErrorCode.TOOL_ERROR, source_stage=role.value, retryable=False,
+                        detail=str(exc),
+                    ))
+                    if trace is not None:
+                        trace.record(
+                            "destructive change blocked", level="ERROR", status_message=str(exc),
+                            metadata={"agent": role.value, "changed_files": output.changed_files},
+                        )
+                    return {
+                        "route_history": [*current.route_history, role.value],
+                        "errors": errors, "model_usage": model_usage,
+                        "rag_evidence": rag_evidence, "tool_results": tool_results,
+                        "human_review_required": True,
+                        "trace_id": trace.trace_id if trace is not None else current.trace_id,
+                        "implementation": output,
+                    }
+                write_failed = False
+                for path, content in output.file_contents.items():
+                    writer = (
+                        repository_mcp.update_file
+                        if path in existing_repo_paths
+                        else repository_mcp.create_file
+                    )
+                    result = writer(role, path, content)
+                    write_failed |= preserve_tool_result(
+                        result, role, errors, tool_results, repository_mcp, strict=True
+                    )
+                diff_result = repository_mcp.get_diff(role)
+                preserve_tool_result(diff_result, role, errors, tool_results, repository_mcp)
+                if write_failed:
+                    return {
+                        "route_history": [*current.route_history, role.value],
+                        "errors": errors, "model_usage": model_usage,
+                        "rag_evidence": rag_evidence, "tool_results": tool_results,
+                        "implementation": output,
+                        "human_review_required": True,
+                        "trace_id": trace.trace_id if trace is not None else current.trace_id,
+                    }
             patch: dict[str, Any] = {
                 "route_history": [*current.route_history, role.value],
                 "rag_evidence": rag_evidence,

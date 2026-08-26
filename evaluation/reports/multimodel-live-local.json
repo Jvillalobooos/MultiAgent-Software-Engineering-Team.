@@ -1,0 +1,524 @@
+{
+  "run_id": "multimodel-077cda28-59d8-4ae3-955a-dbaed5e6d78e",
+  "trace_id": "114415628cf2584ba51d3c15d2c252a0",
+  "langfuse_live": false,
+  "langfuse_error": null,
+  "final_status": "APPROVED",
+  "route_history": [
+    "Product",
+    "Architecture",
+    "Developer",
+    "Security",
+    "Testing",
+    "Reviewer",
+    "FinalReport"
+  ],
+  "model_usage": [
+    {
+      "agent": "Product",
+      "provider": "ollama",
+      "requested_model": "qwen3.5:9b",
+      "actual_model": "qwen3.5:9b",
+      "model_profile": "DEEP_MODEL",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "degraded": false,
+      "latency_ms": 141942,
+      "usage": {
+        "prompt_eval_count": 690,
+        "eval_count": 165
+      },
+      "structured_output_success": true,
+      "error": null
+    },
+    {
+      "agent": "Architecture",
+      "provider": "ollama",
+      "requested_model": "qwen3.5:4b",
+      "actual_model": "qwen3.5:4b",
+      "model_profile": "FAST_MODEL",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "degraded": false,
+      "latency_ms": 71714,
+      "usage": {
+        "prompt_eval_count": 979,
+        "eval_count": 126
+      },
+      "structured_output_success": true,
+      "error": null
+    },
+    {
+      "agent": "Developer",
+      "provider": "ollama",
+      "requested_model": "qwen3.5:9b",
+      "actual_model": "qwen3.5:9b",
+      "model_profile": "CODING_MODEL",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "degraded": false,
+      "latency_ms": 194855,
+      "usage": {
+        "prompt_eval_count": 1218,
+        "eval_count": 644
+      },
+      "structured_output_success": true,
+      "error": null
+    },
+    {
+      "agent": "Security",
+      "provider": "ollama",
+      "requested_model": "qwen3.5:9b",
+      "actual_model": "qwen3.5:9b",
+      "model_profile": "DEEP_MODEL",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "degraded": false,
+      "latency_ms": 49247,
+      "usage": {
+        "prompt_eval_count": 1179,
+        "eval_count": 107
+      },
+      "structured_output_success": true,
+      "error": null
+    },
+    {
+      "agent": "Testing",
+      "provider": "ollama",
+      "requested_model": "qwen3.5:4b",
+      "actual_model": "qwen3.5:4b",
+      "model_profile": "FAST_MODEL",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "degraded": false,
+      "latency_ms": 82635,
+      "usage": {
+        "prompt_eval_count": 1255,
+        "eval_count": 454
+      },
+      "structured_output_success": true,
+      "error": null
+    },
+    {
+      "agent": "Reviewer",
+      "provider": "ollama",
+      "requested_model": "qwen3.5:9b",
+      "actual_model": "qwen3.5:9b",
+      "model_profile": "DEEP_MODEL",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "degraded": false,
+      "latency_ms": 187483,
+      "usage": {
+        "prompt_eval_count": 2127,
+        "eval_count": 524
+      },
+      "structured_output_success": true,
+      "error": null
+    }
+  ],
+  "rag_sources": [
+    "api-design-guidelines.md",
+    "architecture-guidelines.md",
+    "security-guidelines.md",
+    "owasp-api-security.md",
+    "testing-strategy.md",
+    "coding-standards.md"
+  ],
+  "tools_used": [
+    "list_files",
+    "list_files",
+    "search_code",
+    "search_code",
+    "search_code",
+    "read_file",
+    "read_file",
+    "scan_dependencies",
+    "run_security_scan",
+    "run_tests"
+  ],
+  "cloud_used": false,
+  "cloud_first": false,
+  "bonus_pass": true,
+  "trace_events": [
+    {
+      "name": "Product model",
+      "type": "generation",
+      "level": "DEFAULT",
+      "status_message": null,
+      "metadata": {
+        "agent": "Product",
+        "provider": "ollama",
+        "requested_model": "qwen3.5:9b",
+        "actual_model": "qwen3.5:9b",
+        "model_profile": "DEEP_MODEL",
+        "fallback_used": false,
+        "fallback_reason": null,
+        "degraded": false,
+        "latency_ms": 141942,
+        "usage": {
+          "prompt_eval_count": 690,
+          "eval_count": 165
+        },
+        "structured_output_success": true,
+        "error": null,
+        "retry": 0,
+        "repair": 0
+      }
+    },
+    {
+      "name": "Product",
+      "type": "agent",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "iteration": 0
+      }
+    },
+    {
+      "name": "RAG retrieval",
+      "type": "retriever",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "agent": "Architecture",
+        "status": "OK"
+      }
+    },
+    {
+      "name": "MCP call",
+      "type": "tool",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "transport": "stdio",
+        "protocol_version": "2026-07-28",
+        "server": "engineering-team-repository"
+      }
+    },
+    {
+      "name": "Architecture model",
+      "type": "generation",
+      "level": "DEFAULT",
+      "status_message": null,
+      "metadata": {
+        "agent": "Architecture",
+        "provider": "ollama",
+        "requested_model": "qwen3.5:4b",
+        "actual_model": "qwen3.5:4b",
+        "model_profile": "FAST_MODEL",
+        "fallback_used": false,
+        "fallback_reason": null,
+        "degraded": false,
+        "latency_ms": 71714,
+        "usage": {
+          "prompt_eval_count": 979,
+          "eval_count": 126
+        },
+        "structured_output_success": true,
+        "error": null,
+        "retry": 0,
+        "repair": 0
+      }
+    },
+    {
+      "name": "Architecture",
+      "type": "agent",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "iteration": 0
+      }
+    },
+    {
+      "name": "MCP call",
+      "type": "tool",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "transport": "stdio",
+        "protocol_version": "2026-07-28",
+        "server": "engineering-team-repository"
+      }
+    },
+    {
+      "name": "MCP call",
+      "type": "tool",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "transport": "stdio",
+        "protocol_version": "2026-07-28",
+        "server": "engineering-team-repository"
+      }
+    },
+    {
+      "name": "MCP call",
+      "type": "tool",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "transport": "stdio",
+        "protocol_version": "2026-07-28",
+        "server": "engineering-team-repository"
+      }
+    },
+    {
+      "name": "MCP call",
+      "type": "tool",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "transport": "stdio",
+        "protocol_version": "2026-07-28",
+        "server": "engineering-team-repository"
+      }
+    },
+    {
+      "name": "MCP call",
+      "type": "tool",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "transport": "stdio",
+        "protocol_version": "2026-07-28",
+        "server": "engineering-team-repository"
+      }
+    },
+    {
+      "name": "MCP call",
+      "type": "tool",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "transport": "stdio",
+        "protocol_version": "2026-07-28",
+        "server": "engineering-team-repository"
+      }
+    },
+    {
+      "name": "Developer model",
+      "type": "generation",
+      "level": "DEFAULT",
+      "status_message": null,
+      "metadata": {
+        "agent": "Developer",
+        "provider": "ollama",
+        "requested_model": "qwen3.5:9b",
+        "actual_model": "qwen3.5:9b",
+        "model_profile": "CODING_MODEL",
+        "fallback_used": false,
+        "fallback_reason": null,
+        "degraded": false,
+        "latency_ms": 194855,
+        "usage": {
+          "prompt_eval_count": 1218,
+          "eval_count": 644
+        },
+        "structured_output_success": true,
+        "error": null,
+        "retry": 0,
+        "repair": 0
+      }
+    },
+    {
+      "name": "Developer",
+      "type": "agent",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "iteration": 0
+      }
+    },
+    {
+      "name": "route",
+      "type": "span",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "from": "Developer",
+        "to": "Security"
+      }
+    },
+    {
+      "name": "RAG retrieval",
+      "type": "retriever",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "agent": "Security",
+        "status": "OK"
+      }
+    },
+    {
+      "name": "MCP call",
+      "type": "tool",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "transport": "stdio",
+        "protocol_version": "2026-07-28",
+        "server": "engineering-team-quality"
+      }
+    },
+    {
+      "name": "MCP call",
+      "type": "tool",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "transport": "stdio",
+        "protocol_version": "2026-07-28",
+        "server": "engineering-team-quality"
+      }
+    },
+    {
+      "name": "Security model",
+      "type": "generation",
+      "level": "DEFAULT",
+      "status_message": null,
+      "metadata": {
+        "agent": "Security",
+        "provider": "ollama",
+        "requested_model": "qwen3.5:9b",
+        "actual_model": "qwen3.5:9b",
+        "model_profile": "DEEP_MODEL",
+        "fallback_used": false,
+        "fallback_reason": null,
+        "degraded": false,
+        "latency_ms": 49247,
+        "usage": {
+          "prompt_eval_count": 1179,
+          "eval_count": 107
+        },
+        "structured_output_success": true,
+        "error": null,
+        "retry": 0,
+        "repair": 0
+      }
+    },
+    {
+      "name": "Security",
+      "type": "agent",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "iteration": 0
+      }
+    },
+    {
+      "name": "route",
+      "type": "span",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "from": "Security",
+        "to": "Testing"
+      }
+    },
+    {
+      "name": "RAG retrieval",
+      "type": "retriever",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "agent": "Testing",
+        "status": "OK"
+      }
+    },
+    {
+      "name": "MCP call",
+      "type": "tool",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "transport": "stdio",
+        "protocol_version": "2026-07-28",
+        "server": "engineering-team-quality"
+      }
+    },
+    {
+      "name": "Testing model",
+      "type": "generation",
+      "level": "DEFAULT",
+      "status_message": null,
+      "metadata": {
+        "agent": "Testing",
+        "provider": "ollama",
+        "requested_model": "qwen3.5:4b",
+        "actual_model": "qwen3.5:4b",
+        "model_profile": "FAST_MODEL",
+        "fallback_used": false,
+        "fallback_reason": null,
+        "degraded": false,
+        "latency_ms": 82635,
+        "usage": {
+          "prompt_eval_count": 1255,
+          "eval_count": 454
+        },
+        "structured_output_success": true,
+        "error": null,
+        "retry": 0,
+        "repair": 0
+      }
+    },
+    {
+      "name": "Testing",
+      "type": "agent",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "iteration": 0
+      }
+    },
+    {
+      "name": "Reviewer model",
+      "type": "generation",
+      "level": "DEFAULT",
+      "status_message": null,
+      "metadata": {
+        "agent": "Reviewer",
+        "provider": "ollama",
+        "requested_model": "qwen3.5:9b",
+        "actual_model": "qwen3.5:9b",
+        "model_profile": "DEEP_MODEL",
+        "fallback_used": false,
+        "fallback_reason": null,
+        "degraded": false,
+        "latency_ms": 187483,
+        "usage": {
+          "prompt_eval_count": 2127,
+          "eval_count": 524
+        },
+        "structured_output_success": true,
+        "error": null,
+        "retry": 0,
+        "repair": 0
+      }
+    },
+    {
+      "name": "Reviewer",
+      "type": "agent",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "iteration": 0
+      }
+    },
+    {
+      "name": "route",
+      "type": "span",
+      "level": null,
+      "status_message": null,
+      "metadata": {
+        "from": "Reviewer",
+        "to": "FinalReport",
+        "iteration": 0
+      }
+    },
+    {
+      "name": "FinalReport",
+      "type": "span"
+    }
+  ]
+}

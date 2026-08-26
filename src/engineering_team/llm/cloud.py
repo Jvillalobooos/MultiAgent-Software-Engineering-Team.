@@ -1,6 +1,5 @@
 """Bounded cloud contingency routing; not normal model selection."""
 
-import json
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -12,6 +11,7 @@ from engineering_team.config import Settings
 from engineering_team.contracts.enums import AgentRole, ErrorCode
 from engineering_team.contracts.models import CloudFallbackContext, ModelExecutionInfo
 from engineering_team.guardrails.secrets import require_safe_cloud_context
+from engineering_team.llm.prompting import build_role_prompts, governed_output_schema
 from engineering_team.models.context import ContextEnvelope
 
 from .registry import ModelSelection
@@ -50,17 +50,27 @@ class AttemptBudget:
 
 @dataclass
 class CloudBudget:
+    """Bounds cloud usage when cloud is a *fallback*.
+
+    When cloud is the configured primary runtime (``cloud_first``), the caps
+    below describe an emergency-contingency budget, not the steady-state
+    workload of six agents per run, so ``unlimited`` disables the cap while
+    still recording counts for observability/telemetry.
+    """
+
     settings: Settings
     by_agent: dict[AgentRole, int] = field(default_factory=dict)
     run_count: int = 0
+    unlimited: bool = False
 
     def consume(self, role: AgentRole) -> bool:
-        if self.run_count >= self.settings.max_cloud_escalations_per_run:
-            return False
-        used = self.by_agent.get(role, 0)
-        if used >= self.settings.max_cloud_escalations_per_agent:
-            return False
-        self.by_agent[role] = used + 1
+        if not self.unlimited:
+            if self.run_count >= self.settings.max_cloud_escalations_per_run:
+                return False
+            used = self.by_agent.get(role, 0)
+            if used >= self.settings.max_cloud_escalations_per_agent:
+                return False
+        self.by_agent[role] = self.by_agent.get(role, 0) + 1
         self.run_count += 1
         return True
 
@@ -117,17 +127,25 @@ def build_cloud_context(
 
 
 class CloudModelRuntime:
-    """Schema-constrained Gemini/Groq fallback with per-agent and per-run budgets."""
+    """Schema-constrained Gemini/Groq runtime.
+
+    Usable either as the *fallback* runtime (bounded by ``CloudBudget``, the
+    historical role) or as the *primary* runtime for a cloud-first
+    configuration (``primary=True``), in which case the per-agent/per-run
+    escalation caps are disabled since six agents per run is the expected
+    steady-state workload, not an emergency contingency.
+    """
 
     def __init__(
         self, settings: Settings, *, client: httpx.Client | None = None,
-        trace: Any | None = None,
+        trace: Any | None = None, primary: bool = False,
     ) -> None:
         self.settings = settings
         self.router = CloudRouter(settings)
-        self.budget = CloudBudget(settings)
+        self.budget = CloudBudget(settings, unlimited=primary)
         self.client = client
         self.trace = trace
+        self.primary = primary
         self.attempts: list[ModelExecutionInfo] = []
 
     def invoke_artifact(
@@ -136,22 +154,24 @@ class CloudModelRuntime:
         envelope: ContextEnvelope,
         candidate: BaseModel,
         *,
-        fallback_reason: str,
+        fallback_reason: str = "CLOUD_FIRST",
     ) -> tuple[BaseModel, ModelExecutionInfo]:
         selection = self.router.for_role(role)
         if not self.router.enabled_for(role) or not self.budget.consume(role):
             raise RuntimeError("CLOUD_FALLBACK_UNAVAILABLE: disabled, missing credential, or budget")
+        candidate_dict = candidate.model_dump(mode="json")
+        output_schema = governed_output_schema(type(candidate))
+        system_prompt, user_prompt = build_role_prompts(
+            role, envelope, output_schema, candidate_dict
+        )
         safe_context = build_cloud_context(
             role, envelope.current_task,
             str(envelope.state_projection.get("requirement", "")),
-            {"candidate": candidate.model_dump(mode="json")},
+            {"candidate": candidate_dict},
             deterministic_evidence=[item.chunk_id for item in envelope.rag_evidence],
         )
-        prompt = (
-            "Return only the candidate JSON, preserving every governed fact and matching "
-            f"this JSON schema: {json.dumps(type(candidate).model_json_schema())}\n"
-            f"Context: {safe_context.model_dump_json()}"
-        )
+        require_safe_cloud_context(system_prompt)
+        require_safe_cloud_context(user_prompt)
         owns_client = self.client is None
         client = self.client or httpx.Client(timeout=self.settings.llm_timeout_seconds)
         started = time.perf_counter()
@@ -161,11 +181,12 @@ class CloudModelRuntime:
                     f"https://generativelanguage.googleapis.com/v1beta/models/{selection.model}:generateContent",
                     headers={"x-goog-api-key": self.settings.gemini_api_key or ""},
                     json={
-                        "contents": [{"parts": [{"text": prompt}]}],
+                        "systemInstruction": {"parts": [{"text": system_prompt}]},
+                        "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
                         "generationConfig": {
                             "temperature": 0,
                             "responseMimeType": "application/json",
-                            "responseJsonSchema": type(candidate).model_json_schema(),
+                            "responseJsonSchema": output_schema,
                         },
                     },
                 )
@@ -179,7 +200,10 @@ class CloudModelRuntime:
                     headers={"Authorization": f"Bearer {self.settings.groq_api_key or ''}"},
                     json={
                         "model": selection.model,
-                        "messages": [{"role": "user", "content": prompt}],
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt},
+                        ],
                         "temperature": 0,
                         "response_format": {"type": "json_object"},
                     },
@@ -203,7 +227,8 @@ class CloudModelRuntime:
             self.attempts.append(info)
             if self.trace is not None:
                 self.trace.record(
-                    f"{role.value} cloud fallback", as_type="generation",
+                    f"{role.value} cloud {'primary' if self.primary else 'fallback'}",
+                    as_type="generation",
                     metadata=info.model_dump(mode="json"), level="ERROR",
                     status_message=error,
                 )
@@ -221,8 +246,14 @@ class CloudModelRuntime:
         self.attempts.append(info)
         if self.trace is not None:
             self.trace.record(
-                f"{role.value} cloud fallback", as_type="generation",
-                input={"prompt": prompt}, output={"response": raw}, model=selection.model,
-                metadata=info.model_dump(mode="json"), usage_details=usage,
+                f"{role.value} cloud {'primary' if self.primary else 'fallback'}",
+                as_type="generation",
+                input={"system_prompt": system_prompt, "user_prompt": user_prompt},
+                output={"response": raw}, model=selection.model,
+                metadata={
+                    **info.model_dump(mode="json"),
+                    "safe_context": safe_context.model_dump(mode="json"),
+                },
+                usage_details=usage,
             )
         return artifact, info

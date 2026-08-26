@@ -1,0 +1,121 @@
+{
+  "run_id": "apply-52d1a1f7-9992-445e-9ae7-bd0e7ab954a5",
+  "trace_id": "a6ce86fdffd8b1493da913ba4bdf2e38",
+  "langfuse_live": true,
+  "project_path": "/Users/johnbenjamincastrosanabria/Developer/calculadora-qa-demo",
+  "cloud_first": true,
+  "final_status": "HUMAN_REVIEW_REQUIRED",
+  "route_history": [
+    "Product",
+    "Architecture",
+    "Developer",
+    "HUMAN_REVIEW_REQUIRED"
+  ],
+  "iterations": 0,
+  "duration_seconds": 57.68946070799939,
+  "authorize_writes": false,
+  "action_mode": "APPLIED",
+  "changed_files": [
+    "calculadora/estadisticas.py",
+    "tests/test_mediana_par.py"
+  ],
+  "diff_summary": "Updated mediana function in calculadora/estadisticas.py to correctly handle even-length sequences by returning the average of the two central values; added tests/test_mediana_par.py with two test cases verifying median calculation for even-sized lists.",
+  "proposed_file_contents": {
+    "calculadora/estadisticas.py": "\"\"\"Estad\u00edstica descriptiva sobre secuencias de n\u00fameros.\n\nTodas las funciones rechazan la secuencia vac\u00eda en vez de devolver un valor\ninventado: no hay media de cero elementos, y devolver 0 ser\u00eda mentir.\n\"\"\"\n\nfrom __future__ import annotations\n\nfrom collections import Counter\nfrom collections.abc import Sequence\n\nNumero = int | float\n\n\ndef _validar(datos: Sequence[Numero]) -> None:\n    if not datos:\n        raise ValueError(\"La secuencia no puede estar vac\u00eda.\")\n\n\ndef media(datos: Sequence[Numero]) -> float:\n    \"\"\"Media aritm\u00e9tica de `datos`.\"\"\"\n    _validar(datos)\n    return sum(datos) / len(datos)\n\n\ndef mediana(datos: Sequence[Numero]) -> float:\n    \"\"\"Valor central de `datos` una vez ordenados.\n\n    Con una cantidad IMPAR de elementos es el elemento del medio. Con una\n    cantidad PAR es el promedio de los dos elementos centrales, porque en ese\n    caso no hay un \u00fanico centro.\n    \"\"\"\n    _validar(datos)\n    ordenados = sorted(datos)\n    n = len(ordenados)\n    medio = n // 2\n    if n % 2 == 1:\n        return ordenados[medio]\n    else:\n        return (ordenados[medio - 1] + ordenados[medio]) / 2\n\n\ndef moda(datos: Sequence[Numero]) -> Numero:\n    \"\"\"Valor m\u00e1s frecuente. Con empate devuelve el menor, por determinismo.\"\"\"\n    _validar(datos)\n    frecuencias = Counter(datos)\n    mayor = max(frecuencias.values())\n    return min(valor for valor, veces in frecuencias.items() if veces == mayor)\n\n\ndef rango(datos: Sequence[Numero]) -> Numero:\n    \"\"\"Diferencia entre el m\u00e1ximo y el m\u00ednimo.\"\"\"\n    _validar(datos)\n    return max(datos) - min(datos)\n",
+    "tests/test_mediana_par.py": "from calculadora.estadisticas import mediana\n\ndef test_mediana_par_1():\n    assert mediana([7, 8, 9, 10]) == 8.5\n\ndef test_mediana_par_2():\n    assert mediana([16, 22, 5, 34]) == 19.0\n"
+  },
+  "files_written": [],
+  "write_errors": [],
+  "applied_diff": "",
+  "review": null,
+  "model_usage": [
+    {
+      "agent": "Product",
+      "provider": "google",
+      "requested_model": "gemini-3.7-flash",
+      "actual_model": "gemini-3.7-flash",
+      "model_profile": "CLOUD_FALLBACK",
+      "fallback_used": true,
+      "fallback_reason": "CLOUD_FIRST",
+      "degraded": false,
+      "latency_ms": 27464,
+      "usage": {
+        "promptTokenCount": 882,
+        "candidatesTokenCount": 314,
+        "totalTokenCount": 1606,
+        "promptTokensDetails": [
+          {
+            "modality": "TEXT",
+            "tokenCount": 882
+          }
+        ],
+        "thoughtsTokenCount": 410,
+        "serviceTier": "standard"
+      },
+      "structured_output_success": true,
+      "error": null
+    },
+    {
+      "agent": "Architecture",
+      "provider": "google",
+      "requested_model": "gemini-3.7-flash",
+      "actual_model": null,
+      "model_profile": "CLOUD_FALLBACK",
+      "fallback_used": true,
+      "fallback_reason": "CLOUD_FIRST",
+      "degraded": true,
+      "latency_ms": 12936,
+      "usage": null,
+      "structured_output_success": false,
+      "error": "CLOUD_FALLBACK_UNAVAILABLE: HTTPStatusError"
+    },
+    {
+      "agent": "Architecture",
+      "provider": "ollama",
+      "requested_model": "qwen3.5:4b",
+      "actual_model": "qwen3.5:4b",
+      "model_profile": "FAST_MODEL",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "degraded": false,
+      "latency_ms": 9807,
+      "usage": {
+        "prompt_eval_count": 1021,
+        "eval_count": 125
+      },
+      "structured_output_success": true,
+      "error": null
+    },
+    {
+      "agent": "Developer",
+      "provider": "groq",
+      "requested_model": "openai/gpt-oss-120b",
+      "actual_model": "openai/gpt-oss-120b",
+      "model_profile": "CLOUD_FALLBACK",
+      "fallback_used": true,
+      "fallback_reason": "CLOUD_FIRST",
+      "degraded": false,
+      "latency_ms": 5323,
+      "usage": {
+        "queue_time": 0.182318481,
+        "prompt_tokens": 1655,
+        "prompt_time": 0.085102767,
+        "completion_tokens": 2149,
+        "completion_time": 4.502899683,
+        "total_tokens": 3804,
+        "total_time": 4.58800245,
+        "completion_tokens_details": {
+          "reasoning_tokens": 1437
+        }
+      },
+      "structured_output_success": true,
+      "error": null
+    }
+  ],
+  "errors": [
+    "LLM_AVAILABILITY_ERROR: CLOUD_FALLBACK_UNAVAILABLE: HTTPStatusError",
+    "TOOL_ERROR: destructive operation requires explicit authorization"
+  ],
+  "human_review_required": true,
+  "destructive_authorization_blocked": true
+}

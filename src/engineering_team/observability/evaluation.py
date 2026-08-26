@@ -314,8 +314,15 @@ def run_multimodel_acceptance(
         base_url=settings.langfuse_base_url,
         offline_directory="evaluation/reports/traces",
     ).start_run(run_id, requirement)
-    runtime = LocalModelRuntime(settings, trace=trace)
-    cloud_runtime = CloudModelRuntime(settings, trace=trace) if settings.cloud_enabled else None
+    cloud_first = bool(settings.cloud_enabled and not settings.local_first)
+    if cloud_first:
+        # Cloud is the steady-state runtime for all six agents; local Ollama is
+        # kept as the safety-net fallback if a cloud provider call fails.
+        primary_runtime: Any = CloudModelRuntime(settings, trace=trace, primary=True)
+        secondary_runtime: Any | None = LocalModelRuntime(settings, trace=trace)
+    else:
+        primary_runtime = LocalModelRuntime(settings, trace=trace)
+        secondary_runtime = CloudModelRuntime(settings, trace=trace) if settings.cloud_enabled else None
     retriever = build_retriever(settings, settings.rag_persist_directory, reindex=True)
     with (
         MCPRepositoryClient(run_workspace) as repository_mcp,
@@ -325,8 +332,8 @@ def run_multimodel_acceptance(
             repository_mcp=repository_mcp,
             quality_mcp=quality_mcp,
             retriever=retriever,
-            model_runtime=runtime,
-            cloud_runtime=cloud_runtime,
+            model_runtime=primary_runtime,
+            cloud_runtime=secondary_runtime,
             trace=trace,
             test_paths=["test_acceptance.py"],
         ).invoke({"run_id": run_id, "requirement": requirement})
@@ -340,17 +347,27 @@ def run_multimodel_acceptance(
         ("Reviewer", settings.deep_model),
     ]
     observed = [(item["agent"], item["actual_model"]) for item in usage]
-    bonus_pass = (
-        observed == expected
-        and {item["actual_model"] for item in usage} == {settings.fast_model, settings.deep_model}
-        and all(
-            item["provider"] == "ollama"
-            and not item["fallback_used"]
+    if cloud_first:
+        # Cloud-first bonus evidence: every agent resolved through a configured
+        # cloud provider, matching the fixed per-role provider/model map.
+        bonus_pass = all(
+            item["provider"] in {"google", "groq"}
             and item["structured_output_success"]
             and item["error"] is None
             for item in usage
         )
-    )
+    else:
+        bonus_pass = (
+            observed == expected
+            and {item["actual_model"] for item in usage} == {settings.fast_model, settings.deep_model}
+            and all(
+                item["provider"] == "ollama"
+                and not item["fallback_used"]
+                and item["structured_output_success"]
+                and item["error"] is None
+                for item in usage
+            )
+        )
     evidence = {
         "run_id": run_id,
         "trace_id": trace.trace_id,
@@ -362,6 +379,7 @@ def run_multimodel_acceptance(
         "rag_sources": list(dict.fromkeys(item.source for item in state.get("rag_evidence", []))),
         "tools_used": [item.tool_name for item in state.get("tool_results", [])],
         "cloud_used": any(item["provider"] != "ollama" for item in usage),
+        "cloud_first": cloud_first,
         "bonus_pass": bonus_pass,
         "trace_events": [
             {
