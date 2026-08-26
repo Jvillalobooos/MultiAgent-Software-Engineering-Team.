@@ -146,8 +146,8 @@ def test_third_rejected_cycle_stops_without_a_fourth_cycle():
     result = graph.invoke({"run_id": "max", "requirement": "bounded change"})
 
     assert result["iteration"] == 3
-    assert result["human_review_required"] is True
-    assert result["final_status"] == "HUMAN_REVIEW_REQUIRED"
+    assert result["human_review_required"] is False
+    assert result["final_status"] == "INCOMPLETE"
     assert reviewer.calls == 3
 
 
@@ -166,7 +166,7 @@ class CriticalSecurity(SecurityAgent):
         )
 
 
-def test_critical_security_routes_to_hitl_before_reviewer():
+def test_critical_security_finishes_incomplete_before_reviewer():
     reviewer = ScriptedReviewer([])
     graph = build_engineering_graph(
         agent_overrides={AgentRole.SECURITY: CriticalSecurity(), AgentRole.REVIEWER: reviewer}
@@ -174,8 +174,8 @@ def test_critical_security_routes_to_hitl_before_reviewer():
 
     result = graph.invoke({"run_id": "critical", "requirement": "change"})
 
-    assert result["route_history"][-1] == "security_hitl"
-    assert result["final_status"] == "HUMAN_REVIEW_REQUIRED"
+    assert result["route_history"][-1] == "INCOMPLETE"
+    assert result["final_status"] == "INCOMPLETE"
     assert reviewer.calls == 0
 
 
@@ -261,7 +261,7 @@ def test_required_repository_mcp_unavailable_is_recorded_and_cannot_approve(tmp_
 
     assert any(item.status is ToolStatus.UNAVAILABLE for item in result["tool_results"])
     assert any(item.code is ErrorCode.MCP_ERROR for item in result["errors"])
-    assert result["final_status"] == "HUMAN_REVIEW_REQUIRED"
+    assert result["final_status"] == "INCOMPLETE"
     assert result.get("review") is None
     assert any(event["name"] == "MCP_ERROR" for event in trace.events)
     assert not any(item.fallback_used for item in result["model_usage"])
@@ -294,6 +294,22 @@ def test_workflow_searches_and_reads_relevant_repository_files_for_developer(tmp
     assert "read_file" in [item.tool_name for item in developer_tools]
     assert result["implementation"].changed_files == ["app/transactions.py"]
     assert "transaction_history" in result["implementation"].diff
+
+
+def test_product_and_architecture_persist_decision_documents_in_run_workspace(tmp_path):
+    workspace = tmp_path / "run"
+    workspace.mkdir()
+
+    build_engineering_graph().invoke({
+        "run_id": "decision-documents",
+        "requirement": "allow a user to change their password safely",
+        "repository_context": {"workspace": str(workspace)},
+    })
+
+    product_document = workspace / "docs" / "decisions" / "product-specification.md"
+    architecture_document = workspace / "docs" / "decisions" / "architecture-decisions.md"
+    assert "allow a user to change their password safely" in product_document.read_text(encoding="utf-8")
+    assert "Decisions" in architecture_document.read_text(encoding="utf-8")
 
 
 def test_developer_never_uses_generated_trace_as_implementation_target(tmp_path):
@@ -529,7 +545,7 @@ def test_no_progress_skips_redundant_call_after_structural_frontier_is_exhausted
         })
 
     assert runtime.developer_calls == 2
-    assert result["final_status"] == "HUMAN_REVIEW_REQUIRED"
+    assert result["final_status"] == "INCOMPLETE"
     assert any(
         item.tool_name == "read_file" and item.input_summary == "path=app/service.py"
         for item in result["tool_results"]
@@ -565,7 +581,7 @@ def test_repeated_no_progress_skips_the_third_developer_model_call(tmp_path):
         })
 
     assert runtime.developer_calls == 2
-    assert result["final_status"] == "HUMAN_REVIEW_REQUIRED"
+    assert result["final_status"] == "INCOMPLETE"
 
 
 def test_graph_derives_applied_only_from_mcp_write_and_real_diff(tmp_path):
@@ -663,7 +679,7 @@ def test_unapplied_developer_fast_fails_without_security_testing_or_reviewer_wor
     assert testing.calls == 0
     assert reviewer.calls == 0
     assert result["iteration"] == 3
-    assert result["final_status"] == "HUMAN_REVIEW_REQUIRED"
+    assert result["final_status"] == "INCOMPLETE"
 
 
 def test_uninspected_developer_mutation_is_not_written_or_approved(tmp_path):
@@ -764,8 +780,8 @@ def test_local_failure_without_cloud_routes_to_terminal_hitl_instead_of_crashing
         {"run_id": "no-cloud", "requirement": "safe bounded change"}
     )
 
-    assert result["final_status"] == "HUMAN_REVIEW_REQUIRED"
-    assert result["route_history"] == ["Product", "HUMAN_REVIEW_REQUIRED"]
+    assert result["final_status"] == "INCOMPLETE"
+    assert result["route_history"] == ["Product", "INCOMPLETE"]
 
 
 def test_agent_timeout_is_preserved_in_workflow_and_langfuse():
@@ -774,7 +790,7 @@ def test_agent_timeout_is_preserved_in_workflow_and_langfuse():
         model_runtime=TimingOutLocalRuntime(), trace=trace
     ).invoke({"run_id": "agent-timeout", "requirement": "safe bounded change"})
 
-    assert result["final_status"] == "HUMAN_REVIEW_REQUIRED"
+    assert result["final_status"] == "INCOMPLETE"
     assert result["errors"][0].code is ErrorCode.AGENT_TIMEOUT
     assert result["model_usage"][0].error.startswith("AGENT_TIMEOUT")
     assert any(event["name"] == "AGENT_TIMEOUT" for event in trace.events)
@@ -791,7 +807,7 @@ def test_failed_cloud_attempt_preserves_budget_model_attempt_and_completed_evide
         model_runtime=FailingLocalRuntime(), cloud_runtime=cloud,
     ).invoke({"run_id": "cloud-fail", "requirement": "safe bounded change"})
 
-    assert result["final_status"] == "HUMAN_REVIEW_REQUIRED"
+    assert result["final_status"] == "INCOMPLETE"
     assert result["cloud_escalations_run"] == 1
     assert result["cloud_escalations_by_agent"] == {"Product": 1}
     assert result["model_usage"][-1].provider == "google"

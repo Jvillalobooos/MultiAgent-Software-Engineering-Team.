@@ -67,13 +67,13 @@ chmod +x run.sh
 
 The project must already be configured before running these scripts.
 
-Run against the current project directory, or select one explicitly; all
-automatic writes occur only in an isolated run copy:
+Run against `sample_app` by default, or select another project explicitly;
+all automatic writes occur only in an isolated run copy:
 
 ```powershell
 nova-team
 nova-team --project "C:\path\to\project"
-# Controlled demo target
+# Explicit bundled sample target (equivalent to the default)
 nova-team --project ".\sample_app"
 ```
 

@@ -21,7 +21,7 @@ def test_rejected_decision_routes_to_remediation_and_increments_cycle() -> None:
     assert review_route(decision, iteration=0) == "Developer"
 
 
-def test_third_failed_cycle_requires_human_review() -> None:
+def test_third_failed_cycle_finishes_incomplete() -> None:
     decision = ReviewerDecision(
         status=ReviewerStatus.REJECTED,
         score=40,
@@ -31,7 +31,7 @@ def test_third_failed_cycle_requires_human_review() -> None:
         return_to=RouteTarget.DEVELOPER,
         confidence=0.9,
     )
-    assert review_route(decision, iteration=3) == "HUMAN_REVIEW_REQUIRED"
+    assert review_route(decision, iteration=3) == "INCOMPLETE"
 
 
 def test_critical_security_always_routes_to_hitl() -> None:

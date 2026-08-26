@@ -24,3 +24,15 @@ def test_consumed_system_prompt_declares_role_boundaries_evidence_and_authority(
     assert "EVIDENCE TO PRESERVE:" in system
     assert "OUTPUT CONTRACT:" in system
     assert "NO ROUTING / NO MODEL SELECTION:" in system
+
+
+def test_developer_prompt_requires_mutations_for_a_viable_inspected_change() -> None:
+    state = EngineeringState(run_id="prompt", requirement="change a password safely")
+    candidate = ProductAgent().execute(build_context(AgentRole.PRODUCT, state, "Product"))
+    envelope = build_context(AgentRole.DEVELOPER, state, "Developer")
+
+    system, _ = LocalModelRuntime(Settings(_env_file=None))._prompts(
+        AgentRole.DEVELOPER, envelope, type(candidate), candidate.model_dump(mode="json")
+    )
+
+    assert "return one or more mutations" in system

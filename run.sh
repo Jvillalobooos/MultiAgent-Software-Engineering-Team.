@@ -8,7 +8,7 @@ if [ "${1-}" = "--help" ]; then
 fi
 
 PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
-CALLER_PROJECT=$(pwd -P)
+CALLER_PROJECT="$PROJECT_ROOT/sample_app"
 if [ "$#" -gt 0 ]; then
     if [ "$#" -eq 2 ] && [ "$1" = "--project" ]; then
         CALLER_PROJECT=$2

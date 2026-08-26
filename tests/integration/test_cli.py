@@ -20,7 +20,7 @@ def test_cli_accepts_requirement_and_reports_run_evidence(monkeypatch, tmp_path)
     assert result.exit_code == 0
     assert '"final_status": "APPROVED"' in result.stdout
     assert captured["requirement"] == "password recovery"
-    assert captured["project_target"] == Path.cwd().resolve()
+    assert captured["project_target"] == (Path(cli.__file__).resolve().parents[2] / "sample_app")
 
 
 def test_cli_uses_explicit_project_target(monkeypatch, tmp_path) -> None:

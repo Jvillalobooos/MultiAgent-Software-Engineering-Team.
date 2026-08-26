@@ -15,16 +15,16 @@ def review_route(decision: ReviewerDecision, iteration: int) -> str:
     if decision.status is ReviewerStatus.APPROVED:
         return "FinalReport"
     if iteration >= 3:
-        return "HUMAN_REVIEW_REQUIRED"
+        return "INCOMPLETE"
     if decision.return_to not in _ALLOWED_REJECTED_TARGETS:
-        return "HUMAN_REVIEW_REQUIRED"
+        return "INCOMPLETE"
     expected = (
         RouteTarget.ARCHITECTURE
         if decision.remediation_category is RemediationCategory.ARCHITECTURE
         else RouteTarget.DEVELOPER
     )
     if decision.remediation_category is None or decision.return_to is not expected:
-        return "HUMAN_REVIEW_REQUIRED"
+        return "INCOMPLETE"
     return decision.return_to.value
 
 

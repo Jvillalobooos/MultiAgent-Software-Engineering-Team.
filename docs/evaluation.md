@@ -66,23 +66,34 @@ weaken security status/severity/checklist, test status/failures, Reviewer
 status/return route, or remove required evidence. Contradictions consume the
 single repair allowance and then follow quality-error fallback/HITL policy.
 
-## Mandatory HITL routes
+## Interactive HITL route and autonomous outcomes
 
 ### Security CRITICAL
 
-Location: conditional edge immediately after Security. Trigger: highest
-severity `CRITICAL`, regardless of later evidence or cloud. Human intervention
-prevents automated approval of potentially catastrophic exposure. The human
-receives the sanitized requirement, validated finding, provenance, bounded
-diff/tool evidence and trace correlation. `RESUME` follows only the predefined
-validation path; `TERMINATE` leaves `HUMAN_REVIEW_REQUIRED`.
-The interactive graph uses a LangGraph checkpointer and `interrupt`; a later
-`Command(resume=...)` resumes the same `thread_id`.
+Location: conditional edge immediately after Security when the graph is built
+with `interactive_hitl=True`. Trigger: highest severity `CRITICAL`, regardless
+of later evidence or cloud. The human receives the sanitized requirement,
+validated finding, provenance, bounded diff/tool evidence and trace
+correlation. `RESUME` follows only the predefined validation path; `TERMINATE`
+leaves `HUMAN_REVIEW_REQUIRED`. The interactive graph uses a LangGraph
+checkpointer and `interrupt`; a later `Command(resume=...)` resumes the same
+`thread_id`. A normal non-interactive run records the same evidence and ends as
+`INCOMPLETE` instead of pausing.
 
 ### MAX_ITERATIONS=3
 
 Location: Reviewer conditional route. Trigger: the third rejected remediation
-cycle. Human intervention prevents an unbounded or self-approving loop. The
-human receives all three decisions, iteration history, latest validated stage
-summaries, tool/RAG evidence and safe errors. No fourth automated cycle exists;
-the same explicit `RESUME` or `TERMINATE` decision contract applies.
+cycle, an invalid remediation route, or another unrecoverable non-interactive
+workflow error. The run terminates as `INCOMPLETE`, preserving all decisions,
+iteration history, latest validated stage summaries, tool/RAG evidence and
+safe errors in its final report. No fourth automated cycle exists.
+
+## Run decision documents
+
+For a normal run, `sample_app` is the default target unless `--project` names
+another directory. Product writes `docs/decisions/product-specification.md` and
+Architecture writes `docs/decisions/architecture-decisions.md` inside the
+isolated run workspace. Developer writes only through Repository MCP and only
+after inspecting a safe workspace path. `APPROVED` means the changes were
+applied and validated; `INCOMPLETE` means the report contains diagnostics for a
+new attempt.

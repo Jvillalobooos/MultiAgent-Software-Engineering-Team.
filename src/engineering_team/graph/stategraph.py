@@ -27,6 +27,10 @@ from engineering_team.contracts.enums import (
 from engineering_team.contracts.models import FinalReport, ReviewerDecision, WorkflowError
 from engineering_team.contracts.state import EngineeringState
 from engineering_team.models.context import build_context
+from engineering_team.workspace.decision_documents import (
+    write_architecture_decisions,
+    write_product_specification,
+)
 
 from .routers import review_route, security_route
 
@@ -170,7 +174,11 @@ def _report(state: EngineeringState, status: str) -> FinalReport:
         models_used=[item.actual_model or item.requested_model for item in state.model_usage],
         errors_degradations=[f"{item.code.value}: {item.detail}" for item in state.errors],
         trace_id=state.trace_id or state.run_id,
-        next_action="none" if status == "APPROVED" else "human review",
+        next_action=(
+            "none"
+            if status == "APPROVED"
+            else "review diagnostics and refine the requirement before a new run"
+        ),
     )
 
 
@@ -583,6 +591,22 @@ def build_engineering_graph(
                         }
             else:
                 output = candidate
+            decision_document_failed = False
+            workspace = current.repository_context.get("workspace")
+            if workspace and role in {AgentRole.PRODUCT, AgentRole.ARCHITECTURE}:
+                try:
+                    if role is AgentRole.PRODUCT:
+                        write_product_specification(workspace, current.requirement, output)
+                    else:
+                        write_architecture_decisions(workspace, current.requirement, output)
+                except OSError as exc:
+                    errors.append(WorkflowError(
+                        code=ErrorCode.TOOL_ERROR,
+                        source_stage=role.value,
+                        retryable=False,
+                        detail=f"decision document write failed: {exc}",
+                    ))
+                    decision_document_failed = True
             if role is AgentRole.DEVELOPER:
                 output = apply_mutations(output, role, repository_mcp, tool_results, errors)
             if role is AgentRole.TESTING:
@@ -631,6 +655,8 @@ def build_engineering_graph(
                 "model_usage": model_usage,
                 "trace_id": trace.trace_id if trace is not None else current.trace_id,
             }
+            if decision_document_failed:
+                patch["human_review_required"] = True
             if role is AgentRole.DEVELOPER:
                 repository_context = dict(current.repository_context)
                 if output.action_mode is ActionMode.APPLIED:
@@ -667,7 +693,7 @@ def build_engineering_graph(
     def developer_next(raw_state: dict[str, Any]) -> str:
         state = EngineeringState.model_validate(raw_state)
         if state.human_review_required:
-            route = "HUMAN_REVIEW_REQUIRED"
+            route = "INCOMPLETE"
             if trace is not None:
                 trace.record("route", metadata={"from": "Developer", "to": route})
             return route
@@ -691,24 +717,26 @@ def build_engineering_graph(
     def security_next(raw_state: dict[str, Any]) -> str:
         state = EngineeringState.model_validate(raw_state)
         if state.human_review_required:
-            return "HUMAN_REVIEW_REQUIRED"
+            return "INCOMPLETE"
         route = security_route(state.security_review.highest_severity)
+        if route == "security_hitl" and not interactive_hitl:
+            route = "INCOMPLETE"
         if trace is not None:
             trace.record("route", metadata={"from": "Security", "to": route})
         return route
 
     def next_or_human(raw_state: dict[str, Any], normal: str) -> str:
         state = EngineeringState.model_validate(raw_state)
-        return "HUMAN_REVIEW_REQUIRED" if state.human_review_required else normal
+        return "INCOMPLETE" if state.human_review_required else normal
 
     def reviewer_next(raw_state: dict[str, Any]) -> str:
         state = EngineeringState.model_validate(raw_state)
         if state.human_review_required:
-            return "HUMAN_REVIEW_REQUIRED"
+            return "INCOMPLETE"
         route = review_route(state.review, state.iteration)
         if trace is not None:
             trace.record(
-                "remediation route" if route not in {"FinalReport", "HUMAN_REVIEW_REQUIRED"} else "route",
+                "remediation route" if route not in {"FinalReport", "INCOMPLETE"} else "route",
                 metadata={"from": "Reviewer", "to": route, "iteration": state.iteration},
             )
         return route
@@ -721,6 +749,19 @@ def build_engineering_graph(
         return {
             "route_history": [*state.route_history, "FinalReport"],
             "final_status": "APPROVED", "final_report": report,
+        }
+
+    def incomplete_node(raw_state: dict[str, Any]) -> dict[str, Any]:
+        state = EngineeringState.model_validate(raw_state)
+        report = _report(state, "INCOMPLETE")
+        if trace is not None:
+            trace.record("INCOMPLETE", metadata={"iteration": state.iteration})
+            trace.finish(report.model_dump(mode="json"))
+        return {
+            "route_history": [*state.route_history, "INCOMPLETE"],
+            "human_review_required": False,
+            "final_status": "INCOMPLETE",
+            "final_report": report,
         }
 
     def human_node(raw_state: dict[str, Any], name: str = "HUMAN_REVIEW_REQUIRED") -> dict[str, Any]:
@@ -754,34 +795,36 @@ def build_engineering_graph(
         }
 
     graph.add_node("FinalReport", final_node)
+    graph.add_node("INCOMPLETE", incomplete_node)
     graph.add_node("HUMAN_REVIEW_REQUIRED", human_node)
     graph.add_node("security_hitl", lambda state: human_node(state, "security_hitl"))
     graph.add_edge(START, "Product")
     graph.add_conditional_edges(
         "Product", lambda state: next_or_human(state, "Architecture"),
-        {"Architecture": "Architecture", "HUMAN_REVIEW_REQUIRED": "HUMAN_REVIEW_REQUIRED"},
+        {"Architecture": "Architecture", "INCOMPLETE": "INCOMPLETE"},
     )
     graph.add_conditional_edges(
         "Architecture", lambda state: next_or_human(state, "Developer"),
-        {"Developer": "Developer", "HUMAN_REVIEW_REQUIRED": "HUMAN_REVIEW_REQUIRED"},
+        {"Developer": "Developer", "INCOMPLETE": "INCOMPLETE"},
     )
     graph.add_conditional_edges(
         "Developer", developer_next,
-        {"Security": "Security", "Testing": "Testing", "Reviewer": "Reviewer", "HUMAN_REVIEW_REQUIRED": "HUMAN_REVIEW_REQUIRED"},
+        {"Security": "Security", "Testing": "Testing", "Reviewer": "Reviewer", "INCOMPLETE": "INCOMPLETE"},
     )
     graph.add_conditional_edges(
         "Security", security_next,
-        {"Testing": "Testing", "security_hitl": "security_hitl", "HUMAN_REVIEW_REQUIRED": "HUMAN_REVIEW_REQUIRED"},
+        {"Testing": "Testing", "security_hitl": "security_hitl", "INCOMPLETE": "INCOMPLETE"},
     )
     graph.add_conditional_edges(
         "Testing", lambda state: next_or_human(state, "Reviewer"),
-        {"Reviewer": "Reviewer", "HUMAN_REVIEW_REQUIRED": "HUMAN_REVIEW_REQUIRED"},
+        {"Reviewer": "Reviewer", "INCOMPLETE": "INCOMPLETE"},
     )
     graph.add_conditional_edges(
         "Reviewer", reviewer_next,
-        {"FinalReport": "FinalReport", "Architecture": "Architecture", "Developer": "Developer", "HUMAN_REVIEW_REQUIRED": "HUMAN_REVIEW_REQUIRED"},
+        {"FinalReport": "FinalReport", "Architecture": "Architecture", "Developer": "Developer", "INCOMPLETE": "INCOMPLETE"},
     )
     graph.add_edge("FinalReport", END)
+    graph.add_edge("INCOMPLETE", END)
     if interactive_hitl:
         def hitl_next(raw_state: dict[str, Any], resume_target: str) -> str:
             state = EngineeringState.model_validate(raw_state)

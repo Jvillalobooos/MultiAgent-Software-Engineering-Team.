@@ -159,7 +159,7 @@ def test_semantic_guard_rejects_invented_source_and_material_developer_change() 
     assert not _preserves_governed_facts(implementation.model_dump(mode="json"), fabricated)
 
 
-def test_developer_prompt_explicitly_allows_only_bounded_mutations() -> None:
+def test_developer_prompt_requires_bounded_mutations_for_a_viable_change() -> None:
     candidate = ImplementationResult(
         action_mode=ActionMode.PROPOSED, changed_files=["app/email.py"],
         diff="PROPOSED\n+ change", evidence=["mcp://repository/read_file#app/email.py"],
@@ -174,7 +174,7 @@ def test_developer_prompt_explicitly_allows_only_bounded_mutations() -> None:
 
     _, prompt = runtime._prompts(AgentRole.DEVELOPER, envelope, type(candidate), candidate.model_dump(mode="json"))
 
-    assert "MAY populate mutations" in prompt
+    assert "When inspected evidence supports a viable change, return one or more mutations" in prompt
     assert "Copy every candidate key and value exactly" not in prompt
 
 

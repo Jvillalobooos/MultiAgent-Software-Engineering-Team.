@@ -21,17 +21,14 @@ def run(
     report_path: Annotated[Path, typer.Option(help="Sanitized evidence output")] = Path(
         "evaluation/reports/cli-run.json"
     ),
-    project: Annotated[Path | None, typer.Option(help="Target project; defaults to the caller directory")] = None,
+    project: Annotated[Path | None, typer.Option(help="Target project; defaults to the bundled sample app")] = None,
 ) -> None:
     """Execute a complete local-first run with real configured Ollama models."""
-    target = (project or Path.cwd()).resolve()
+    project_root = Path(__file__).resolve().parents[2]
+    target = (project or project_root / "sample_app").resolve()
     if not target.is_dir():
         raise typer.BadParameter("project must be an existing directory", param_hint="--project")
     typer.echo(f"Target project: {target}")
-    if target == Path(__file__).resolve().parents[2]:
-        typer.echo(
-            "Target is the engineering-team engine itself. Use --project <path> to work on a different application."
-        )
 
     def progress(role, iteration):
         suffix = f"[cycle {iteration}] " if iteration else ""

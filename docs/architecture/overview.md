@@ -21,6 +21,10 @@ Workspaces are copied to `workspace/runs/<run_id>` and Repository MCP resolves
 every path beneath that copy. Cloud remains a sanitized, bounded contingency,
 not an orchestrator or multi-model substitute.
 
+La propuesta de evolución para ejecutar por defecto sobre `sample_app`,
+persistir decisiones de Product y Architecture, y emitir resultados autónomos
+está documentada en [Ejecuciones autónomas sobre Sample App](sample-app-autonomous-outcomes.md).
+
 RAG ingestion uses LangChain Document and RecursiveCharacterTextSplitter as a
 small integration layer before Sentence Transformers and persistent Chroma.
 Tool execution crosses the official MCP stdio protocol through

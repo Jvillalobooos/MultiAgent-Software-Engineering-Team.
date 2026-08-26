@@ -51,6 +51,7 @@ class RouteTarget(StrEnum):
     ARCHITECTURE = "Architecture"
     DEVELOPER = "Developer"
     TESTING = "Testing"
+    INCOMPLETE = "INCOMPLETE"
     HUMAN_REVIEW_REQUIRED = "HUMAN_REVIEW_REQUIRED"
 
 

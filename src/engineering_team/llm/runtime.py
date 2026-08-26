@@ -260,8 +260,9 @@ class LocalModelRuntime:
         candidate_instruction = "Copy every candidate key and value exactly; do not omit schema-optional keys."
         if role is AgentRole.DEVELOPER:
             candidate_instruction = (
-                "Return only mutations and no_mutation_reason. You MAY populate mutations (at most two) "
-                "for inspected paths with complete bounded content; otherwise return an empty list."
+                "Return only mutations and no_mutation_reason. When inspected evidence supports a viable "
+                "change, return one or more mutations (at most two) for inspected paths with complete "
+                "bounded content; otherwise return an empty list with a no_mutation_reason."
             )
         elif role is AgentRole.TESTING:
             candidate_instruction = (

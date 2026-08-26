@@ -18,7 +18,7 @@ if ($LauncherArguments -contains "--help") {
 }
 
 $projectRoot = (Resolve-Path (Split-Path -Parent $MyInvocation.MyCommand.Path)).Path
-$targetProject = (Get-Location).Path
+$targetProject = Join-Path $projectRoot "sample_app"
 if ($LauncherArguments.Count -gt 0) {
     if ($LauncherArguments.Count -eq 2 -and $LauncherArguments[0] -eq "--project") {
         $targetProject = $LauncherArguments[1]
