@@ -1,10 +1,9 @@
 import pytest
 
 from engineering_team.agents.product import ProductAgent
-from engineering_team.config import Settings
 from engineering_team.contracts.enums import AgentRole
 from engineering_team.contracts.state import EngineeringState
-from engineering_team.llm.runtime import LocalModelRuntime
+from engineering_team.llm.prompting import build_role_prompts
 from engineering_team.models.context import build_context
 
 
@@ -14,7 +13,7 @@ def test_consumed_system_prompt_declares_role_boundaries_evidence_and_authority(
     candidate = ProductAgent().execute(build_context(AgentRole.PRODUCT, state, "Product"))
     envelope = build_context(role, state, role.value)
 
-    system, _ = LocalModelRuntime(Settings(_env_file=None))._prompts(
+    system, _ = build_role_prompts(
         role, envelope, type(candidate), candidate.model_dump(mode="json")
     )
 

@@ -18,16 +18,6 @@ if ($LauncherArguments -contains "--help") {
 }
 
 $projectRoot = (Resolve-Path (Split-Path -Parent $MyInvocation.MyCommand.Path)).Path
-$targetProject = (Get-Location).Path
-if ($LauncherArguments.Count -gt 0) {
-    if ($LauncherArguments.Count -eq 2 -and $LauncherArguments[0] -eq "--project") {
-        $targetProject = $LauncherArguments[1]
-    }
-    else {
-        Write-Error "Usage: .\run.ps1 [--project <path>]"
-        exit 1
-    }
-}
 $python = Join-Path $projectRoot ".venv\Scripts\python.exe"
 
 if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
@@ -38,7 +28,7 @@ if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
 
 function Test-Ollama {
     try {
-        $response = Invoke-WebRequest -Uri "http://localhost:11434/api/tags" -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+        $response = Invoke-WebRequest -Uri "http://localhost:11434/api/tags" -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
         return $response.StatusCode -ge 200 -and $response.StatusCode -lt 300
     }
     catch {
@@ -54,7 +44,7 @@ if (-not (Test-Ollama)) {
     }
 
     Start-Process -FilePath $ollama.Source -ArgumentList "serve" -WindowStyle Hidden
-    Start-Sleep -Seconds 5
+    Start-Sleep -Seconds 3
     if (-not (Test-Ollama)) {
         Write-Error "Ollama did not respond at http://localhost:11434."
         exit 1
@@ -77,7 +67,7 @@ Write-Host "Starting engineering team..."
 
 Push-Location $projectRoot
 try {
-    & $python -m engineering_team.cli run $requirement --project $targetProject
+    & $python -m engineering_team.cli run $requirement
     $exitCode = $LASTEXITCODE
 }
 finally {

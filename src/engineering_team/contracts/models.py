@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -44,12 +44,6 @@ class ArchitectureProposal(StrictModel):
     evidence_references: list[str] = Field(default_factory=list)
 
 
-class FileMutation(StrictModel):
-    path: str
-    operation: Literal["create", "update"]
-    content: str = Field(min_length=1)
-
-
 class ImplementationResult(StrictModel):
     action_mode: ActionMode
     changed_files: list[str]
@@ -57,7 +51,7 @@ class ImplementationResult(StrictModel):
     evidence: list[str]
     validation_result: str
     security_surface_changed: bool = False
-    mutations: list[FileMutation] = Field(default_factory=list)
+    file_contents: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def require_detailed_proposal_or_justified_noop(self) -> "ImplementationResult":
@@ -116,7 +110,6 @@ class TestResult(StrictModel):
     failures: list[str]
     coverage_mapping: dict[str, list[str]]
     evidence_references: list[str]
-    test_mutations: list[FileMutation] = Field(default_factory=list)
 
 
 class ReviewerDecision(StrictModel):

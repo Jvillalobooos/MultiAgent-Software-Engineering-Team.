@@ -11,42 +11,34 @@ from .base import AgentBase
 
 class DeveloperAgent(AgentBase[ImplementationResult]):
     role = "Developer"
-    _MAX_EDITABLE_SOURCE_CHARS = 4_000
-    _GENERATED_PARTS: ClassVar[set[str]] = {
-        "workspace", "evaluation", "traces", "rag", "chroma", "__pycache__",
-        ".pytest_cache", ".ruff_cache", ".git", ".venv", "node_modules",
-        "dist", "build", "coverage", "htmlcov",
-    }
-    _SOURCE_SUFFIXES: ClassVar[set[str]] = {
-        ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".go", ".rs", ".rb",
-        ".php", ".cs", ".c", ".h", ".cpp", ".hpp", ".swift", ".kt", ".kts",
-        ".scala", ".vue", ".svelte",
-    }
-    _PROJECT_FILES: ClassVar[set[str]] = {
-        "pyproject.toml", "package.json", "tsconfig.json", "cargo.toml", "go.mod",
-        "pom.xml", "build.gradle", "build.gradle.kts", "composer.json", "gemfile",
-    }
-    # Generic package/index markers that carry little standalone information.
-    # Weak signal only: real structural evidence always outranks this penalty.
-    _LOW_INFO_STEMS: ClassVar[set[str]] = {"__init__", "index", "mod", "package-info"}
-    # Generic cross-language architecture-role tokens used only as a weak scoring
-    # signal; never required and never sufficient on their own.
-    _ROLE_HINTS: ClassVar[set[str]] = {
-        "service", "controller", "domain", "repository", "handler",
-        "usecase", "manager", "logic", "model",
-    }
-    _IMPORT_PATTERNS: ClassVar[tuple[re.Pattern[str], ...]] = (
-        re.compile(r"(?m)^\s*from\s+([.\w]+)\s+import\b"),
-        re.compile(r"(?m)^\s*import\s+(?:static\s+)?([.\w]+)\s*;?"),
-        re.compile(r"""import\s+(?:[\w*{}\s,]+\s+from\s+)?['"]([^'"]+)['"]"""),
-        re.compile(r"""require\(\s*['"]([^'"]+)['"]\s*\)"""),
-    )
 
     _STOP_WORDS: ClassVar[set[str]] = {
         "after", "allow", "authorized", "belonging", "bounded", "change",
         "exactly", "from", "latest", "only", "provide", "return", "safe",
         "that", "their", "this", "using", "with",
     }
+
+    _TARGET_EXTENSIONS: ClassVar[set[str]] = {
+        "py", "ts", "tsx", "js", "jsx", "java", "go", "rb", "md", "json",
+        "yaml", "yml", "toml", "txt", "cfg", "ini", "sql", "html", "css",
+        "c", "cpp", "h", "hpp", "rs", "kt", "swift",
+    }
+
+    @classmethod
+    def requested_targets(cls, requirement: str) -> list[str]:
+        """File paths the requirement text explicitly names, in order of first mention.
+
+        Used only when the caller opts into apply mode — a deterministic,
+        auditable way to decide *which* files may be written, independent of
+        whatever the LLM later proposes as content.
+        """
+        targets: list[str] = []
+        for token in re.findall(r"[A-Za-z0-9_][A-Za-z0-9_./-]*\.[A-Za-z]+", requirement):
+            cleaned = token.rstrip(".,;:()")
+            extension = cleaned.rsplit(".", 1)[-1].lower()
+            if extension in cls._TARGET_EXTENSIONS and cls._safe_path(cleaned):
+                targets.append(cleaned)
+        return list(dict.fromkeys(targets))
 
     @classmethod
     def relevance_terms(cls, specification: Any, architecture: Any, requirement: str) -> list[str]:
@@ -65,40 +57,18 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
                 terms.append(normalized)
         return list(dict.fromkeys(terms))
 
-    @classmethod
-    def rank_paths(
-        cls,
-        paths: list[str],
-        search_hits: list[str],
-        terms: list[str],
-        structural_boost: set[str] | None = None,
-    ) -> list[str]:
-        """Deterministically order candidates: structural evidence first, then
-        search/requirement signals, then weak generic role hints. Information
-        value -- never file length -- breaks ties, so a short package marker
-        cannot outrank a real implementation module."""
-        structural_boost = structural_boost or set()
+    @staticmethod
+    def rank_paths(paths: list[str], search_hits: list[str], terms: list[str]) -> list[str]:
         hit_counts = {path: search_hits.count(path) for path in paths}
 
-        def score(path: str) -> int:
+        def score(path: str) -> tuple[int, int, str]:
             folded = path.casefold()
-            stem = PurePosixPath(path).stem.casefold()
             term_score = sum(term in folded for term in terms)
             source_score = hit_counts[path]
             code_score = 1 if PurePosixPath(path).suffix in {".py", ".js", ".ts", ".java"} else 0
-            role_score = 1 if any(hint in stem for hint in cls._ROLE_HINTS) else 0
-            low_info_penalty = 1 if stem in cls._LOW_INFO_STEMS else 0
-            structural_score = 5 if path in structural_boost else 0
-            return (
-                structural_score * 20
-                + source_score * 10
-                + term_score * 4
-                + role_score
-                - low_info_penalty * 3
-                + code_score
-            )
+            return (source_score * 10 + term_score * 4 + code_score, -len(path), path)
 
-        return sorted(paths, key=lambda path: (-score(path), path))
+        return sorted(paths, key=score, reverse=True)
 
     @staticmethod
     def _safe_path(path: str) -> bool:
@@ -111,108 +81,6 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
             and "__pycache__" not in candidate.parts
         )
 
-    @classmethod
-    def is_implementation_candidate(cls, path: str) -> bool:
-        """Separate sandbox-safe paths from files suitable for a bounded code change."""
-        if not cls._safe_path(path):
-            return False
-        candidate = PurePosixPath(path.replace("\\", "/"))
-        parts = {part.casefold() for part in candidate.parts}
-        if parts & cls._GENERATED_PARTS:
-            return False
-        return candidate.suffix.casefold() in cls._SOURCE_SUFFIXES or candidate.name.casefold() in cls._PROJECT_FILES
-
-    @classmethod
-    def structural_references(
-        cls, content: str, source_path: str, candidate_paths: list[str]
-    ) -> list[str]:
-        """Return repository-local candidates that source_path's imports/references
-        point to, using a bounded conservative heuristic (no compiler/parser).
-
-        Supports common relative/absolute import syntaxes (Python, JS/TS, Java-like
-        dotted imports) and falls back to filename/basename matching when the exact
-        syntax is not recognized. Only ever returns paths already present in
-        candidate_paths, so it can never surface a generated, sandbox-unsafe, or
-        otherwise disqualified path.
-        """
-        candidates = set(candidate_paths)
-        raw_refs: list[str] = []
-        for pattern in cls._IMPORT_PATTERNS:
-            raw_refs.extend(pattern.findall(content))
-        references: list[str] = []
-        seen: set[str] = set()
-        for raw in raw_refs:
-            resolved = cls._resolve_reference(raw, source_path, candidates)
-            if resolved and resolved != source_path and resolved not in seen:
-                seen.add(resolved)
-                references.append(resolved)
-        return references
-
-    @classmethod
-    def _resolve_reference(cls, raw: str, source_path: str, candidates: set[str]) -> str | None:
-        ref = raw.strip()
-        if not ref:
-            return None
-        source_dir = PurePosixPath(source_path).parent
-        if ref.startswith(("./", "../")):
-            directory = source_dir
-            remainder = ref
-            while remainder.startswith("../"):
-                directory = directory.parent
-                remainder = remainder[3:]
-            remainder = remainder.removeprefix("./")
-            base = directory / remainder if remainder else directory
-            return cls._match_basename(base, candidates)
-        if ref.startswith("."):
-            dots = len(ref) - len(ref.lstrip("."))
-            module = ref[dots:]
-            directory = source_dir
-            for _ in range(dots - 1):
-                directory = directory.parent
-            parts = [part for part in module.split(".") if part]
-            base = directory
-            for part in parts:
-                base = base / part
-            return cls._match_basename(base, candidates)
-        parts = [part for part in ref.replace("/", ".").split(".") if part]
-        if not parts:
-            return None
-        match = cls._match_basename(PurePosixPath(*parts), candidates)
-        if match:
-            return match
-        # Dotted package path (e.g. Java-like) with an unknown source root:
-        # fall back to matching the referenced class/module name by basename.
-        # Fail closed on ambiguity -- a tail match is only trustworthy when it
-        # is the single candidate; two same-named classes in different
-        # packages must not be resolved by set-iteration order.
-        tail = parts[-1]
-        tail_matches = {
-            candidate for candidate in candidates
-            if PurePosixPath(candidate).stem == tail
-            and PurePosixPath(candidate).stem.casefold() not in cls._LOW_INFO_STEMS
-        }
-        return next(iter(tail_matches)) if len(tail_matches) == 1 else None
-
-    @classmethod
-    def _match_basename(cls, base: PurePosixPath, candidates: set[str]) -> str | None:
-        base_str = base.as_posix().lstrip("/")
-        if base_str in candidates:
-            return base_str
-        # Collect every suffix/marker variant that exists before deciding: if
-        # more than one distinct file could satisfy the same logical
-        # reference (e.g. foo.js and foo.ts both present), that is ambiguous
-        # and must fail closed rather than pick by set-iteration order.
-        matches: set[str] = set()
-        for suffix in cls._SOURCE_SUFFIXES:
-            direct = f"{base_str}{suffix}"
-            if direct in candidates:
-                matches.add(direct)
-            for marker in ("__init__", "index", "mod"):
-                nested = f"{base_str}/{marker}{suffix}"
-                if nested in candidates:
-                    matches.add(nested)
-        return next(iter(matches)) if len(matches) == 1 else None
-
     @staticmethod
     def _symbols(content: str) -> list[str]:
         patterns = (
@@ -222,6 +90,65 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
         symbols = [match for pattern in patterns for match in re.findall(pattern, content)]
         return list(dict.fromkeys(symbols))[:6]
 
+    def _apply_candidate(
+        self,
+        requested: list[str],
+        repository_results: list[Any],
+        specification: Any,
+        architecture: Any,
+        envelope: ContextEnvelope,
+    ) -> ImplementationResult:
+        """Deterministic APPLY-mode candidate: decide *which* files change and why.
+
+        The LLM elaborates *what* to write (real file content) — see
+        ``_preserves_governed_facts`` in ``llm/runtime.py``, which only governs
+        this structural decision (changed_files/evidence/security signal), not
+        the code text itself.
+        """
+        evidence = list(dict.fromkeys(
+            (
+                f"{item.evidence_reference}#{item.input_summary[5:]}"
+                if item.evidence_reference
+                and item.tool_name in {"read_file", "get_file_content"}
+                and item.input_summary.startswith("path=")
+                else item.evidence_reference or f"repository:{item.tool_name}"
+            )
+            for item in repository_results
+            if item.status is ToolStatus.SUCCESS
+        )) or [f"requirement:target:{path}" for path in requested]
+        objective = getattr(specification, "objective", envelope.current_task)
+        apis = ", ".join(getattr(architecture, "apis", [])) or "no API change declared"
+        data_changes = (
+            ", ".join(getattr(architecture, "data_changes", []))
+            or "no data change declared"
+        )
+        security_terms = " ".join((
+            getattr(specification, "source_requirement", ""),
+            apis,
+            data_changes,
+            " ".join(getattr(architecture, "risks", [])),
+            str(envelope.state_projection.get("requirement", "")),
+        )).lower()
+        return ImplementationResult(
+            action_mode=ActionMode.APPLIED,
+            changed_files=requested,
+            diff=(
+                "APPLY REQUESTED: author complete replacement content for each path in "
+                f"changed_files honoring the requirement. Objective: {objective}."
+            ),
+            evidence=evidence,
+            validation_result=(
+                "APPLY validation strategy: write file_contents via Repository MCP, then "
+                "run_build/run_linter/run_tests against the target project before Reviewer "
+                "sign-off."
+            ),
+            security_surface_changed=any(
+                term in security_terms
+                for term in ("api", "auth", "owner", "security", "token", "password", "idor")
+            ),
+            file_contents={},
+        )
+
     def execute(self, envelope: ContextEnvelope) -> ImplementationResult:
         specification = envelope.state_projection.get("specification")
         architecture = envelope.state_projection.get("architecture")
@@ -229,6 +156,15 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
             item for item in envelope.tool_results
             if item.tool_name in {"list_files", "read_file", "search_code", "get_file_content"}
         ]
+        repository_context = envelope.state_projection.get("repository_context") or {}
+        if repository_context.get("apply_changes"):
+            requested = self.requested_targets(
+                str(envelope.state_projection.get("requirement", ""))
+            )
+            if requested:
+                return self._apply_candidate(
+                    requested, repository_results, specification, architecture, envelope
+                )
         listed_paths: list[str] = []
         search_hits: list[str] = []
         inspected_content: dict[str, str] = {}
@@ -249,30 +185,14 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
                     path = item.input_summary[len(prefix):].replace("\\", "/")
                     if self._safe_path(path):
                         inspected_content[path] = item.output_summary
-        safe_listed = list(dict.fromkeys(
-            path for path in listed_paths if self.is_implementation_candidate(path)
-        ))
+        safe_listed = list(dict.fromkeys(path for path in listed_paths if self._safe_path(path)))
         terms = self.relevance_terms(
             specification, architecture, str(envelope.state_projection.get("requirement", ""))
         )
-        structural_boost: set[str] = set()
-        for src_path, content in inspected_content.items():
-            structural_boost.update(
-                self.structural_references(content, src_path, safe_listed + list(inspected_content))
-            )
-        ranked_paths = self.rank_paths(safe_listed, search_hits, terms, structural_boost=structural_boost)
-        inspected_paths = [
-            path for path in ranked_paths
-            if path in inspected_content and len(inspected_content[path]) <= self._MAX_EDITABLE_SOURCE_CHARS
-        ]
-        search_hit_paths = set(search_hits)
-        relevant_inspected = [
-            path for path in inspected_paths
-            if path in search_hit_paths
-            or any(term in path.casefold() or term in inspected_content[path].casefold() for term in terms)
-        ]
-        if relevant_inspected:
-            inspected_paths = relevant_inspected
+        ranked_paths = self.rank_paths(safe_listed, search_hits, terms)
+        inspected_paths = [path for path in ranked_paths if path in inspected_content]
+        if search_hits:
+            inspected_paths = [path for path in inspected_paths if path in set(search_hits)]
         evidence = list(dict.fromkeys(
             (
                 f"{item.evidence_reference}#{item.input_summary[5:]}"
@@ -307,7 +227,7 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
         )
         decisions = "; ".join(getattr(architecture, "decisions", [])) or "preserve design"
         objective = getattr(specification, "objective", envelope.current_task)
-        changed_files = inspected_paths[:2]
+        changed_files = inspected_paths[:4]
         proposal = [
             "PROPOSED TECHNICAL CHANGE",
             f"Objective: {objective}",

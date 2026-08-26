@@ -65,7 +65,7 @@ _TOOLS: dict[AgentRole, set[str]] = {
     AgentRole.ARCHITECTURE: {"list_files", "read_file", "search_code", "get_file_content"},
     AgentRole.DEVELOPER: {"list_files", "read_file", "search_code", "get_file_content", "create_file", "update_file", "get_diff", "run_build", "get_build_status", "run_linter"},
     AgentRole.SECURITY: {"scan_dependencies", "run_security_scan", "get_security_report"},
-    AgentRole.TESTING: {"create_file", "update_file", "run_tests", "get_test_results", "run_build", "get_build_status", "run_linter"},
+    AgentRole.TESTING: {"run_tests", "get_test_results", "run_build", "get_build_status", "run_linter"},
 }
 
 
@@ -82,16 +82,11 @@ def build_context(
     serialized = json.dumps(projection, default=str, sort_keys=True)
     relevant_domains = _RAG_DOMAINS.get(agent, set())
     rag_evidence = [item for item in state.rag_evidence if item.domain in relevant_domains]
-    if agent is AgentRole.REVIEWER:
-        latest_by_tool: dict[str, ToolResult] = {}
-        for item in state.tool_results:
-            latest_by_tool[item.tool_name] = item
-        tool_results = [
-            item.model_copy(update={"output_summary": item.output_summary[:600]})
-            for item in latest_by_tool.values()
-        ]
-    else:
-        tool_results = [item for item in state.tool_results if item.tool_name in _TOOLS.get(agent, set())]
+    tool_results = (
+        list(state.tool_results)
+        if agent is AgentRole.REVIEWER
+        else [item for item in state.tool_results if item.tool_name in _TOOLS.get(agent, set())]
+    )
     return ContextEnvelope(
         agent=agent,
         current_task=current_task,

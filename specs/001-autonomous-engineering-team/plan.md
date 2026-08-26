@@ -359,28 +359,6 @@ deterministic evidence. It rejects `.env`, API keys, secret values, complete
 repository snapshots, complete EngineeringState, and unrelated context before
 the provider adapter is called.
 
-## 5.1 Target workspace, applied evidence, and bounded execution
-
-The CLI composition root resolves an explicit `--project` target or the caller
-working directory, validates it, and copies it to `workspace/runs/<run_id>`
-before constructing MCP clients. Repository and Quality MCP operate only on
-that copy; target and workspace paths are recorded as sanitized state/trace
-metadata. Evaluation keeps its controlled `sample_app` target explicitly.
-
-Developer may recommend bounded structured mutations, but graph code validates
-their paths and sends only authorized create/update operations through
-Repository MCP. It builds `ImplementationResult(action_mode=APPLIED)` only
-after successful write ToolResults and successful non-empty `get_diff` output.
-Testing writes only generated test paths inside the run copy, executes them
-through Quality MCP, and preserves the actual result. Before FinalReport, a
-pure deterministic approval gate normalizes unsupported APPROVED decisions to
-REJECTED with the existing implementation remediation route.
-
-Context projections deduplicate evidence and cap tool summaries by role;
-runtime timeout and role-specific output limits remain external settings.
-The CLI receives factual graph stage callbacks and prints them while retaining
-the final JSON response.
-
 ## 6. RAG design
 
 `knowledge/` starts with six real source documents named in the structure

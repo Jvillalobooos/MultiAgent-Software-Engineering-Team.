@@ -4,33 +4,21 @@ from __future__ import annotations
 
 import json
 import time
-from pathlib import Path
 from typing import Any
 
 import httpx
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ValidationError
 
 from engineering_team.config import Settings
 from engineering_team.contracts.enums import AgentRole
-from engineering_team.contracts.models import (
-    FileMutation,
-    ImplementationResult,
-    ModelExecutionInfo,
-    StrictModel,
-)
+from engineering_team.contracts.models import ModelExecutionInfo, StrictModel
+from engineering_team.llm.prompting import build_role_prompts, governed_output_schema
 from engineering_team.llm.router import ModelRouter
 from engineering_team.models.context import ContextEnvelope
 
 
 class StructuredAgentObservation(StrictModel):
     acknowledged: bool
-
-
-class DeveloperMutationPlan(StrictModel):
-    """Internal, minimal schema for the only facts Developer may recommend."""
-
-    mutations: list[FileMutation] = Field(default_factory=list, max_length=2)
-    no_mutation_reason: str | None = None
 
 
 class LocalModelRuntime:
@@ -56,19 +44,15 @@ class LocalModelRuntime:
         return info
 
     def invoke_artifact(
-        self, role: AgentRole, envelope: ContextEnvelope, candidate: BaseModel
+        self, role: AgentRole, envelope: ContextEnvelope, candidate: BaseModel,
+        *, fallback_reason: str | None = None,
     ) -> tuple[BaseModel, ModelExecutionInfo]:
-        """Return the role-specific, schema-validated artifact produced by Ollama."""
-        if role is AgentRole.DEVELOPER and isinstance(candidate, ImplementationResult):
-            plan, info = self._invoke_schema(
-                role,
-                envelope,
-                DeveloperMutationPlan,
-                {"mutations": [], "no_mutation_reason": None},
-            )
-            artifact = candidate.model_copy(update={"mutations": plan.mutations})
-            self.outputs[role] = artifact
-            return artifact, info
+        """Return the role-specific, schema-validated artifact produced by Ollama.
+
+        Accepts ``fallback_reason`` so this runtime can be plugged into either the
+        primary or the secondary slot in the graph — e.g. as the local fallback
+        when a cloud provider is configured as the primary runtime.
+        """
         return self._invoke_schema(role, envelope, type(candidate), candidate.model_dump(mode="json"))
 
     def _invoke_schema(
@@ -76,8 +60,8 @@ class LocalModelRuntime:
         schema_type: type[BaseModel], candidate: dict[str, Any],
     ) -> tuple[BaseModel, ModelExecutionInfo]:
         selection = self.router.local_for(role)
-        output_schema = _governed_output_schema(schema_type)
-        system_prompt, user_prompt = self._prompts(
+        output_schema = governed_output_schema(schema_type)
+        system_prompt, user_prompt = build_role_prompts(
             role, envelope, output_schema, candidate
         )
         availability_attempt = 0
@@ -97,7 +81,7 @@ class LocalModelRuntime:
                         "stream": False,
                         "think": False,
                         "format": output_schema,
-                        "options": {"temperature": 0, "num_predict": self._output_limit(role)},
+                        "options": {"temperature": 0, "num_predict": 2048},
                     },
                 )
                 response.raise_for_status()
@@ -185,106 +169,6 @@ class LocalModelRuntime:
                          retry=availability_attempt, repair=repair_attempt)
             return parsed, info
 
-    def _prompts(
-        self, role: AgentRole, envelope: ContextEnvelope,
-        output_schema: dict[str, Any] | type[BaseModel], candidate: dict[str, Any],
-    ) -> tuple[str, str]:
-        if isinstance(output_schema, type) and issubclass(output_schema, BaseModel):
-            output_schema = _governed_output_schema(output_schema)
-        directory = Path(__file__).parents[1] / "prompts" / role.value.lower()
-        system = (directory / "system.md").read_text(encoding="utf-8").strip()
-        system += (
-            "\nReturn only one JSON object matching the supplied role-specific schema. "
-            "Preserve all governed facts, findings, statuses, and evidence from the "
-            "candidate artifact. Do not add prose or fields."
-        )
-        if role is AgentRole.DEVELOPER:
-            system += (
-                " Return only the bounded mutation plan for inspected paths. "
-                "Graph code owns action mode, writes, diffs, and all deterministic evidence."
-            )
-        if role is AgentRole.TESTING:
-            system += " You may replace test_mutations only under test paths; never write production code."
-        projection = {
-            key: (
-                str(value)[:300]
-                if key in {"run_id", "requirement"}
-                else ("present" if value is not None else "absent")
-            )
-            for key, value in envelope.state_projection.items()
-        }
-        tool_results = envelope.tool_results
-        if role is AgentRole.DEVELOPER:
-            seen: set[tuple[str, str]] = set()
-            bounded: list[Any] = []
-            readable = 0
-            for item in reversed(tool_results):
-                key = (item.tool_name, item.input_summary)
-                if key in seen:
-                    continue
-                if item.tool_name in {"read_file", "get_file_content"}:
-                    if readable >= 2:
-                        continue
-                    readable += 1
-                seen.add(key)
-                bounded.append(item)
-            tool_results = list(reversed(bounded))
-        context = {
-            "agent": envelope.agent.value,
-            "current_task": envelope.current_task,
-            "state_projection": projection,
-            "rag_evidence": [
-                {
-                    "source": item.source, "section": item.section, "chunk_id": item.chunk_id,
-                    "score": item.score,
-                }
-                for item in envelope.rag_evidence
-            ],
-            "tool_results": [
-                {
-                    "tool": item.tool_name, "status": item.status.value,
-                    **({"path": item.input_summary, "content": item.output_summary[:1200]}
-                       if role is AgentRole.DEVELOPER and item.tool_name in {"read_file", "get_file_content"}
-                       else {}),
-                }
-                for item in tool_results
-            ],
-            "remediation_feedback": envelope.remediation_feedback,
-        }
-        if role is AgentRole.TESTING:
-            implementation = envelope.state_projection.get("implementation")
-            context["implementation_basis"] = {
-                "changed_files": getattr(implementation, "changed_files", []),
-                "diff": getattr(implementation, "diff", "")[:2000],
-            }
-        candidate_instruction = "Copy every candidate key and value exactly; do not omit schema-optional keys."
-        if role is AgentRole.DEVELOPER:
-            candidate_instruction = (
-                "Return only mutations and no_mutation_reason. You MAY populate mutations (at most two) "
-                "for inspected paths with complete bounded content; otherwise return an empty list."
-            )
-        elif role is AgentRole.TESTING:
-            candidate_instruction = (
-                "Preserve every candidate field exactly except test_mutations: you MAY replace them "
-                "with one bounded behavioral test file derived from the task and implementation basis."
-            )
-        user = (
-            f"Task: {envelope.current_task}\n"
-            f"ContextEnvelope: {json.dumps(context, ensure_ascii=False)}\n"
-            f"Output schema: {json.dumps(output_schema)}\n"
-            f"Candidate artifact: {json.dumps(candidate, ensure_ascii=False)}\n"
-            f"{candidate_instruction}"
-        )
-        return system, user
-
-    @staticmethod
-    def _output_limit(role: AgentRole) -> int:
-        return {
-            AgentRole.PRODUCT: 900, AgentRole.ARCHITECTURE: 800,
-            AgentRole.DEVELOPER: 1400, AgentRole.SECURITY: 900,
-            AgentRole.TESTING: 800, AgentRole.REVIEWER: 500,
-        }[role]
-
     def _record(
         self, role: AgentRole, system: str, user: str, response: Any,
         info: ModelExecutionInfo, *, retry: int, repair: int,
@@ -307,13 +191,6 @@ def _contains_all(actual: list[Any], governed: list[Any]) -> bool:
     return all(item in actual for item in governed)
 
 
-def _governed_output_schema(schema_type: type[BaseModel]) -> dict[str, Any]:
-    """Require every governed candidate key in Ollama's structured output grammar."""
-    schema = schema_type.model_json_schema()
-    schema["required"] = list(schema.get("properties", {}))
-    return schema
-
-
 def _same_items(actual: list[Any], governed: list[Any]) -> bool:
     return _contains_all(actual, governed) and _contains_all(governed, actual)
 
@@ -323,11 +200,25 @@ def _preserves_governed_facts(candidate: dict[str, Any], parsed: BaseModel) -> b
     actual = parsed.model_dump(mode="json")
     model_name = type(parsed).__name__
     if model_name == "ImplementationResult":
-        governed = (
-            "action_mode", "changed_files", "diff", "evidence",
-            "validation_result", "security_surface_changed",
-        )
-        return all(actual.get(key) == candidate.get(key) for key in governed)
+        if candidate.get("action_mode") != "APPLIED":
+            # PROPOSED mode is fully deterministic today: the LLM only
+            # validates/echoes the candidate, it does not author content.
+            return actual == candidate
+        # APPLIED mode: Python governs *which* files change and why; the LLM
+        # is the one place allowed to author the real file content, since no
+        # deterministic rule can write arbitrary code for an arbitrary repo.
+        if actual.get("action_mode") != "APPLIED":
+            return False
+        if actual.get("security_surface_changed") != candidate.get("security_surface_changed"):
+            return False
+        if not _contains_all(actual.get("evidence", []), candidate.get("evidence", [])):
+            return False
+        if not _same_items(actual.get("changed_files", []), candidate.get("changed_files", [])):
+            return False
+        file_contents = actual.get("file_contents", {})
+        if set(file_contents) != set(candidate.get("changed_files", [])):
+            return False
+        return all(str(content).strip() for content in file_contents.values())
     guarded_lists: dict[str, tuple[str, ...]] = {
         "ProductSpecification": (
             "business_rules", "constraints", "acceptance_criteria", "nfrs",
@@ -335,7 +226,7 @@ def _preserves_governed_facts(candidate: dict[str, Any], parsed: BaseModel) -> b
         "ArchitectureProposal": ("risks", "evidence_references"),
         "ImplementationResult": ("evidence",),
         "SecurityReview": ("findings", "sources"),
-        "TestResult": ("failures", "evidence_references", "actual_results", "generated_tests"),
+        "TestResult": ("failures", "evidence_references", "actual_results"),
         "ReviewerDecision": ("problems", "evidence_references"),
     }
     guarded_values: dict[str, tuple[str, ...]] = {

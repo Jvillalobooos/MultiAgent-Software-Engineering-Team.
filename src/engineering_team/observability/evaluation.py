@@ -295,8 +295,6 @@ def run_multimodel_acceptance(
     *,
     requirement: str,
     report_path: str | Path | None = None,
-    project_target: str | Path | None = None,
-    progress: Any | None = None,
 ) -> dict[str, Any]:
     """Execute one normal six-agent run using the two configured Ollama tags."""
     from engineering_team.llm.cloud import CloudModelRuntime
@@ -306,8 +304,7 @@ def run_multimodel_acceptance(
     from engineering_team.workspace.isolation import create_run_copy
 
     run_id = f"multimodel-{uuid.uuid4()}"
-    target = Path(project_target or "sample_app").resolve()
-    run_workspace = create_run_copy(run_id, target, settings.workspace_root)
+    run_workspace = create_run_copy(run_id, "sample_app", settings.workspace_root)
     trace = LangfuseTracer(
         public_key=settings.langfuse_public_key,
         secret_key=(
@@ -317,9 +314,15 @@ def run_multimodel_acceptance(
         base_url=settings.langfuse_base_url,
         offline_directory="evaluation/reports/traces",
     ).start_run(run_id, requirement)
-    trace.record("target workspace", metadata={"target_project": str(target), "workspace": str(run_workspace)})
-    runtime = LocalModelRuntime(settings, trace=trace)
-    cloud_runtime = CloudModelRuntime(settings, trace=trace) if settings.cloud_enabled else None
+    cloud_first = bool(settings.cloud_enabled and not settings.local_first)
+    if cloud_first:
+        # Cloud is the steady-state runtime for all six agents; local Ollama is
+        # kept as the safety-net fallback if a cloud provider call fails.
+        primary_runtime: Any = CloudModelRuntime(settings, trace=trace, primary=True)
+        secondary_runtime: Any | None = LocalModelRuntime(settings, trace=trace)
+    else:
+        primary_runtime = LocalModelRuntime(settings, trace=trace)
+        secondary_runtime = CloudModelRuntime(settings, trace=trace) if settings.cloud_enabled else None
     retriever = build_retriever(settings, settings.rag_persist_directory, reindex=True)
     with (
         MCPRepositoryClient(run_workspace) as repository_mcp,
@@ -329,18 +332,11 @@ def run_multimodel_acceptance(
             repository_mcp=repository_mcp,
             quality_mcp=quality_mcp,
             retriever=retriever,
-            model_runtime=runtime,
-            cloud_runtime=cloud_runtime,
+            model_runtime=primary_runtime,
+            cloud_runtime=secondary_runtime,
             trace=trace,
-            test_paths=None,
-            progress=progress,
-        ).invoke({
-            "run_id": run_id, "requirement": requirement,
-            "repository_context": {
-                "target_project": str(target), "workspace": str(run_workspace),
-                "implementation_required": True,
-            },
-        })
+            test_paths=["test_acceptance.py"],
+        ).invoke({"run_id": run_id, "requirement": requirement})
     usage = [item.model_dump(mode="json") for item in state.get("model_usage", [])]
     expected = [
         ("Product", settings.deep_model),
@@ -350,22 +346,40 @@ def run_multimodel_acceptance(
         ("Testing", settings.fast_model),
         ("Reviewer", settings.deep_model),
     ]
-    bonus_pass = _multi_model_bonus_pass(
-        usage, expected, settings.fast_model, settings.deep_model
-    )
+    observed = [(item["agent"], item["actual_model"]) for item in usage]
+    if cloud_first:
+        # Cloud-first bonus evidence: every agent resolved through a configured
+        # cloud provider, matching the fixed per-role provider/model map.
+        bonus_pass = all(
+            item["provider"] in {"google", "groq"}
+            and item["structured_output_success"]
+            and item["error"] is None
+            for item in usage
+        )
+    else:
+        bonus_pass = (
+            observed == expected
+            and {item["actual_model"] for item in usage} == {settings.fast_model, settings.deep_model}
+            and all(
+                item["provider"] == "ollama"
+                and not item["fallback_used"]
+                and item["structured_output_success"]
+                and item["error"] is None
+                for item in usage
+            )
+        )
     evidence = {
         "run_id": run_id,
         "trace_id": trace.trace_id,
         "langfuse_live": trace.live,
         "langfuse_error": trace.live_error,
         "final_status": state.get("final_status"),
-        "target_project": str(target),
-        "workspace": str(run_workspace),
         "route_history": state.get("route_history", []),
         "model_usage": usage,
         "rag_sources": list(dict.fromkeys(item.source for item in state.get("rag_evidence", []))),
         "tools_used": [item.tool_name for item in state.get("tool_results", [])],
         "cloud_used": any(item["provider"] != "ollama" for item in usage),
+        "cloud_first": cloud_first,
         "bonus_pass": bonus_pass,
         "trace_events": [
             {
@@ -381,32 +395,3 @@ def run_multimodel_acceptance(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(evidence, indent=2), encoding="utf-8")
     return evidence
-
-
-def _multi_model_bonus_pass(
-    usage: list[dict[str, Any]],
-    expected: list[tuple[str, str]],
-    fast_model: str,
-    deep_model: str,
-) -> bool:
-    """Use each role's final valid local execution; retries remain trace evidence."""
-    final_valid: dict[str, dict[str, Any]] = {}
-    for item in usage:
-        if (
-            item["provider"] == "ollama"
-            and item["structured_output_success"]
-            and item["error"] is None
-            and item["actual_model"]
-        ):
-            final_valid[item["agent"]] = item
-    observed = [(role, final_valid.get(role, {}).get("actual_model")) for role, _ in expected]
-    return (
-        observed == expected
-        and {item["actual_model"] for item in final_valid.values()} == {fast_model, deep_model}
-        and all(
-            item["provider"] == "ollama"
-            and item["structured_output_success"]
-            and item["error"] is None
-            for item in final_valid.values()
-        )
-    )

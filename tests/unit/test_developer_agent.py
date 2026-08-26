@@ -1,5 +1,3 @@
-from pathlib import PurePosixPath
-
 import pytest
 from pydantic import ValidationError
 
@@ -80,96 +78,6 @@ def test_developer_proposal_is_detailed_and_grounded_in_inspected_paths() -> Non
     assert "run_linter" in result.validation_result
     assert "run_tests" in result.validation_result
     assert result.security_surface_changed is True
-
-
-def test_structural_references_resolves_python_relative_import() -> None:
-    content = "from .service import apply_update\n"
-    candidates = ["app/main.py", "app/service.py"]
-
-    refs = DeveloperAgent.structural_references(content, "app/main.py", candidates)
-
-    assert refs == ["app/service.py"]
-
-
-def test_structural_references_resolves_typescript_relative_import() -> None:
-    content = 'import { promote } from "../domain/account-manager";\n'
-    candidates = ["src/routes/account.ts", "src/domain/account-manager.ts"]
-
-    refs = DeveloperAgent.structural_references(content, "src/routes/account.ts", candidates)
-
-    assert refs == ["src/domain/account-manager.ts"]
-
-
-def test_structural_references_resolves_java_like_dotted_import_by_tail_match() -> None:
-    content = "import com.example.domain.AccountService;\n"
-    candidates = [
-        "src/main/java/com/example/api/AccountController.java",
-        "src/main/java/com/example/domain/AccountService.java",
-    ]
-
-    refs = DeveloperAgent.structural_references(
-        content, "src/main/java/com/example/api/AccountController.java", candidates
-    )
-
-    assert refs == ["src/main/java/com/example/domain/AccountService.java"]
-
-
-def test_structural_references_fails_closed_on_ambiguous_same_stem_tail_match() -> None:
-    content = "import com.acme.users.AccountService;\n"
-    candidates = [
-        "src/main/java/com/acme/entry/Gateway.java",
-        "src/main/java/com/acme/users/AccountService.java",
-        "src/main/java/com/acme/admin/AccountService.java",
-    ]
-
-    refs = DeveloperAgent.structural_references(
-        content, "src/main/java/com/acme/entry/Gateway.java", candidates
-    )
-
-    assert refs == []
-
-
-def test_structural_references_still_resolves_fully_qualified_path_match() -> None:
-    content = "from app.service import apply_update\n"
-    candidates = [
-        "app/main.py",
-        "app/service.py",
-        "other_package/service.py",
-    ]
-
-    refs = DeveloperAgent.structural_references(content, "app/main.py", candidates)
-
-    assert refs == ["app/service.py"]
-
-
-def test_match_basename_fails_closed_on_ambiguous_multi_extension_candidates() -> None:
-    candidates = {"src/domain/account-manager.js", "src/domain/account-manager.ts"}
-
-    resolved = DeveloperAgent._match_basename(
-        PurePosixPath("src/domain/account-manager"), candidates
-    )
-
-    assert resolved is None
-
-
-def test_structural_references_never_fabricates_a_path_outside_the_candidate_set() -> None:
-    content = "from ...secret import token\nimport evaluation.reports.old_run\n"
-    candidates = ["app/main.py", "app/service.py"]
-
-    refs = DeveloperAgent.structural_references(content, "app/main.py", candidates)
-
-    assert refs == []
-
-
-def test_rank_paths_never_favors_a_low_information_marker_over_a_referenced_module() -> None:
-    ranked = DeveloperAgent.rank_paths(
-        ["app/__init__.py", "app/service.py"],
-        search_hits=[],
-        terms=[],
-        structural_boost={"app/service.py"},
-    )
-
-    assert ranked[0] == "app/service.py"
 
 
 def test_developer_contract_rejects_unjustified_empty_proposal() -> None:

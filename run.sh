@@ -8,15 +8,6 @@ if [ "${1-}" = "--help" ]; then
 fi
 
 PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
-CALLER_PROJECT=$(pwd -P)
-if [ "$#" -gt 0 ]; then
-    if [ "$#" -eq 2 ] && [ "$1" = "--project" ]; then
-        CALLER_PROJECT=$2
-    else
-        printf '%s\n' "Usage: ./run.sh [--project <path>]" >&2
-        exit 1
-    fi
-fi
 PYTHON="$PROJECT_ROOT/.venv/bin/python"
 
 if [ ! -f "$PYTHON" ]; then
@@ -54,4 +45,4 @@ done
 
 printf '%s\n' "" "Starting engineering team..."
 cd "$PROJECT_ROOT" || exit 1
-exec "$PYTHON" -m engineering_team.cli run "$requirement" --project "$CALLER_PROJECT"
+exec "$PYTHON" -m engineering_team.cli run "$requirement"

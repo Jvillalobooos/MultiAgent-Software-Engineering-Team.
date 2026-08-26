@@ -624,37 +624,6 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
   consistencia de la evidencia Multi-model, escenarios y Langfuse existente.
 - **Done When:** Código, documentación y evidencia final son consistentes.
 
-## FASE 11 — IMPLEMENTACIÓN REAL Y GATES DE ENTREGA
-
-### [X] T039 — Target CLI y workspace aislado
-
-- **Objetivo:** Seleccionar CWD/`--project`, crear copia aislada y preservar
-  metadata sin modificar el proyecto original.
-- **FR/NFR:** FR-087, NFR-002, NFR-011–013; AC-043.
-
-### [X] T040 — Evidence APPLIED y gate de aprobación
-
-- **Objetivo:** Derivar APPLIED de writes MCP/diff real y normalizar
-  aprobaciones sin evidencia material a remediación.
-- **FR/NFR:** FR-088, FR-090; NFR-006, NFR-010; AC-044–045.
-
-### [X] T041 — Tests generados y ejecución aislada
-
-- **Objetivo:** Generar, escribir y ejecutar tests específicos bajo permisos
-  de Testing limitados a paths de test.
-- **FR/NFR:** FR-089, FR-044; NFR-011–016.
-
-### [X] T042 — Contexto, timeout y progreso CLI
-
-- **Objetivo:** Reducir contexto redundante, configurar límites/timeout y
-  emitir progreso factual sin perder JSON final.
-- **FR/NFR:** FR-091–092, NFR-014–015.
-
-### [X] T043 — Regresión de gobernanza y evidencia
-
-- **Objetivo:** Ejecutar tests focalizados de aislamiento, MCP, gates,
-  remediación, bonus y observabilidad sin inferencia LIVE.
-
 ## MATRIZ DE TRAZABILIDAD FR/NFR → TASK(S)
 
 | FR/NFR | Task(s) |
@@ -682,7 +651,6 @@ arquitectura, requisitos, escenarios, modelos ni políticas.
 | FR-075–076 | T024–T027, T031 |
 | FR-077 | T007, T023 |
 | FR-078–086 | T024–T027, T032 |
-| FR-087–092 | T039–T043 |
 | Remediación MCP/LangChain/Developer/LIVE | T028–T038 |
 | NFR-001–003 | T001, T013 |
 | NFR-004 | T006, T011, T022, T029 |

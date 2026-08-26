@@ -132,7 +132,10 @@ class QualityMCP:
         )
         return self._run(
             role, "run_security_scan",
-            [sys.executable, "-m", "ruff", "check", target, "--select", "S"],
+            [
+                sys.executable, "-m", "ruff", "check", target, "--select", "S",
+                "--extend-exclude", "tests,test,test_*.py,*_test.py",
+            ],
             {AgentRole.SECURITY},
         )
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from typing import Any, TypedDict
 
 from langgraph.checkpoint.memory import InMemorySaver
@@ -21,11 +20,11 @@ from engineering_team.contracts.enums import (
     ErrorCode,
     RemediationCategory,
     ReviewerStatus,
-    RouteTarget,
     ToolStatus,
 )
-from engineering_team.contracts.models import FinalReport, ReviewerDecision, WorkflowError
+from engineering_team.contracts.models import FinalReport, WorkflowError
 from engineering_team.contracts.state import EngineeringState
+from engineering_team.guardrails.validation import require_explicit_destructive_authorization
 from engineering_team.models.context import build_context
 
 from .routers import review_route, security_route
@@ -63,67 +62,6 @@ class WorkflowState(TypedDict, total=False):
     route_history: list
     final_report: object
     human_decision: str
-
-
-def approval_problems(state: EngineeringState) -> list[str]:
-    """Return deterministic material-evidence gaps for an implementable run."""
-    if not state.repository_context.get("implementation_required", False):
-        return []
-    implementation = state.implementation
-    if implementation is None:
-        return ["implementation is missing"]
-    problems: list[str] = []
-    if implementation.action_mode.value != "APPLIED":
-        problems.append("implementation is not applied")
-    if not implementation.changed_files:
-        problems.append("implementation changed_files is empty")
-    writes = [
-        item for item in state.tool_results
-        if item.tool_name in {"create_file", "update_file"} and item.status is ToolStatus.SUCCESS
-    ]
-    if not writes:
-        problems.append("successful Repository MCP write evidence is missing")
-    diffs = [
-        item for item in state.tool_results
-        if item.tool_name == "get_diff" and item.status is ToolStatus.SUCCESS
-    ]
-    if not diffs or not implementation.diff.strip():
-        problems.append("successful non-empty Repository MCP diff is missing")
-    latest_test = state.test_results[-1] if state.test_results else None
-    if latest_test is None or latest_test.status is not ToolStatus.SUCCESS:
-        problems.append("successful workspace test validation is missing")
-    elif not latest_test.generated_tests:
-        problems.append("requirement-specific generated tests are missing")
-    if state.security_review is not None and state.security_review.status.value == "FAIL":
-        problems.append("security review failed")
-    if any(error.code in {ErrorCode.MCP_ERROR, ErrorCode.RAG_ERROR} for error in state.errors):
-        problems.append("required MCP or RAG evidence is unavailable")
-    return problems
-
-
-def implementation_pre_gate_problems(state: EngineeringState) -> list[str]:
-    """Return evidence gaps that make downstream validation futile."""
-    if not state.repository_context.get("implementation_required", False):
-        return []
-    implementation = state.implementation
-    if implementation is None:
-        return ["implementation is missing"]
-    problems: list[str] = []
-    if implementation.action_mode is not ActionMode.APPLIED:
-        problems.append("implementation is not applied")
-    if not implementation.changed_files:
-        problems.append("implementation changed_files is empty")
-    if not any(
-        item.tool_name in {"create_file", "update_file"} and item.status is ToolStatus.SUCCESS
-        for item in state.tool_results
-    ):
-        problems.append("successful Repository MCP write evidence is missing")
-    if not any(
-        item.tool_name == "get_diff" and item.status is ToolStatus.SUCCESS
-        for item in state.tool_results
-    ) or not implementation.diff.strip():
-        problems.append("successful non-empty Repository MCP diff is missing")
-    return problems
 
 
 def _visit(role: str):
@@ -172,8 +110,10 @@ def _report(state: EngineeringState, status: str) -> FinalReport:
         trace_id=state.trace_id or state.run_id,
         next_action="none" if status == "APPROVED" else "human review",
     )
+# Orquestación LangGraph
 
-
+# el sistema utiliza una "memoria central" o estado con reglas estrictas (el TypedDict).
+# En lugar de pasarse mensajes de texto desordenados, todos los agentes leen y escriben sobre un mismo formato estructurado
 def build_engineering_graph(
     *,
     agent_overrides: dict[AgentRole, Any] | None = None,
@@ -185,8 +125,8 @@ def build_engineering_graph(
     trace: Any | None = None,
     test_paths: list[str] | None = None,
     interactive_hitl: bool = False,
-    progress: Any | None = None,
 ):
+    # StateGraph(WorkflowState) real con TypedDict, un nodo por agente y edges condicionales.
     """Compile normal, remediation, MCP/RAG, and HITL routes as real nodes."""
     graph = StateGraph(WorkflowState)
     agents: dict[AgentRole, Any] = {
@@ -214,15 +154,27 @@ def build_engineering_graph(
         errors: list[WorkflowError],
         tool_results: list[Any],
         adapter: Any,
+        *,
+        strict: bool = False,
     ) -> bool:
-        """Preserve one MCP result and return whether required MCP evidence is unavailable."""
+        """Preserve one MCP result and return whether required MCP evidence is unavailable.
+
+        ``strict`` treats any non-SUCCESS status (including DENIED) as blocking —
+        used for write calls, where a silently-ignored denial would leave a
+        change set partially applied.
+        """
         tool_results.append(result)
         if trace is not None:
             trace.record(
                 "MCP call", as_type="tool", output=result.model_dump(mode="json"),
                 metadata=mcp_trace_metadata(adapter),
             )
-        if result.status not in {ToolStatus.UNAVAILABLE, ToolStatus.FAIL}:
+        blocking = (
+            result.status is not ToolStatus.SUCCESS
+            if strict
+            else result.status in {ToolStatus.UNAVAILABLE, ToolStatus.FAIL}
+        )
+        if not blocking:
             return False
         code = (
             ErrorCode.MCP_ERROR
@@ -245,98 +197,16 @@ def build_engineering_graph(
                 output=result.model_dump(mode="json"),
                 metadata={"agent": role.value, "tool": result.tool_name},
             )
-        return result.status is ToolStatus.UNAVAILABLE
-
-    def apply_mutations(candidate: Any, role: AgentRole, adapter: Any, tool_results: list[Any], errors: list[WorkflowError]) -> Any:
-        """Apply only validated MCP mutations and derive evidence from returned tools."""
-        mutations = getattr(candidate, "mutations", []) if role is AgentRole.DEVELOPER else getattr(candidate, "test_mutations", [])
-        if adapter is None or not mutations:
-            return candidate
-        inspected = {
-            item.input_summary.removeprefix("path=").replace("\\", "/")
-            for item in tool_results
-            if item.tool_name in {"read_file", "get_file_content"}
-            and item.status is ToolStatus.SUCCESS and item.input_summary.startswith("path=")
-        }
-        writes: list[Any] = []
-        for mutation in mutations:
-            if role is AgentRole.DEVELOPER and mutation.path not in inspected:
-                errors.append(WorkflowError(
-                    code=ErrorCode.TOOL_ERROR, source_stage=role.value, retryable=False,
-                    detail=f"uninspected mutation path: {mutation.path}",
-                ))
-                continue
-            operation = adapter.create_file if mutation.operation == "create" else adapter.update_file
-            result = operation(role, mutation.path, mutation.content)
-            preserve_tool_result(result, role, errors, tool_results, adapter)
-            if result.status is ToolStatus.SUCCESS:
-                writes.append(result)
-        if role is not AgentRole.DEVELOPER or not writes:
-            return candidate
-        diff = adapter.get_diff(role)
-        preserve_tool_result(diff, role, errors, tool_results, adapter)
-        if diff.status is ToolStatus.SUCCESS and diff.output_summary.strip():
-            return candidate.model_copy(update={
-                "action_mode": ActionMode.APPLIED,
-                "changed_files": list(dict.fromkeys(item.output_summary for item in writes)),
-                "diff": diff.output_summary,
-                "evidence": list(dict.fromkeys([
-                    *candidate.evidence,
-                    *(item.evidence_reference or item.tool_name for item in writes),
-                    diff.evidence_reference or diff.tool_name,
-                ])),
-                "validation_result": "APPLIED from successful Repository MCP writes and real get_diff",
-            })
-        return candidate
-
-    def developer_inspection_fingerprint(tool_results: list[Any]) -> str:
-        inspected = [
-            f"{item.input_summary}:{item.output_summary}"
-            for item in tool_results
-            if item.allowed_role is AgentRole.DEVELOPER
-            and item.tool_name in {"read_file", "get_file_content"}
-            and item.status is ToolStatus.SUCCESS
-            and item.input_summary.startswith("path=")
-            and DeveloperAgent.is_implementation_candidate(item.input_summary[5:])
-        ]
-        return hashlib.sha256("\n".join(inspected).encode()).hexdigest()
+        return blocking if strict else result.status is ToolStatus.UNAVAILABLE
 
     def make_node(role: AgentRole):
         def node(raw_state: dict[str, Any]) -> dict[str, Any]:
             current = EngineeringState.model_validate(raw_state)
-            if progress is not None:
-                progress(role, current.iteration)
-            if role is AgentRole.REVIEWER:
-                gaps = approval_problems(current)
-                if gaps:
-                    decision = ReviewerDecision(
-                        status=ReviewerStatus.REJECTED,
-                        score=45,
-                        subscores={},
-                        problems=gaps,
-                        reason="deterministic delivery gate: " + "; ".join(gaps),
-                        remediation_category=RemediationCategory.IMPLEMENTATION,
-                        return_to=RouteTarget.DEVELOPER,
-                        confidence=1.0,
-                        evidence_references=[],
-                    )
-                    if trace is not None:
-                        trace.record(
-                            "Reviewer pre-gate", as_type="agent", output=decision.model_dump(mode="json"),
-                            metadata={"iteration": current.iteration, "llm_skipped": True},
-                        )
-                    return {
-                        "route_history": [*current.route_history, role.value],
-                        "review": decision,
-                        "iteration": current.iteration + 1,
-                        "remediation_request": decision.reason,
-                        "next_validation_path": "full",
-                        "trace_id": trace.trace_id if trace is not None else current.trace_id,
-                    }
             rag_evidence = list(current.rag_evidence)
             errors = list(current.errors)
             tool_results = list(current.tool_results)
             required_mcp_missing = False
+            existing_repo_paths: set[str] = set()
             if retriever is not None and role in {
                 AgentRole.ARCHITECTURE, AgentRole.SECURITY, AgentRole.TESTING
             }:
@@ -352,25 +222,7 @@ def build_engineering_graph(
                         output=[item.model_dump(mode="json") for item in retrieved],
                         metadata={"agent": role.value, "status": retriever.last_status},
                     )
-            prior_developer_inspection = (
-                role is AgentRole.DEVELOPER
-                and any(
-                    item.allowed_role is AgentRole.DEVELOPER
-                    and item.tool_name in {"read_file", "get_file_content"}
-                    and item.status is ToolStatus.SUCCESS
-                    and item.input_summary.startswith("path=")
-                    and DeveloperAgent.is_implementation_candidate(item.input_summary[5:])
-                    for item in tool_results
-                )
-            )
-            fresh_remediation_selection = (
-                role is AgentRole.DEVELOPER
-                and current.iteration == 1
-                and bool(current.remediation_request)
-            )
-            if repository_mcp is not None and role in {AgentRole.ARCHITECTURE, AgentRole.DEVELOPER} and (
-                not prior_developer_inspection or fresh_remediation_selection
-            ):
+            if repository_mcp is not None and role in {AgentRole.ARCHITECTURE, AgentRole.DEVELOPER}:
                 result = repository_mcp.list_files(role)
                 required_mcp_missing |= preserve_tool_result(
                     result, role, errors, tool_results, repository_mcp
@@ -379,18 +231,11 @@ def build_engineering_graph(
                     listed_paths = [
                         line.strip().replace("\\", "/")
                         for line in result.output_summary.splitlines()
-                        if DeveloperAgent.is_implementation_candidate(line.strip().replace("\\", "/"))
+                        if DeveloperAgent._safe_path(line.strip().replace("\\", "/"))
                     ]
                     terms = DeveloperAgent.relevance_terms(
                         current.specification, current.architecture, current.requirement
                     )
-                    if fresh_remediation_selection and current.remediation_request:
-                        # Bounded remediation expansion: treat the rejection reason as a
-                        # search hint only, never as authority over path safety.
-                        terms = list(dict.fromkeys([
-                            *terms,
-                            *DeveloperAgent.relevance_terms(None, None, current.remediation_request),
-                        ]))
                     search_hits: list[str] = []
                     for term in terms[:3]:
                         searched = repository_mcp.search_code(role, term)
@@ -401,62 +246,33 @@ def build_engineering_graph(
                             search_hits.extend(
                                 line.strip().replace("\\", "/")
                                 for line in searched.output_summary.splitlines()
-                                if DeveloperAgent.is_implementation_candidate(line.strip().replace("\\", "/"))
                             )
-                    already_read = {
-                        item.input_summary[5:].replace("\\", "/")
-                        for item in tool_results
-                        if item.allowed_role is AgentRole.DEVELOPER
-                        and item.tool_name in {"read_file", "get_file_content"}
-                        and item.status is ToolStatus.SUCCESS
-                        and item.input_summary.startswith("path=")
-                    }
-                    already_inspected_content = {
-                        item.input_summary[5:].replace("\\", "/"): item.output_summary
-                        for item in tool_results
-                        if item.allowed_role is AgentRole.DEVELOPER
-                        and item.tool_name in {"read_file", "get_file_content"}
-                        and item.status is ToolStatus.SUCCESS
-                        and item.input_summary.startswith("path=")
-                    }
-                    # Stage B: structural expansion. A file the Developer already
-                    # inspected (this cycle or an earlier one) may reference another
-                    # repository-local implementation module; that referenced module
-                    # becomes a high-priority, still-unexplored candidate.
-                    structural_frontier: list[str] = []
-                    for source_path, content in already_inspected_content.items():
-                        structural_frontier.extend(
-                            DeveloperAgent.structural_references(content, source_path, listed_paths)
-                        )
-                    structural_frontier = [
-                        path for path in dict.fromkeys(structural_frontier) if path not in already_read
-                    ]
-                    ranked = DeveloperAgent.rank_paths(
-                        listed_paths, search_hits, terms, structural_boost=set(structural_frontier)
-                    )
-                    read_order = [
-                        *structural_frontier,
-                        *[path for path in ranked if path not in already_read and path not in structural_frontier],
-                    ]
-                    reads_remaining = 2
-                    index = 0
-                    while reads_remaining > 0 and index < len(read_order):
-                        path = read_order[index]
-                        index += 1
+                    existing_repo_paths = set(listed_paths)
+                    ranked = DeveloperAgent.rank_paths(listed_paths, search_hits, terms)
+                    if search_hits:
+                        ranked = [path for path in ranked if path in set(search_hits)]
+                    already_read = set(ranked[:4])
+                    for path in ranked[:4]:
                         read = repository_mcp.read_file(role, path)
                         required_mcp_missing |= preserve_tool_result(
                             read, role, errors, tool_results, repository_mcp
                         )
-                        reads_remaining -= 1
-                        if read.status is ToolStatus.SUCCESS and reads_remaining > 0:
-                            discovered = [
-                                ref for ref in DeveloperAgent.structural_references(
-                                    read.output_summary, path, listed_paths
+                    if current.repository_context.get("apply_changes"):
+                        # Guarantee the LLM sees the current content of every file the
+                        # requirement explicitly names, not just the heuristically
+                        # ranked ones, before it authors real replacement content.
+                        for target_path in DeveloperAgent.requested_targets(current.requirement):
+                            if target_path in existing_repo_paths and target_path not in already_read:
+                                read = repository_mcp.read_file(role, target_path)
+                                required_mcp_missing |= preserve_tool_result(
+                                    read, role, errors, tool_results, repository_mcp
                                 )
-                                if ref not in already_read and ref not in read_order[:index]
-                            ]
-                            if discovered:
-                                read_order[index:index] = discovered
+                                already_read.add(target_path)
+            if quality_mcp is not None and role is AgentRole.TESTING:
+                result = quality_mcp.run_tests(role, test_paths)
+                required_mcp_missing |= preserve_tool_result(
+                    result, role, errors, tool_results, quality_mcp
+                )
             if quality_mcp is not None and role is AgentRole.SECURITY:
                 operations = [
                     getattr(quality_mcp, name) for name in (
@@ -482,33 +298,9 @@ def build_engineering_graph(
                     "trace_id": trace.trace_id if trace is not None else current.trace_id,
                 }
             model_usage = list(current.model_usage)
-            envelope = build_context(role, current, current.requirement)
+            envelope = build_context(role, current, role.value)
             candidate = agents[role].execute(envelope)
-            inspection_fingerprint = developer_inspection_fingerprint(tool_results) if role is AgentRole.DEVELOPER else ""
-            no_progress_signature = hashlib.sha256(
-                f"{inspection_fingerprint}\n{current.remediation_request or ''}".encode()
-            ).hexdigest()
-            skip_developer_model = (
-                role is AgentRole.DEVELOPER
-                and (
-                    not candidate.changed_files
-                    or (
-                        current.iteration >= 2
-                        and current.repository_context.get("_developer_no_progress_signature") == no_progress_signature
-                        and current.implementation is not None
-                        and current.implementation.action_mode is ActionMode.PROPOSED
-                        and implementation_pre_gate_problems(current)
-                    )
-                )
-            )
-            if skip_developer_model:
-                output = candidate
-                if trace is not None:
-                    trace.record(
-                        "Developer no-progress", as_type="agent", output=output.model_dump(mode="json"),
-                        metadata={"iteration": current.iteration, "llm_skipped": True},
-                    )
-            elif model_runtime is not None:
+            if model_runtime is not None:
                 attempt_start = len(model_runtime.attempts)
                 try:
                     output, model_info = model_runtime.invoke_artifact(role, envelope, candidate)
@@ -583,46 +375,56 @@ def build_engineering_graph(
                         }
             else:
                 output = candidate
-            if role is AgentRole.DEVELOPER:
-                output = apply_mutations(output, role, repository_mcp, tool_results, errors)
-            if role is AgentRole.TESTING:
-                output = apply_mutations(output, role, repository_mcp, tool_results, errors)
-                if quality_mcp is not None:
-                    result = quality_mcp.run_tests(role, output.generated_tests or test_paths)
-                    required_mcp_missing |= preserve_tool_result(
-                        result, role, errors, tool_results, quality_mcp
+            if (
+                role is AgentRole.DEVELOPER
+                and repository_mcp is not None
+                and output.action_mode is ActionMode.APPLIED
+                and output.file_contents
+            ):
+                try:
+                    require_explicit_destructive_authorization(
+                        bool(current.repository_context.get("authorized"))
                     )
-                    output = output.model_copy(update={
-                        "executed_tests": [*output.executed_tests, *output.generated_tests, result.tool_name],
-                        "actual_results": [*output.actual_results, result.output_summary],
-                        "status": result.status,
-                        "failures": ([*output.failures, result.output_summary] if result.status is not ToolStatus.SUCCESS else output.failures),
-                        "evidence_references": list(dict.fromkeys([
-                            *output.evidence_references, result.evidence_reference or result.tool_name,
-                        ])),
-                    })
-                if required_mcp_missing:
+                except PermissionError as exc:
+                    errors.append(WorkflowError(
+                        code=ErrorCode.TOOL_ERROR, source_stage=role.value, retryable=False,
+                        detail=str(exc),
+                    ))
+                    if trace is not None:
+                        trace.record(
+                            "destructive change blocked", level="ERROR", status_message=str(exc),
+                            metadata={"agent": role.value, "changed_files": output.changed_files},
+                        )
                     return {
                         "route_history": [*current.route_history, role.value],
-                        "rag_evidence": rag_evidence,
-                        "errors": errors,
-                        "tool_results": tool_results,
-                        "model_usage": model_usage,
+                        "errors": errors, "model_usage": model_usage,
+                        "rag_evidence": rag_evidence, "tool_results": tool_results,
+                        "human_review_required": True,
+                        "trace_id": trace.trace_id if trace is not None else current.trace_id,
+                        "implementation": output,
+                    }
+                write_failed = False
+                for path, content in output.file_contents.items():
+                    writer = (
+                        repository_mcp.update_file
+                        if path in existing_repo_paths
+                        else repository_mcp.create_file
+                    )
+                    result = writer(role, path, content)
+                    write_failed |= preserve_tool_result(
+                        result, role, errors, tool_results, repository_mcp, strict=True
+                    )
+                diff_result = repository_mcp.get_diff(role)
+                preserve_tool_result(diff_result, role, errors, tool_results, repository_mcp)
+                if write_failed:
+                    return {
+                        "route_history": [*current.route_history, role.value],
+                        "errors": errors, "model_usage": model_usage,
+                        "rag_evidence": rag_evidence, "tool_results": tool_results,
+                        "implementation": output,
                         "human_review_required": True,
                         "trace_id": trace.trace_id if trace is not None else current.trace_id,
                     }
-            if role is AgentRole.REVIEWER and output.status is ReviewerStatus.APPROVED:
-                gaps = approval_problems(current)
-                if gaps:
-                    output = output.model_copy(update={
-                        "status": ReviewerStatus.REJECTED,
-                        "score": min(output.score, 45),
-                        "problems": list(dict.fromkeys([*output.problems, *gaps])),
-                        "reason": "deterministic delivery gate: " + "; ".join(gaps),
-                        "remediation_category": RemediationCategory.IMPLEMENTATION,
-                        "return_to": RouteTarget.DEVELOPER,
-                        "confidence": 1.0,
-                    })
             patch: dict[str, Any] = {
                 "route_history": [*current.route_history, role.value],
                 "rag_evidence": rag_evidence,
@@ -631,13 +433,6 @@ def build_engineering_graph(
                 "model_usage": model_usage,
                 "trace_id": trace.trace_id if trace is not None else current.trace_id,
             }
-            if role is AgentRole.DEVELOPER:
-                repository_context = dict(current.repository_context)
-                if output.action_mode is ActionMode.APPLIED:
-                    repository_context.pop("_developer_no_progress_signature", None)
-                else:
-                    repository_context["_developer_no_progress_signature"] = no_progress_signature
-                patch["repository_context"] = repository_context
             if cloud_runtime is not None and hasattr(cloud_runtime, "budget"):
                 patch["cloud_escalations_by_agent"] = {
                     item.value: count for item, count in cloud_runtime.budget.by_agent.items()
@@ -670,11 +465,6 @@ def build_engineering_graph(
             route = "HUMAN_REVIEW_REQUIRED"
             if trace is not None:
                 trace.record("route", metadata={"from": "Developer", "to": route})
-            return route
-        if implementation_pre_gate_problems(state):
-            route = "Reviewer"
-            if trace is not None:
-                trace.record("route", metadata={"from": "Developer", "to": route, "pre_gate": True})
             return route
         if (
             state.next_validation_path == "testing_only"
@@ -767,7 +557,7 @@ def build_engineering_graph(
     )
     graph.add_conditional_edges(
         "Developer", developer_next,
-        {"Security": "Security", "Testing": "Testing", "Reviewer": "Reviewer", "HUMAN_REVIEW_REQUIRED": "HUMAN_REVIEW_REQUIRED"},
+        {"Security": "Security", "Testing": "Testing", "HUMAN_REVIEW_REQUIRED": "HUMAN_REVIEW_REQUIRED"},
     )
     graph.add_conditional_edges(
         "Security", security_next,

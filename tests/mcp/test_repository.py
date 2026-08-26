@@ -44,17 +44,3 @@ def test_search_code_never_reads_secret_paths_but_keeps_allowed_matches(tmp_path
     assert result.status is ToolStatus.SUCCESS
     assert result.output_summary.splitlines() == ["allowed.py"]
     assert sentinel not in result.output_summary
-
-
-def test_testing_may_write_only_test_paths(tmp_path: Path) -> None:
-    mcp = RepositoryMCP(tmp_path)
-
-    denied = mcp.create_file(AgentRole.TESTING, "app/service.py", "x = 1\n")
-    allowed = mcp.create_file(
-        AgentRole.TESTING, "tests/test_generated.py", "def test_ok():\n    assert True\n"
-    )
-
-    assert denied.status is ToolStatus.DENIED
-    assert allowed.status is ToolStatus.SUCCESS
-    assert not (tmp_path / "app" / "service.py").exists()
-    assert (tmp_path / "tests" / "test_generated.py").exists()

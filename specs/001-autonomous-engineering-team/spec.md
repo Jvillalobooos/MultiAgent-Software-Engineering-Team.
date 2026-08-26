@@ -156,12 +156,6 @@ Each requirement names the minimum evidence by which it shall be verified.
 | FR-084 | The final evaluation report SHALL include the five scenarios, expected-versus-observed outcomes, scores, aggregate metrics, multi-model evaluation, and relevant errors/fallbacks. | Evaluation-report completeness review linked to scenario records. |
 | FR-085 | The system SHALL provide a reproducible documented demo that exposes requirement entry; Product and ProductSpecification; Architecture; RAG retrieval and provenance; Developer; a Repository MCP call; Security; applicable Quality MCP or security evidence; Testing; test execution or testing evidence; Reviewer; APPROVED or REJECTED; a conditional remediation loop when applicable; a Langfuse trace; FinalReport; and models used. | Executed demo transcript, trace, and FinalReport using documented commands. |
 | FR-086 | Final documentation SHALL describe each mandatory HITL route—Security severity `CRITICAL` and `MAX_ITERATIONS=3` without approval leading to `HUMAN_REVIEW_REQUIRED`—including where it occurs, trigger condition, reason for human intervention, mitigated risk, information received by the human, and how the workflow resumes or terminates. | HITL documentation completeness review and corresponding route evidence. |
-| FR-087 | A normal CLI run SHALL select an existing target project from `--project` or the caller working directory, create an isolated per-run copy, and preserve target/workspace identifiers as evidence; the original target SHALL never be modified automatically. | CLI and byte-for-byte workspace-isolation tests. |
-| FR-088 | For an implementable change, `APPLIED` SHALL be constructed only from successful Repository MCP writes and a successful non-empty real `get_diff`; a model recommendation alone SHALL never establish applied evidence. | MCP write/diff and contract tests. |
-| FR-089 | Testing SHALL generate and execute requirement-specific tests inside the isolated workspace when an applied change requires them, preserving generated paths and actual Quality MCP results. | Generated-test protocol/integration evidence. |
-| FR-090 | Deterministic approval validation SHALL reject an otherwise APPROVED Reviewer recommendation when material implementation, test, security, RAG, or MCP evidence is missing or contradictory. | Approval-gate tests and remediation trace. |
-| FR-091 | Local runtime timeout and output limits SHALL be externally configurable; context and evidence passed to each role SHALL be bounded and deduplicated without removing required contracts. | Settings/context and runtime-policy tests. |
-| FR-092 | CLI execution SHALL emit factual stage progress and retain a machine-readable final JSON report. | CLI transcript test. |
 
 ## 5. Non-functional requirements
 
@@ -232,9 +226,6 @@ Each requirement names the minimum evidence by which it shall be verified.
 | AC-040 | README, both required diagrams, RAG documentation, MCP documentation, verifiable complete Langfuse evidence, and the evaluation report exist and satisfy FR-078 through FR-084. |
 | AC-041 | A documented command sequence reproduces the demo and exposes every required observation in FR-085. |
 | AC-042 | HITL documentation covers only the two mandatory routes, includes every explanation required by FR-086, and aligns with the corresponding graph routes. |
-| AC-043 | A CLI target selected by CWD or `--project` is copied before MCP activity and remains byte-for-byte unchanged after the run. |
-| AC-044 | An implementable requirement with `PROPOSED`, missing write evidence, missing/empty diff, failed generated test, Security FAIL, mandatory RAG/MCP error, or contradictory evidence cannot reach APPROVED. |
-| AC-045 | Successful write evidence, non-empty real diff, generated/executed tests, Security PASS, and valid grounding may reach APPROVED through the existing Reviewer/router path. |
 
 ## 7. Evaluation scenarios
 

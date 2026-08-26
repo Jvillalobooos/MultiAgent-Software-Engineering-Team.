@@ -18,8 +18,19 @@ results; Reviewer receives validated summaries and provenance, never raw
 repository contents or tool permissions.
 
 Workspaces are copied to `workspace/runs/<run_id>` and Repository MCP resolves
-every path beneath that copy. Cloud remains a sanitized, bounded contingency,
-not an orchestrator or multi-model substitute.
+every path beneath that copy. By default (`local_first=true`) cloud is a
+sanitized, bounded contingency: Ollama runs every agent and Gemini/Groq only
+step in, budget-capped, after a local failure. Setting `CLOUD_ENABLED=true`
+and `LOCAL_FIRST=false` reverses the priority — `CloudModelRuntime` becomes
+the primary runtime for all six agents (still schema-constrained and
+governed-facts-checked, still routed per role through the fixed
+Gemini/Groq map) and `LocalModelRuntime`/Ollama becomes the safety-net
+fallback if a cloud call fails. Either way, cloud never becomes the
+orchestrator: LangGraph routing, guardrails, and governed facts are identical
+regardless of which runtime executes a node. Both runtimes build their
+prompts from the same role-specific `prompts/<role>/system.md` files via
+`engineering_team.llm.prompting`, so provider choice never changes what an
+agent is allowed to do.
 
 RAG ingestion uses LangChain Document and RecursiveCharacterTextSplitter as a
 small integration layer before Sentence Transformers and persistent Chroma.
