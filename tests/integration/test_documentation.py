@@ -18,5 +18,8 @@ def test_required_documentation_and_demo_commands_are_present() -> None:
         "SC-01", "SC-05", "scripts/run_evaluation.py", "scripts/run_multimodel.py",
         "LangChain Document", "MCP Server", "stdio", "--live-models",
         "scenarios-live.json",
+        "ProjectCapabilities", "PROJECT_CAPABILITY_ERROR", "Node/TypeScript",
+        ".NET", "Java", "Go", "Rust", "profile fingerprint",
+            "HF_HUB_OFFLINE", "LANGFUSE_OFFLINE", "unique", "behavior identifier",
     ):
         assert phrase in combined

@@ -112,7 +112,9 @@ generated from this registry so they cannot contradict `_preserves_governed_fact
   profile.
 - Architecture preserves evidence provenance and known risks. It may describe
   components, APIs, data changes, dependencies, decisions, and impact only when
-  supported by Product facts and the profile.
+  supported by Product facts and the profile. Product business rules and
+  acceptance criteria are included verbatim in its bounded context, so a
+  required capability may be proposed even when it does not exist yet.
 - Developer returns only bounded mutations for inspected safe paths. It does
   not infer UI, API, persistence, authentication, or another architectural
   surface unless the requirement, Architecture artifact, or inspected files
@@ -120,8 +122,11 @@ generated from this registry so they cannot contradict `_preserves_governed_fact
 - Security may add findings and recommendations but cannot weaken deterministic
   status, severity, failed checklist controls, scan failures, or provenance.
 - Testing may add ecosystem-native test mutations only under validated test
-  paths. It cannot change production files, erase failures, claim unexecuted
-  results, or substitute another ecosystem's test framework.
+  paths. Normalized paths must be unique, every accepted mutation must reference
+  behavior added by the implementation diff, and its context includes the
+  governed business rules and acceptance criteria. It cannot change production
+  files, erase failures, claim unexecuted results, overwrite new evidence with
+  an unrelated existing test, or substitute another ecosystem's test framework.
 - Reviewer may explain and score validated evidence but cannot weaken status,
   problems, return recommendation, or evidence references. Graph routing and
   final approval remain deterministic.
@@ -171,6 +176,48 @@ complete-file mutation contracts; Product, Architecture, Security, and
 Reviewer retain smaller artifact-only bounds. Every budget has a regression
 test against its schema contract.
 
+### Causal remediation and preservation
+
+Downstream validation evidence is a separate read-only context channel, not a
+tool grant. On remediation, Developer receives the prior implementation/diff,
+Reviewer reason, and only the latest relevant failed validation artifact plus
+one bounded causal `ToolResult`. Testing failures expose the latest failed
+`run_tests` status, exception/assertion summary, and evidence reference;
+Security failures expose the equivalent review and scanner evidence. The
+Developer tool allowlist remains unchanged and never gains test or scanner
+execution permission from this visibility.
+
+Reviewer may retain a generic deterministic audit reason, but the
+`remediation_request` must include the latest structured causal result when it
+exists. Complete logs and complete state are prohibited; summaries preserve
+the useful failure head and tail within the bounded context.
+
+Testing model output is an internal `TestingMutationPlan` containing at most
+one unique normalized test path and an optional no-mutation reason. Graph code
+owns execution commands, actual results, failures, evidence, and final status.
+Generated tests exercise executable behavior and derive state setup from an
+existing public/domain API, repository fixture/helper, or the inspected
+implementation contract; they do not manufacture missing production
+infrastructure or opaque inconsistent fixtures.
+
+Every Python `UPDATE` is compared with its inspected original before Repository
+MCP write. AST-derived top-level functions, classes, and decorated route
+handlers are preserved unless the validated requirement or architecture
+explicitly authorizes removal of the named boundary. Unparseable or
+unauthorized destructive replacements fail closed before mutation.
+
+Security governance is monotonic. Grounded model/RAG evidence may strengthen a
+deterministic `PASS` into `FAIL`, raise severity, fail checklist controls, or
+require HITL. It may never weaken an existing deterministic failure. Security,
+Architecture, and Testing prompts receive bounded relevant RAG fragment text
+with source, section, chunk, and score provenance; source IDs alone are not
+sufficient reasoning context.
+
+An invalid Testing plan receives one bounded schema-only repair. Exhaustion
+preserves `LLM_QUALITY_ERROR` and follows the governed fallback/HITL terminal
+route. With no available cloud fallback, the result is explicit
+`HUMAN_REVIEW_REQUIRED`, never control-flow fallthrough to opaque `INCOMPLETE`.
+
 ## Workflow
 
 1. The isolated workspace is created.
@@ -205,7 +252,9 @@ Structured-response repair remains stateless and self-contained for every
 role. A failed attempt with a remaining local repair is a Langfuse `WARNING`;
 the exhausted attempt is `ERROR`. Langfuse authentication or HTTP
 unavailability degrades to the correlated local trace and cannot abort the
-workflow. Profile detection, selected context paths, argv commands, tool exit
+workflow. `LANGFUSE_OFFLINE=true` deliberately prevents live exporter startup
+while retaining the same correlated local artifact, including when credentials
+remain configured. Profile detection, selected context paths, argv commands, tool exit
 status, and terminal capability decisions are trace events with secrets
 redacted.
 

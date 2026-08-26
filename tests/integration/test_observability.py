@@ -1,3 +1,5 @@
+import httpx
+
 from engineering_team.observability.langfuse import LangfuseTracer
 
 
@@ -92,6 +94,18 @@ def test_langfuse_without_credentials_keeps_local_correlated_trace(monkeypatch) 
     assert [event["name"] for event in trace.events] == ["retry", "FinalReport"]
 
 
+def test_langfuse_explicit_offline_mode_ignores_configured_credentials(monkeypatch) -> None:
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "configured-public-key")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "configured-secret-key")
+    monkeypatch.setenv("LANGFUSE_OFFLINE", "true")
+
+    trace = LangfuseTracer().start_run("explicit-offline", "requirement")
+
+    assert trace.live is False
+    assert trace.live_error is None
+    assert trace.trace_id
+
+
 def test_langfuse_invalid_credentials_do_not_claim_live_export() -> None:
     class InvalidClient(FakeLangfuse):
         def auth_check(self):
@@ -101,6 +115,21 @@ def test_langfuse_invalid_credentials_do_not_claim_live_export() -> None:
 
     assert trace.live is False
     assert trace.live_error == "LANGFUSE_AUTH_FAILED"
+
+
+def test_langfuse_connection_failure_falls_back_to_local_trace() -> None:
+    class UnavailableClient(FakeLangfuse):
+        def auth_check(self):
+            raise httpx.ConnectError("connection refused")
+
+    trace = LangfuseTracer(client=UnavailableClient()).start_run(
+        "unavailable",
+        "requirement",
+    )
+
+    assert trace.live is False
+    assert trace.live_error == "LANGFUSE_UNAVAILABLE"
+    assert trace.trace_id
 
 
 def test_adapter_uses_canonical_base_url_and_exports_live(monkeypatch) -> None:

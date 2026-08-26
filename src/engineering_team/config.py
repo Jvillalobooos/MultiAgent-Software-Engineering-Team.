@@ -3,17 +3,19 @@
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from engineering_team.contracts.enums import ModelPriority
+
 
 class Settings(BaseSettings):
-    """Settings with local-first safe defaults required by the SDD contracts."""
+    """Settings with cloud-first safe defaults required by the SDD contracts."""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     fast_model: str = "qwen3.5:4b"
     deep_model: str = "qwen3.5:9b"
     coding_model: str = "qwen3.5:9b"
-    local_first: bool = True
-    cloud_enabled: bool = False
+    model_priority: ModelPriority = ModelPriority.CLOUD_FIRST
+    cloud_enabled: bool = True
     max_local_retries: int = Field(default=1, ge=0)
     max_local_repairs: int = Field(default=1, ge=0)
     max_cloud_escalations_per_agent: int = Field(default=1, ge=0)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 from typing import Any, TypedDict
 
 from langgraph.checkpoint.memory import InMemorySaver
@@ -15,18 +16,26 @@ from engineering_team.agents.product import ProductAgent
 from engineering_team.agents.reviewer import ReviewerAgent
 from engineering_team.agents.security import SecurityAgent
 from engineering_team.agents.testing import TestingAgent
+from engineering_team.capabilities import is_native_test_path
 from engineering_team.contracts.enums import (
     ActionMode,
     AgentRole,
     ErrorCode,
+    ProjectCapabilityStatus,
     RemediationCategory,
     ReviewerStatus,
     RouteTarget,
     ToolStatus,
 )
-from engineering_team.contracts.models import FinalReport, ReviewerDecision, WorkflowError
+from engineering_team.contracts.models import (
+    FinalReport,
+    ProjectCapabilityProfile,
+    ReviewerDecision,
+    WorkflowError,
+)
 from engineering_team.contracts.state import EngineeringState
-from engineering_team.models.context import build_context
+from engineering_team.llm.priority import resolve_runtime_order
+from engineering_team.models.context import bounded_remediation_output, build_context
 from engineering_team.workspace.decision_documents import (
     write_architecture_decisions,
     write_product_specification,
@@ -43,6 +52,7 @@ class WalkingState(TypedDict):
 class WorkflowState(TypedDict, total=False):
     run_id: str
     requirement: str
+    project_capabilities: ProjectCapabilityProfile
     specification: object
     repository_context: dict
     architecture: object
@@ -71,12 +81,29 @@ class WorkflowState(TypedDict, total=False):
 
 def approval_problems(state: EngineeringState) -> list[str]:
     """Return deterministic material-evidence gaps for an implementable run."""
+    capability_tools = {
+        "test": "run_tests",
+        "build": "run_build",
+        "lint": "run_linter",
+        "dependency_check": "scan_dependencies",
+        "security_scan": "run_security_scan",
+    }
+    problems = []
+    if state.project_capabilities is not None:
+        for capability in state.project_capabilities.required_capabilities:
+            tool_name = capability_tools[capability]
+            if not any(
+                item.tool_name == tool_name and item.status is ToolStatus.SUCCESS
+                for item in state.tool_results
+            ):
+                problems.append(
+                    f"required project capability '{capability}' validation is missing or unsuccessful"
+                )
     if not state.repository_context.get("implementation_required", False):
-        return []
+        return problems
     implementation = state.implementation
     if implementation is None:
         return ["implementation is missing"]
-    problems: list[str] = []
     if implementation.action_mode.value != "APPLIED":
         problems.append("implementation is not applied")
     if not implementation.changed_files:
@@ -103,6 +130,66 @@ def approval_problems(state: EngineeringState) -> list[str]:
     if any(error.code in {ErrorCode.MCP_ERROR, ErrorCode.RAG_ERROR} for error in state.errors):
         problems.append("required MCP or RAG evidence is unavailable")
     return problems
+
+
+def _causal_segment(state: EngineeringState, stage: str, tool_names: set[str]) -> str | None:
+    cause = next(
+        (
+            item for item in reversed(state.tool_results)
+            if item.tool_name in tool_names and item.status is not ToolStatus.SUCCESS
+        ),
+        None,
+    )
+    if cause is None:
+        return None
+    summary = bounded_remediation_output(cause.output_summary, 1_200)
+    evidence = cause.evidence_reference or "unavailable"
+    return (
+        f"{stage} failed. Quality MCP {cause.tool_name} returned "
+        f"{cause.status.value}:\n{summary}\nEvidence: {evidence}"
+    )
+
+
+def causal_remediation_request(
+    state: EngineeringState,
+    audit_reason: str,
+    category: RemediationCategory | None = None,
+) -> str:
+    """Attach every currently active structured downstream cause to the audit reason.
+
+    A targeted Security or Testing remediation category surfaces only its own cause.
+    A generic/implementation pre-gate rejection surfaces every active blocker so
+    Developer sees all concrete evidence at once, not just the first one found.
+    """
+    latest_test = state.test_results[-1] if state.test_results else None
+    testing_failed = latest_test is not None and latest_test.status is not ToolStatus.SUCCESS
+    security_failed = (
+        state.security_review is not None and state.security_review.status.value == "FAIL"
+    )
+    segments: list[str] = []
+    if category is RemediationCategory.SECURITY:
+        if security_failed:
+            segment = _causal_segment(state, "Security", {"scan_dependencies", "run_security_scan"})
+            if segment is not None:
+                segments.append(segment)
+    elif category is RemediationCategory.TESTING:
+        if testing_failed:
+            segment = _causal_segment(state, "Testing", {"run_tests"})
+            if segment is not None:
+                segments.append(segment)
+    else:
+        if security_failed:
+            segment = _causal_segment(state, "Security", {"scan_dependencies", "run_security_scan"})
+            if segment is not None:
+                segments.append(segment)
+        if testing_failed:
+            segment = _causal_segment(state, "Testing", {"run_tests"})
+            if segment is not None:
+                segments.append(segment)
+    if not segments:
+        return audit_reason
+    request = audit_reason + "\n" + "\n".join(segments)
+    return bounded_remediation_output(request, 2_000)
 
 
 def implementation_pre_gate_problems(state: EngineeringState) -> list[str]:
@@ -159,6 +246,7 @@ def build_walking_graph():
 
 
 def _report(state: EngineeringState, status: str) -> FinalReport:
+    profile = state.project_capabilities
     return FinalReport(
         feature="Autonomous Software Engineering Team",
         status=status,
@@ -179,6 +267,19 @@ def _report(state: EngineeringState, status: str) -> FinalReport:
             if status == "APPROVED"
             else "review diagnostics and refine the requirement before a new run"
         ),
+        project_capabilities=(
+            {
+                "status": profile.status.value,
+                "ecosystem": profile.ecosystem.value,
+                "project_root": profile.project_root,
+                "manifests": profile.manifests,
+                "required_capabilities": profile.required_capabilities,
+                "missing_capabilities": profile.missing_capabilities,
+                "fingerprint": profile.fingerprint,
+            }
+            if profile is not None
+            else None
+        ),
     )
 
 
@@ -190,6 +291,7 @@ def build_engineering_graph(
     retriever: Any | None = None,
     model_runtime: Any | None = None,
     cloud_runtime: Any | None = None,
+    model_priority: str = "cloud_first",
     trace: Any | None = None,
     test_paths: list[str] | None = None,
     interactive_hitl: bool = False,
@@ -197,6 +299,7 @@ def build_engineering_graph(
 ):
     """Compile normal, remediation, MCP/RAG, and HITL routes as real nodes."""
     graph = StateGraph(WorkflowState)
+    runtime_order = resolve_runtime_order(model_priority, model_runtime, cloud_runtime)
     agents: dict[AgentRole, Any] = {
         AgentRole.PRODUCT: ProductAgent(), AgentRole.ARCHITECTURE: ArchitectureAgent(),
         AgentRole.DEVELOPER: DeveloperAgent(), AgentRole.SECURITY: SecurityAgent(),
@@ -255,7 +358,93 @@ def build_engineering_graph(
             )
         return result.status is ToolStatus.UNAVAILABLE
 
-    def apply_mutations(candidate: Any, role: AgentRole, adapter: Any, tool_results: list[Any], errors: list[WorkflowError]) -> Any:
+    def project_capabilities_node(raw_state: dict[str, Any]) -> dict[str, Any]:
+        """Detect and validate the target project before invoking any model."""
+        if repository_mcp is None or not hasattr(
+            repository_mcp, "detect_project_capabilities"
+        ):
+            return {}
+        current = EngineeringState.model_validate(raw_state)
+        errors = list(current.errors)
+        tool_results = list(current.tool_results)
+        result = repository_mcp.detect_project_capabilities(AgentRole.ARCHITECTURE)
+        unavailable = preserve_tool_result(
+            result,
+            AgentRole.ARCHITECTURE,
+            errors,
+            tool_results,
+            repository_mcp,
+        )
+        profile: ProjectCapabilityProfile | None = None
+        if not unavailable and result.status is ToolStatus.SUCCESS:
+            try:
+                profile = ProjectCapabilityProfile.model_validate_json(result.output_summary)
+            except ValueError as exc:
+                errors.append(
+                    WorkflowError(
+                        code=ErrorCode.PROJECT_CAPABILITY_ERROR,
+                        source_stage="ProjectCapabilities",
+                        retryable=False,
+                        detail=f"invalid project capability profile: {exc}",
+                        evidence_reference=result.evidence_reference,
+                    )
+                )
+        elif not unavailable:
+            errors.append(
+                WorkflowError(
+                    code=ErrorCode.PROJECT_CAPABILITY_ERROR,
+                    source_stage="ProjectCapabilities",
+                    retryable=False,
+                    detail=result.error or "project capability detection failed",
+                    evidence_reference=result.evidence_reference,
+                )
+            )
+        if profile is not None and profile.status is not ProjectCapabilityStatus.SUPPORTED:
+            missing = "; ".join(profile.missing_capabilities) or "no specific detail"
+            manifests = ", ".join(profile.manifests) or "none"
+            detail = (
+                f"status={profile.status.value}; ecosystem={profile.ecosystem.value}; "
+                f"manifests={manifests}; missing={missing}; "
+                "safe action=configure one supported project and its required test command"
+            )
+            errors.append(
+                WorkflowError(
+                    code=ErrorCode.PROJECT_CAPABILITY_ERROR,
+                    source_stage="ProjectCapabilities",
+                    retryable=False,
+                    detail=detail,
+                    evidence_reference=result.evidence_reference,
+                )
+            )
+        failed = unavailable or profile is None or (
+            profile.status is not ProjectCapabilityStatus.SUPPORTED
+        )
+        if trace is not None:
+            trace.record(
+                "Project capability detection",
+                as_type="agent",
+                level="ERROR" if failed else None,
+                status_message=errors[-1].detail if failed and errors else None,
+                output=profile.model_dump(mode="json") if profile is not None else None,
+                metadata={"llm_skipped": True},
+            )
+        return {
+            "project_capabilities": profile,
+            "errors": errors,
+            "tool_results": tool_results,
+            "human_review_required": failed,
+            "trace_id": trace.trace_id if trace is not None else current.trace_id,
+        }
+
+    def apply_mutations(
+        candidate: Any,
+        role: AgentRole,
+        adapter: Any,
+        tool_results: list[Any],
+        errors: list[WorkflowError],
+        profile: ProjectCapabilityProfile | None = None,
+        preservation_basis: str = "",
+    ) -> Any:
         """Apply only validated MCP mutations and derive evidence from returned tools."""
         mutations = getattr(candidate, "mutations", []) if role is AgentRole.DEVELOPER else getattr(candidate, "test_mutations", [])
         if adapter is None or not mutations:
@@ -266,14 +455,53 @@ def build_engineering_graph(
             if item.tool_name in {"read_file", "get_file_content"}
             and item.status is ToolStatus.SUCCESS and item.input_summary.startswith("path=")
         }
+        inspected_content = {
+            item.input_summary.removeprefix("path=").replace("\\", "/"): item.output_summary
+            for item in tool_results
+            if item.tool_name in {"read_file", "get_file_content"}
+            and item.status is ToolStatus.SUCCESS
+            and item.input_summary.startswith("path=")
+        }
         writes: list[Any] = []
         for mutation in mutations:
+            if (
+                role is AgentRole.TESTING
+                and (profile is None or not is_native_test_path(profile, mutation.path))
+            ):
+                errors.append(WorkflowError(
+                    code=ErrorCode.TOOL_ERROR,
+                    source_stage=role.value,
+                    retryable=False,
+                    detail=f"non-native test mutation path: {mutation.path}",
+                ))
+                continue
             if role is AgentRole.DEVELOPER and mutation.path not in inspected:
                 errors.append(WorkflowError(
                     code=ErrorCode.TOOL_ERROR, source_stage=role.value, retryable=False,
                     detail=f"uninspected mutation path: {mutation.path}",
                 ))
                 continue
+            if (
+                role is AgentRole.DEVELOPER
+                and mutation.operation == "update"
+            ):
+                safe, removed = DeveloperAgent.validate_update_preservation(
+                    mutation.path,
+                    inspected_content[mutation.path],
+                    mutation.content,
+                    preservation_basis,
+                )
+                if not safe:
+                    errors.append(WorkflowError(
+                        code=ErrorCode.TOOL_ERROR,
+                        source_stage=role.value,
+                        retryable=False,
+                        detail=(
+                            f"update rejected: removed Python boundaries from "
+                            f"{mutation.path}: {', '.join(removed)}"
+                        ),
+                    ))
+                    continue
             operation = adapter.create_file if mutation.operation == "create" else adapter.update_file
             result = operation(role, mutation.path, mutation.content)
             preserve_tool_result(result, role, errors, tool_results, adapter)
@@ -297,7 +525,10 @@ def build_engineering_graph(
             })
         return candidate
 
-    def developer_inspection_fingerprint(tool_results: list[Any]) -> str:
+    def developer_inspection_fingerprint(
+        tool_results: list[Any],
+        profile: ProjectCapabilityProfile | None,
+    ) -> str:
         inspected = [
             f"{item.input_summary}:{item.output_summary}"
             for item in tool_results
@@ -306,8 +537,28 @@ def build_engineering_graph(
             and item.status is ToolStatus.SUCCESS
             and item.input_summary.startswith("path=")
             and DeveloperAgent.is_implementation_candidate(item.input_summary[5:])
+            and (
+                profile is None
+                or not is_native_test_path(profile, item.input_summary[5:])
+            )
         ]
         return hashlib.sha256("\n".join(inspected).encode()).hexdigest()
+
+    def invoke_quality(
+        operation: Any,
+        role: AgentRole,
+        profile: ProjectCapabilityProfile | None,
+        *args: Any,
+    ) -> Any:
+        """Pass only the validated fingerprint across the Quality boundary."""
+        parameters = inspect.signature(operation).parameters
+        if profile is not None and "profile_fingerprint" in parameters:
+            return operation(
+                role,
+                *args,
+                profile_fingerprint=profile.fingerprint,
+            )
+        return operation(role, *args)
 
     def make_node(role: AgentRole):
         def node(raw_state: dict[str, Any]) -> dict[str, Any]:
@@ -337,7 +588,9 @@ def build_engineering_graph(
                         "route_history": [*current.route_history, role.value],
                         "review": decision,
                         "iteration": current.iteration + 1,
-                        "remediation_request": decision.reason,
+                        "remediation_request": causal_remediation_request(
+                            current, decision.reason, decision.remediation_category
+                        ),
                         "next_validation_path": "full",
                         "trace_id": trace.trace_id if trace is not None else current.trace_id,
                     }
@@ -368,6 +621,12 @@ def build_engineering_graph(
                     and item.status is ToolStatus.SUCCESS
                     and item.input_summary.startswith("path=")
                     and DeveloperAgent.is_implementation_candidate(item.input_summary[5:])
+                    and (
+                        current.project_capabilities is None
+                        or not is_native_test_path(
+                            current.project_capabilities, item.input_summary[5:]
+                        )
+                    )
                     for item in tool_results
                 )
             )
@@ -388,6 +647,13 @@ def build_engineering_graph(
                         line.strip().replace("\\", "/")
                         for line in result.output_summary.splitlines()
                         if DeveloperAgent.is_implementation_candidate(line.strip().replace("\\", "/"))
+                        and (
+                            current.project_capabilities is None
+                            or not is_native_test_path(
+                                current.project_capabilities,
+                                line.strip().replace("\\", "/"),
+                            )
+                        )
                     ]
                     terms = DeveloperAgent.relevance_terms(
                         current.specification, current.architecture, current.requirement
@@ -410,6 +676,13 @@ def build_engineering_graph(
                                 line.strip().replace("\\", "/")
                                 for line in searched.output_summary.splitlines()
                                 if DeveloperAgent.is_implementation_candidate(line.strip().replace("\\", "/"))
+                                and (
+                                    current.project_capabilities is None
+                                    or not is_native_test_path(
+                                        current.project_capabilities,
+                                        line.strip().replace("\\", "/"),
+                                    )
+                                )
                             )
                     already_read = {
                         item.input_summary[5:].replace("\\", "/")
@@ -466,15 +739,52 @@ def build_engineering_graph(
                             if discovered:
                                 read_order[index:index] = discovered
             if quality_mcp is not None and role is AgentRole.SECURITY:
+                security_operations = {
+                    "dependency_check": "scan_dependencies",
+                    "security_scan": "run_security_scan",
+                }
+                available_capabilities = (
+                    set(current.project_capabilities.commands)
+                    if current.project_capabilities is not None
+                    else set(security_operations)
+                )
                 operations = [
-                    getattr(quality_mcp, name) for name in (
-                        "scan_dependencies", "run_security_scan"
-                    ) if hasattr(quality_mcp, name)
+                    getattr(quality_mcp, tool_name)
+                    for capability, tool_name in security_operations.items()
+                    if capability in available_capabilities
+                    and hasattr(quality_mcp, tool_name)
                 ]
                 for operation in operations:
-                    result = operation(role)
+                    result = invoke_quality(
+                        operation,
+                        role,
+                        current.project_capabilities,
+                    )
                     required_mcp_missing |= preserve_tool_result(
                         result, role, errors, tool_results, quality_mcp
+                    )
+            if (
+                repository_mcp is not None
+                and role is AgentRole.TESTING
+                and current.project_capabilities is not None
+                and hasattr(repository_mcp, "read_test_file")
+                and not any(item.tool_name == "read_test_file" for item in tool_results)
+            ):
+                listed_paths = sorted({
+                    path.strip().replace("\\", "/")
+                    for item in tool_results
+                    if item.tool_name == "list_files" and item.status is ToolStatus.SUCCESS
+                    for path in item.output_summary.splitlines()
+                    if is_native_test_path(current.project_capabilities, path.strip())
+                })
+                if listed_paths:
+                    example = repository_mcp.read_test_file(
+                        role,
+                        listed_paths[0],
+                        current.project_capabilities.fingerprint,
+                    )
+                    required_mcp_missing |= preserve_tool_result(
+                        example, role, errors, tool_results, repository_mcp
                     )
             current = current.model_copy(
                 update={"rag_evidence": rag_evidence, "errors": errors, "tool_results": tool_results}
@@ -492,7 +802,13 @@ def build_engineering_graph(
             model_usage = list(current.model_usage)
             envelope = build_context(role, current, current.requirement)
             candidate = agents[role].execute(envelope)
-            inspection_fingerprint = developer_inspection_fingerprint(tool_results) if role is AgentRole.DEVELOPER else ""
+            inspection_fingerprint = (
+                developer_inspection_fingerprint(
+                    tool_results, current.project_capabilities
+                )
+                if role is AgentRole.DEVELOPER
+                else ""
+            )
             no_progress_signature = hashlib.sha256(
                 f"{inspection_fingerprint}\n{current.remediation_request or ''}".encode()
             ).hexdigest()
@@ -516,14 +832,18 @@ def build_engineering_graph(
                         "Developer no-progress", as_type="agent", output=output.model_dump(mode="json"),
                         metadata={"iteration": current.iteration, "llm_skipped": True},
                     )
-            elif model_runtime is not None:
-                attempt_start = len(model_runtime.attempts)
+            elif runtime_order.primary is not None:
+                primary_runtime = runtime_order.primary
+                fallback_runtime = runtime_order.fallback
+                attempt_start = len(primary_runtime.attempts)
                 try:
-                    output, model_info = model_runtime.invoke_artifact(role, envelope, candidate)
-                    attempts = model_runtime.attempts[attempt_start:]
+                    output, model_info = primary_runtime.invoke_artifact(
+                        role, envelope, candidate, mode="primary",
+                    )
+                    attempts = primary_runtime.attempts[attempt_start:]
                     model_usage.extend(attempts or [model_info])
                 except RuntimeError as exc:
-                    model_usage.extend(model_runtime.attempts[attempt_start:])
+                    model_usage.extend(primary_runtime.attempts[attempt_start:])
                     message = str(exc)
                     if message.startswith(ErrorCode.LLM_QUALITY_ERROR.value):
                         code = ErrorCode.LLM_QUALITY_ERROR
@@ -539,48 +859,56 @@ def build_engineering_graph(
                             code.value, level="ERROR", status_message=message,
                             metadata={"agent": role.value},
                         )
-                    if cloud_runtime is not None:
-                        cloud_attempt_start = len(getattr(cloud_runtime, "attempts", []))
+                    if fallback_runtime is not None:
+                        fallback_attempt_start = len(getattr(fallback_runtime, "attempts", []))
                         try:
-                            output, cloud_info = cloud_runtime.invoke_artifact(
+                            output, fallback_info = fallback_runtime.invoke_artifact(
                                 role,
                                 envelope,
                                 candidate,
+                                mode="fallback",
                                 fallback_reason=code.value,
                             )
-                            model_usage.append(cloud_info)
-                        except RuntimeError as cloud_exc:
+                            model_usage.append(fallback_info)
+                        except RuntimeError as fallback_exc:
                             model_usage.extend(
-                                getattr(cloud_runtime, "attempts", [])[cloud_attempt_start:]
+                                getattr(fallback_runtime, "attempts", [])[fallback_attempt_start:]
+                            )
+                            fallback_error_code = (
+                                ErrorCode.CLOUD_FALLBACK_UNAVAILABLE
+                                if runtime_order.fallback_is_cloud
+                                else ErrorCode.LLM_AVAILABILITY_ERROR
                             )
                             errors.append(WorkflowError(
-                                code=ErrorCode.CLOUD_FALLBACK_UNAVAILABLE,
+                                code=fallback_error_code,
                                 source_stage=role.value, retryable=False,
-                                detail=str(cloud_exc),
+                                detail=str(fallback_exc),
                             ))
                             if trace is not None:
                                 trace.record(
-                                    "cloud fallback error", level="ERROR",
-                                    status_message=str(cloud_exc),
+                                    "provider fallback error", level="ERROR",
+                                    status_message=str(fallback_exc),
                                     metadata={"agent": role.value},
                                 )
-                            return {
+                            patch_out: dict[str, Any] = {
                                 "route_history": [*current.route_history, role.value],
                                 "errors": errors, "model_usage": model_usage,
                                 "rag_evidence": rag_evidence, "tool_results": tool_results,
                                 "human_review_required": True,
                                 "trace_id": trace.trace_id if trace is not None else current.trace_id,
-                                "cloud_escalations_by_agent": {
+                            }
+                            if cloud_runtime is not None:
+                                patch_out["cloud_escalations_by_agent"] = {
                                     item.value: count
                                     for item, count in cloud_runtime.budget.by_agent.items()
-                                },
-                                "cloud_escalations_run": cloud_runtime.budget.run_count,
-                            }
+                                }
+                                patch_out["cloud_escalations_run"] = cloud_runtime.budget.run_count
+                            return patch_out
                     else:
                         if trace is not None:
                             trace.record(
                                 "model error", level="ERROR", status_message=message,
-                                metadata={"agent": role.value, "cloud_fallback": "unavailable"},
+                                metadata={"agent": role.value, "provider_fallback": "unavailable"},
                             )
                         return {
                             "route_history": [*current.route_history, role.value],
@@ -608,11 +936,196 @@ def build_engineering_graph(
                     ))
                     decision_document_failed = True
             if role is AgentRole.DEVELOPER:
-                output = apply_mutations(output, role, repository_mcp, tool_results, errors)
+                architecture_basis = current.architecture
+                specification_basis = current.specification
+                preservation_basis = "\n".join([
+                    current.requirement,
+                    getattr(specification_basis, "objective", ""),
+                    *getattr(specification_basis, "business_rules", []),
+                    *getattr(architecture_basis, "decisions", []),
+                    *getattr(architecture_basis, "components", []),
+                    *getattr(architecture_basis, "apis", []),
+                ])
+                output = apply_mutations(
+                    output,
+                    role,
+                    repository_mcp,
+                    tool_results,
+                    errors,
+                    preservation_basis=preservation_basis,
+                )
+                is_developer_remediation = bool(current.remediation_request)
+                attempted_live_call = not skip_developer_model and runtime_order.primary is not None
+
+                def _actionable(candidate_result: Any) -> bool:
+                    return (
+                        candidate_result.action_mode is ActionMode.APPLIED
+                        or candidate_result.blocker is not None
+                    )
+
+                if is_developer_remediation and attempted_live_call and not _actionable(output):
+                    errors.append(WorkflowError(
+                        code=ErrorCode.NON_ACTIONABLE_REMEDIATION,
+                        source_stage=role.value, retryable=True,
+                        detail=(
+                            "Developer primary provider returned zero applicable mutations and "
+                            "no structured blocker for active downstream evidence"
+                        ),
+                    ))
+                    if trace is not None:
+                        trace.record(
+                            "NON_ACTIONABLE_REMEDIATION", level="WARNING",
+                            metadata={"agent": role.value, "provider": "primary"},
+                        )
+                    # The primary cloud provider's own secondary provider (same chain,
+                    # same causal evidence) is tried before ever escalating to local.
+                    if runtime_order.primary_is_cloud:
+                        secondary_attempt_start = len(getattr(runtime_order.primary, "attempts", []))
+                        try:
+                            secondary_output, secondary_info = runtime_order.primary.invoke_artifact(
+                                role, envelope, candidate, mode="fallback",
+                                fallback_reason=ErrorCode.NON_ACTIONABLE_REMEDIATION.value,
+                                start_index=1,
+                            )
+                            model_usage.append(secondary_info)
+                            output = apply_mutations(
+                                secondary_output,
+                                role,
+                                repository_mcp,
+                                tool_results,
+                                errors,
+                                preservation_basis=preservation_basis,
+                            )
+                        except RuntimeError as secondary_exc:
+                            model_usage.extend(
+                                getattr(runtime_order.primary, "attempts", [])[secondary_attempt_start:]
+                            )
+                            if trace is not None:
+                                trace.record(
+                                    "developer remediation secondary-cloud error", level="ERROR",
+                                    status_message=str(secondary_exc),
+                                    metadata={"agent": role.value},
+                                )
+                        if not _actionable(output) and trace is not None:
+                            trace.record(
+                                "NON_ACTIONABLE_REMEDIATION", level="WARNING",
+                                metadata={"agent": role.value, "provider": "secondary_cloud"},
+                            )
+                    if not _actionable(output) and runtime_order.fallback is not None:
+                        fallback_attempt_start = len(getattr(runtime_order.fallback, "attempts", []))
+                        try:
+                            fallback_output, fallback_info = runtime_order.fallback.invoke_artifact(
+                                role, envelope, candidate, mode="fallback",
+                                fallback_reason=ErrorCode.NON_ACTIONABLE_REMEDIATION.value,
+                            )
+                            model_usage.append(fallback_info)
+                            output = apply_mutations(
+                                fallback_output,
+                                role,
+                                repository_mcp,
+                                tool_results,
+                                errors,
+                                preservation_basis=preservation_basis,
+                            )
+                        except RuntimeError as fallback_exc:
+                            model_usage.extend(
+                                getattr(runtime_order.fallback, "attempts", [])[fallback_attempt_start:]
+                            )
+                            if trace is not None:
+                                trace.record(
+                                    "developer remediation fallback error", level="ERROR",
+                                    status_message=str(fallback_exc),
+                                    metadata={"agent": role.value},
+                                )
+                    if not _actionable(output):
+                        errors.append(WorkflowError(
+                            code=ErrorCode.DEVELOPER_REMEDIATION_EXHAUSTED,
+                            source_stage=role.value, retryable=False,
+                            detail=(
+                                "Both primary and fallback providers returned zero applicable "
+                                "mutations and no structured blocker for active downstream evidence"
+                            ),
+                        ))
+                        if trace is not None:
+                            trace.record(
+                                "DEVELOPER_REMEDIATION_EXHAUSTED", level="ERROR",
+                                metadata={"agent": role.value},
+                            )
+                        return {
+                            "route_history": [*current.route_history, role.value],
+                            "errors": errors, "model_usage": model_usage,
+                            "rag_evidence": rag_evidence, "tool_results": tool_results,
+                            "implementation": output,
+                            "human_review_required": True,
+                            "trace_id": trace.trace_id if trace is not None else current.trace_id,
+                        }
             if role is AgentRole.TESTING:
-                output = apply_mutations(output, role, repository_mcp, tool_results, errors)
+                native_mutations = []
+                seen_paths: set[str] = set()
+                for mutation in output.test_mutations:
+                    normalized_path = mutation.path.replace("\\", "/").casefold()
+                    rejection: str | None = None
+                    if (
+                        current.project_capabilities is None
+                        or not is_native_test_path(current.project_capabilities, mutation.path)
+                    ):
+                        rejection = f"non-native test mutation path: {mutation.path}"
+                    elif normalized_path in seen_paths:
+                        rejection = f"duplicate test mutation path: {mutation.path}"
+                    elif (
+                        current.implementation is not None
+                        and not TestingAgent.mutation_is_grounded(
+                            current.implementation,
+                            mutation,
+                        )
+                    ):
+                        rejection = f"ungrounded test mutation: {mutation.path}"
+                    if rejection is not None:
+                        errors.append(WorkflowError(
+                            code=ErrorCode.TOOL_ERROR,
+                            source_stage=role.value,
+                            retryable=False,
+                            detail=rejection,
+                        ))
+                        continue
+                    seen_paths.add(normalized_path)
+                    native_mutations.append(mutation)
+                output = output.model_copy(update={
+                    "test_mutations": native_mutations,
+                    "generated_tests": [mutation.path for mutation in native_mutations],
+                })
+                output = apply_mutations(
+                    output,
+                    role,
+                    repository_mcp,
+                    tool_results,
+                    errors,
+                    current.project_capabilities,
+                )
                 if quality_mcp is not None:
-                    result = quality_mcp.run_tests(role, output.generated_tests or test_paths)
+                    if (
+                        current.project_capabilities is not None
+                        and "build" in current.project_capabilities.required_capabilities
+                        and hasattr(quality_mcp, "run_build")
+                    ):
+                        build_result = invoke_quality(
+                            quality_mcp.run_build,
+                            role,
+                            current.project_capabilities,
+                        )
+                        required_mcp_missing |= preserve_tool_result(
+                            build_result,
+                            role,
+                            errors,
+                            tool_results,
+                            quality_mcp,
+                        )
+                    result = invoke_quality(
+                        quality_mcp.run_tests,
+                        role,
+                        current.project_capabilities,
+                        output.generated_tests or test_paths,
+                    )
                     required_mcp_missing |= preserve_tool_result(
                         result, role, errors, tool_results, quality_mcp
                     )
@@ -673,7 +1186,9 @@ def build_engineering_graph(
             patch[target] = [*current.test_results, output] if role is AgentRole.TESTING else output
             if role is AgentRole.REVIEWER and output.status is ReviewerStatus.REJECTED:
                 patch["iteration"] = current.iteration + 1
-                patch["remediation_request"] = output.reason
+                patch["remediation_request"] = causal_remediation_request(
+                    current, output.reason, output.remediation_category
+                )
                 patch["next_validation_path"] = (
                     "testing_only"
                     if output.remediation_category is RemediationCategory.TESTING
@@ -693,7 +1208,7 @@ def build_engineering_graph(
     def developer_next(raw_state: dict[str, Any]) -> str:
         state = EngineeringState.model_validate(raw_state)
         if state.human_review_required:
-            route = "INCOMPLETE"
+            route = governed_terminal_route(state)
             if trace is not None:
                 trace.record("route", metadata={"from": "Developer", "to": route})
             return route
@@ -717,7 +1232,7 @@ def build_engineering_graph(
     def security_next(raw_state: dict[str, Any]) -> str:
         state = EngineeringState.model_validate(raw_state)
         if state.human_review_required:
-            return "INCOMPLETE"
+            return governed_terminal_route(state)
         route = security_route(state.security_review.highest_severity)
         if route == "security_hitl" and not interactive_hitl:
             route = "INCOMPLETE"
@@ -725,14 +1240,25 @@ def build_engineering_graph(
             trace.record("route", metadata={"from": "Security", "to": route})
         return route
 
+    _HITL_ELIGIBLE_CODES = {
+        ErrorCode.LLM_QUALITY_ERROR,
+        ErrorCode.NON_ACTIONABLE_REMEDIATION,
+        ErrorCode.DEVELOPER_REMEDIATION_EXHAUSTED,
+    }
+
+    def governed_terminal_route(state: EngineeringState) -> str:
+        if any(error.code in _HITL_ELIGIBLE_CODES for error in state.errors):
+            return "HUMAN_REVIEW_REQUIRED"
+        return "INCOMPLETE"
+
     def next_or_human(raw_state: dict[str, Any], normal: str) -> str:
         state = EngineeringState.model_validate(raw_state)
-        return "INCOMPLETE" if state.human_review_required else normal
+        return governed_terminal_route(state) if state.human_review_required else normal
 
     def reviewer_next(raw_state: dict[str, Any]) -> str:
         state = EngineeringState.model_validate(raw_state)
         if state.human_review_required:
-            return "INCOMPLETE"
+            return governed_terminal_route(state)
         route = review_route(state.review, state.iteration)
         if trace is not None:
             trace.record(
@@ -794,34 +1320,63 @@ def build_engineering_graph(
             "human_decision": human_decision,
         }
 
+    graph.add_node("ProjectCapabilities", project_capabilities_node)
     graph.add_node("FinalReport", final_node)
     graph.add_node("INCOMPLETE", incomplete_node)
     graph.add_node("HUMAN_REVIEW_REQUIRED", human_node)
     graph.add_node("security_hitl", lambda state: human_node(state, "security_hitl"))
-    graph.add_edge(START, "Product")
+    graph.add_edge(START, "ProjectCapabilities")
+    graph.add_conditional_edges(
+        "ProjectCapabilities",
+        lambda state: next_or_human(state, "Product"),
+        {"Product": "Product", "INCOMPLETE": "INCOMPLETE"},
+    )
     graph.add_conditional_edges(
         "Product", lambda state: next_or_human(state, "Architecture"),
-        {"Architecture": "Architecture", "INCOMPLETE": "INCOMPLETE"},
+        {
+            "Architecture": "Architecture",
+            "INCOMPLETE": "INCOMPLETE",
+            "HUMAN_REVIEW_REQUIRED": "HUMAN_REVIEW_REQUIRED",
+        },
     )
     graph.add_conditional_edges(
         "Architecture", lambda state: next_or_human(state, "Developer"),
-        {"Developer": "Developer", "INCOMPLETE": "INCOMPLETE"},
+        {
+            "Developer": "Developer",
+            "INCOMPLETE": "INCOMPLETE",
+            "HUMAN_REVIEW_REQUIRED": "HUMAN_REVIEW_REQUIRED",
+        },
     )
     graph.add_conditional_edges(
         "Developer", developer_next,
-        {"Security": "Security", "Testing": "Testing", "Reviewer": "Reviewer", "INCOMPLETE": "INCOMPLETE"},
+        {
+            "Security": "Security", "Testing": "Testing", "Reviewer": "Reviewer",
+            "INCOMPLETE": "INCOMPLETE",
+            "HUMAN_REVIEW_REQUIRED": "HUMAN_REVIEW_REQUIRED",
+        },
     )
     graph.add_conditional_edges(
         "Security", security_next,
-        {"Testing": "Testing", "security_hitl": "security_hitl", "INCOMPLETE": "INCOMPLETE"},
+        {
+            "Testing": "Testing", "security_hitl": "security_hitl",
+            "INCOMPLETE": "INCOMPLETE",
+            "HUMAN_REVIEW_REQUIRED": "HUMAN_REVIEW_REQUIRED",
+        },
     )
     graph.add_conditional_edges(
         "Testing", lambda state: next_or_human(state, "Reviewer"),
-        {"Reviewer": "Reviewer", "INCOMPLETE": "INCOMPLETE"},
+        {
+            "Reviewer": "Reviewer", "INCOMPLETE": "INCOMPLETE",
+            "HUMAN_REVIEW_REQUIRED": "HUMAN_REVIEW_REQUIRED",
+        },
     )
     graph.add_conditional_edges(
         "Reviewer", reviewer_next,
-        {"FinalReport": "FinalReport", "Architecture": "Architecture", "Developer": "Developer", "INCOMPLETE": "INCOMPLETE"},
+        {
+            "FinalReport": "FinalReport", "Architecture": "Architecture",
+            "Developer": "Developer", "INCOMPLETE": "INCOMPLETE",
+            "HUMAN_REVIEW_REQUIRED": "HUMAN_REVIEW_REQUIRED",
+        },
     )
     graph.add_edge("FinalReport", END)
     graph.add_edge("INCOMPLETE", END)

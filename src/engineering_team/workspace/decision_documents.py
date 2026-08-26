@@ -1,7 +1,7 @@
 """Persist validated Product and Architecture decisions in a run workspace."""
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from engineering_team.contracts.models import ArchitectureProposal, ProductSpecification
 

@@ -57,6 +57,28 @@ def build_repository_server(root: str | Path) -> MCPServer:
         return result.model_dump(mode="json")
 
     @server.tool()
+    def detect_project_capabilities(role: str) -> dict[str, Any]:
+        result = backend.detect_project_capabilities(AgentRole(role)).model_copy(update={
+            "input_summary": "workspace=isolated",
+            "evidence_reference": "mcp://repository/detect_project_capabilities",
+        })
+        return result.model_dump(mode="json")
+
+    @server.tool()
+    def read_test_file(
+        role: str,
+        relative: str,
+        profile_fingerprint: str,
+    ) -> dict[str, Any]:
+        result = backend.read_test_file(
+            AgentRole(role), relative, profile_fingerprint
+        ).model_copy(update={
+            "input_summary": f"path={relative}",
+            "evidence_reference": "mcp://repository/read_test_file",
+        })
+        return result.model_dump(mode="json")
+
+    @server.tool()
     def create_file(role: str, relative: str, content: str) -> dict[str, Any]:
         return _wire_result(
             "repository", backend.create_file, AgentRole(role), relative, content
@@ -80,32 +102,50 @@ def build_quality_server(root: str | Path, timeout_seconds: int = 60) -> MCPServ
     server = MCPServer(name="engineering-team-quality", log_level="ERROR")
 
     @server.tool()
-    def run_tests(role: str, paths: list[str] | None = None) -> dict[str, Any]:
-        return _wire_result("quality", backend.run_tests, AgentRole(role), paths)
+    def run_tests(
+        role: str,
+        paths: list[str] | None = None,
+        profile_fingerprint: str | None = None,
+    ) -> dict[str, Any]:
+        return _wire_result(
+            "quality", backend.run_tests, AgentRole(role), paths, profile_fingerprint
+        )
 
     @server.tool()
     def get_test_results(role: str) -> dict[str, Any]:
         return _wire_result("quality", backend.get_test_results, AgentRole(role))
 
     @server.tool()
-    def run_build(role: str) -> dict[str, Any]:
-        return _wire_result("quality", backend.run_build, AgentRole(role))
+    def run_build(role: str, profile_fingerprint: str | None = None) -> dict[str, Any]:
+        return _wire_result(
+            "quality", backend.run_build, AgentRole(role), profile_fingerprint
+        )
 
     @server.tool()
     def get_build_status(role: str) -> dict[str, Any]:
         return _wire_result("quality", backend.get_build_status, AgentRole(role))
 
     @server.tool()
-    def run_linter(role: str) -> dict[str, Any]:
-        return _wire_result("quality", backend.run_linter, AgentRole(role))
+    def run_linter(role: str, profile_fingerprint: str | None = None) -> dict[str, Any]:
+        return _wire_result(
+            "quality", backend.run_linter, AgentRole(role), profile_fingerprint
+        )
 
     @server.tool()
-    def scan_dependencies(role: str) -> dict[str, Any]:
-        return _wire_result("quality", backend.scan_dependencies, AgentRole(role))
+    def scan_dependencies(
+        role: str, profile_fingerprint: str | None = None
+    ) -> dict[str, Any]:
+        return _wire_result(
+            "quality", backend.scan_dependencies, AgentRole(role), profile_fingerprint
+        )
 
     @server.tool()
-    def run_security_scan(role: str) -> dict[str, Any]:
-        return _wire_result("quality", backend.run_security_scan, AgentRole(role))
+    def run_security_scan(
+        role: str, profile_fingerprint: str | None = None
+    ) -> dict[str, Any]:
+        return _wire_result(
+            "quality", backend.run_security_scan, AgentRole(role), profile_fingerprint
+        )
 
     @server.tool()
     def get_security_report(role: str) -> dict[str, Any]:

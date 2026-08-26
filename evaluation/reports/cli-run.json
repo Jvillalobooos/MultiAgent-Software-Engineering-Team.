@@ -1,11 +1,11 @@
 {
-  "run_id": "multimodel-e584c9ae-de57-42c6-87df-e3f446eade8b",
-  "trace_id": "7aa1df55ab77d602940ca867de6c9b70",
+  "run_id": "multimodel-22af63d0-7374-4d02-9bef-6da89f6e6aa8",
+  "trace_id": "e050f52a1b82261a22b250e4626c93e0",
   "langfuse_live": true,
   "langfuse_error": null,
   "final_status": "HUMAN_REVIEW_REQUIRED",
-  "target_project": "C:\\Users\\AbrahamVillalobosUga\\Desktop\\AI-NOVA\\MultiAgent-Software-Engineering-Team\\sample_app",
-  "workspace": "C:\\Users\\AbrahamVillalobosUga\\Desktop\\AI-NOVA\\MultiAgent-Software-Engineering-Team\\workspace\\runs\\multimodel-e584c9ae-de57-42c6-87df-e3f446eade8b",
+  "target_project": "C:\\Users\\AbrahamVillalobosUga\\Desktop\\AI-NOVA\\MultiAgent-Software-Engineering-Team",
+  "workspace": "C:\\Users\\AbrahamVillalobosUga\\Desktop\\AI-NOVA\\MultiAgent-Software-Engineering-Team\\workspace\\runs\\multimodel-22af63d0-7374-4d02-9bef-6da89f6e6aa8",
   "route_history": [
     "Product",
     "Architecture",
@@ -27,10 +27,10 @@
       "fallback_used": false,
       "fallback_reason": null,
       "degraded": false,
-      "latency_ms": 75661,
+      "latency_ms": 66800,
       "usage": {
-        "prompt_eval_count": 727,
-        "eval_count": 139
+        "prompt_eval_count": 640,
+        "eval_count": 105
       },
       "structured_output_success": true,
       "error": null
@@ -44,9 +44,9 @@
       "fallback_used": false,
       "fallback_reason": null,
       "degraded": false,
-      "latency_ms": 60421,
+      "latency_ms": 47877,
       "usage": {
-        "prompt_eval_count": 1025,
+        "prompt_eval_count": 975,
         "eval_count": 124
       },
       "structured_output_success": true,
@@ -61,10 +61,10 @@
       "fallback_used": false,
       "fallback_reason": null,
       "degraded": false,
-      "latency_ms": 101618,
+      "latency_ms": 78351,
       "usage": {
-        "prompt_eval_count": 1143,
-        "eval_count": 138
+        "prompt_eval_count": 1362,
+        "eval_count": 46
       },
       "structured_output_success": true,
       "error": null
@@ -78,10 +78,10 @@
       "fallback_used": false,
       "fallback_reason": null,
       "degraded": false,
-      "latency_ms": 69737,
+      "latency_ms": 81263,
       "usage": {
-        "prompt_eval_count": 1075,
-        "eval_count": 38
+        "prompt_eval_count": 1384,
+        "eval_count": 45
       },
       "structured_output_success": true,
       "error": null
@@ -115,8 +115,8 @@
       "level": null,
       "status_message": null,
       "metadata": {
-        "target_project": "C:\\Users\\AbrahamVillalobosUga\\Desktop\\AI-NOVA\\MultiAgent-Software-Engineering-Team\\sample_app",
-        "workspace": "C:\\Users\\AbrahamVillalobosUga\\Desktop\\AI-NOVA\\MultiAgent-Software-Engineering-Team\\workspace\\runs\\multimodel-e584c9ae-de57-42c6-87df-e3f446eade8b"
+        "target_project": "C:\\Users\\AbrahamVillalobosUga\\Desktop\\AI-NOVA\\MultiAgent-Software-Engineering-Team",
+        "workspace": "C:\\Users\\AbrahamVillalobosUga\\Desktop\\AI-NOVA\\MultiAgent-Software-Engineering-Team\\workspace\\runs\\multimodel-22af63d0-7374-4d02-9bef-6da89f6e6aa8"
       }
     },
     {
@@ -133,10 +133,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 75661,
+        "latency_ms": 66800,
         "usage": {
-          "prompt_eval_count": 727,
-          "eval_count": 139
+          "prompt_eval_count": 640,
+          "eval_count": 105
         },
         "structured_output_success": true,
         "error": null,
@@ -188,9 +188,9 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 60421,
+        "latency_ms": 47877,
         "usage": {
-          "prompt_eval_count": 1025,
+          "prompt_eval_count": 975,
           "eval_count": 124
         },
         "structured_output_success": true,
@@ -288,10 +288,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 101618,
+        "latency_ms": 78351,
         "usage": {
-          "prompt_eval_count": 1143,
-          "eval_count": 138
+          "prompt_eval_count": 1362,
+          "eval_count": 46
         },
         "structured_output_success": true,
         "error": null,
@@ -420,10 +420,10 @@
         "fallback_used": false,
         "fallback_reason": null,
         "degraded": false,
-        "latency_ms": 69737,
+        "latency_ms": 81263,
         "usage": {
-          "prompt_eval_count": 1075,
-          "eval_count": 38
+          "prompt_eval_count": 1384,
+          "eval_count": 45
         },
         "structured_output_success": true,
         "error": null,

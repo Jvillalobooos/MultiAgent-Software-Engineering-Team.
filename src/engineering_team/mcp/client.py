@@ -206,6 +206,22 @@ class MCPRepositoryClient(_MCPStdioClient):
     def get_file_content(self, role: AgentRole, relative: str) -> ToolResult:
         return self.call_tool("get_file_content", role, relative=relative)
 
+    def detect_project_capabilities(self, role: AgentRole) -> ToolResult:
+        return self.call_tool("detect_project_capabilities", role)
+
+    def read_test_file(
+        self,
+        role: AgentRole,
+        relative: str,
+        profile_fingerprint: str,
+    ) -> ToolResult:
+        return self.call_tool(
+            "read_test_file",
+            role,
+            relative=relative,
+            profile_fingerprint=profile_fingerprint,
+        )
+
     def create_file(self, role: AgentRole, relative: str, content: str) -> ToolResult:
         return self.call_tool("create_file", role, relative=relative, content=content)
 
@@ -220,26 +236,52 @@ class MCPQualityClient(_MCPStdioClient):
     def __init__(self, root: str | Path, *, timeout_seconds: int = 60) -> None:
         super().__init__(root, "quality", timeout_seconds=timeout_seconds)
 
-    def run_tests(self, role: AgentRole, paths: list[str] | None = None) -> ToolResult:
-        return self.call_tool("run_tests", role, paths=paths)
+    def run_tests(
+        self,
+        role: AgentRole,
+        paths: list[str] | None = None,
+        profile_fingerprint: str | None = None,
+    ) -> ToolResult:
+        return self.call_tool(
+            "run_tests",
+            role,
+            paths=paths,
+            profile_fingerprint=profile_fingerprint,
+        )
 
     def get_test_results(self, role: AgentRole) -> ToolResult:
         return self.call_tool("get_test_results", role)
 
-    def run_build(self, role: AgentRole) -> ToolResult:
-        return self.call_tool("run_build", role)
+    def run_build(
+        self, role: AgentRole, profile_fingerprint: str | None = None
+    ) -> ToolResult:
+        return self.call_tool(
+            "run_build", role, profile_fingerprint=profile_fingerprint
+        )
 
     def get_build_status(self, role: AgentRole) -> ToolResult:
         return self.call_tool("get_build_status", role)
 
-    def run_linter(self, role: AgentRole) -> ToolResult:
-        return self.call_tool("run_linter", role)
+    def run_linter(
+        self, role: AgentRole, profile_fingerprint: str | None = None
+    ) -> ToolResult:
+        return self.call_tool(
+            "run_linter", role, profile_fingerprint=profile_fingerprint
+        )
 
-    def scan_dependencies(self, role: AgentRole) -> ToolResult:
-        return self.call_tool("scan_dependencies", role)
+    def scan_dependencies(
+        self, role: AgentRole, profile_fingerprint: str | None = None
+    ) -> ToolResult:
+        return self.call_tool(
+            "scan_dependencies", role, profile_fingerprint=profile_fingerprint
+        )
 
-    def run_security_scan(self, role: AgentRole) -> ToolResult:
-        return self.call_tool("run_security_scan", role)
+    def run_security_scan(
+        self, role: AgentRole, profile_fingerprint: str | None = None
+    ) -> ToolResult:
+        return self.call_tool(
+            "run_security_scan", role, profile_fingerprint=profile_fingerprint
+        )
 
     def get_security_report(self, role: AgentRole) -> ToolResult:
         return self.call_tool("get_security_report", role)

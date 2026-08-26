@@ -1,19 +1,28 @@
 from engineering_team.config import Settings
+from engineering_team.contracts.enums import ModelPriority
 
 
-def test_settings_default_to_approved_local_model_policy() -> None:
+def test_settings_default_to_approved_cloud_first_model_policy() -> None:
     settings = Settings(_env_file=None)
 
     assert settings.fast_model == "qwen3.5:4b"
     assert settings.deep_model == "qwen3.5:9b"
     assert settings.coding_model == "qwen3.5:9b"
-    assert settings.local_first is True
-    assert settings.cloud_enabled is False
+    assert settings.model_priority == ModelPriority.CLOUD_FIRST
+    assert settings.cloud_enabled is True
     assert settings.max_local_retries == 1
     assert settings.max_local_repairs == 1
     assert settings.max_cloud_escalations_per_agent == 1
     assert settings.max_cloud_escalations_per_run == 3
     assert settings.llm_timeout_seconds == 600
+
+
+def test_model_priority_reads_from_environment(monkeypatch) -> None:
+    monkeypatch.setenv("MODEL_PRIORITY", "local_only")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.model_priority == ModelPriority.LOCAL_ONLY
 
 
 def test_settings_loads_canonical_langfuse_environment(monkeypatch) -> None:

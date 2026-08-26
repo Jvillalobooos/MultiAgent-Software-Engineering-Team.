@@ -2,7 +2,9 @@
 
 ```mermaid
 flowchart TD
-    S([START]) --> P[Product]
+    S([START]) --> C[ProjectCapabilities]
+    C -->|SUPPORTED| P[Product]
+    C -->|AMBIGUOUS / UNSUPPORTED / missing required capability| I[INCOMPLETE]
     P --> A[Architecture]
     A --> D[Developer]
     D -->|full or security changed| SEC[Security]
@@ -14,7 +16,7 @@ flowchart TD
     R -->|Architecture issue| A
     R -->|Implementation / Security issue| D
     R -->|Testing caused by code| D
-    R -->|third rejection / invalid route| I[INCOMPLETE]
+    R -->|third rejection / invalid route| I
     SEC -->|CRITICAL, non-interactive| I
     SH --> E([END])
     I --> E

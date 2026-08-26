@@ -45,6 +45,14 @@ usage when Ollama supplies it, structured_output_success, fallback_used and
 error. Bonus PASS requires all six roles, both `qwen3.5:4b` and `qwen3.5:9b`
 in the same run, ModelRouter selection, and no cloud substitution.
 
+The sentence-transformers bootstrap may print an unauthenticated Hugging Face
+Hub warning. It is not a workflow or Langfuse error: local downloads continue
+with lower Hub rate limits. `HF_TOKEN` is optional and only needed for higher
+download limits or private Hub assets.
+For a fully cached verification, set `HF_HUB_OFFLINE=1`; this suppresses Hub
+access without changing model routing, capability detection, or acceptance
+gates.
+
 ## Langfuse
 
 One root trace is seeded by `run_id`. Child observations cover Product,
@@ -59,12 +67,76 @@ legacy alias. Without keys the same adapter records correlated local events;
 only LIVE Langfuse evidence remains `BLOCKED_CREDENTIAL`, never the core.
 Every run also writes its redacted event sequence to
 `evaluation/reports/traces/<run_id>.json`, including routes and FinalReport.
+If the configured Langfuse endpoint rejects or loses its HTTP connection during
+the initial authentication check, the adapter records `LANGFUSE_UNAVAILABLE`
+and uses that same local trace path. Observability unavailability does not abort
+Product or any later workflow stage.
+Set `LANGFUSE_OFFLINE=true` to force the correlated local trace even when keys
+remain configured. This is the reproducible option for offline acceptance runs
+because it prevents the asynchronous exporter from starting; it does not alter
+agent routing, validation, delivery gates, or the redacted trace artifact.
 
 Model JSON is schema-validated and then checked against deterministic governed
 facts. A schema-valid response may elaborate non-routing content, but cannot
 weaken security status/severity/checklist, test status/failures, Reviewer
 status/return route, or remove required evidence. Contradictions consume the
 single repair allowance and then follow quality-error fallback/HITL policy.
+The exact/additive/enrichable/mutation classifications come from one central
+registry used by all six roles, so prompt wording and semantic enforcement
+cannot drift independently.
+
+Every run traces the `ProjectCapabilities` decision, sanitized ecosystem/root,
+profile fingerprint, native argv execution and terminal capability errors.
+Unknown, ambiguous, or missing-test projects produce
+`PROJECT_CAPABILITY_ERROR` and `INCOMPLETE` before model work. Python,
+Node/TypeScript, .NET, Java, Go and Rust use their own declared test patterns;
+Quality independently re-detects the profile before every command.
+
+Developer receives at most two inspected source files, and each file is
+included up to the same 4,000-character boundary used to decide whether the
+agent may safely produce a complete-file mutation. Its generation budget is
+4,096 tokens so the two-file mutation contract is not truncated at the former
+1,400-token boundary. Because Ollama's `/api/generate` calls are stateless, an
+invalid structured response is embedded as untrusted data in the one permitted
+repair request; the model is not asked to repair context that it cannot see.
+Reviewer receives 1,200 output tokens so its complete decision, subscores,
+problems and evidence references are not truncated at the former 500-token
+boundary.
+
+Developer and Testing receive the actual governed business rules, constraints,
+and acceptance criteria in bounded context. Testing mutation paths must be
+unique after slash/case normalization, at most one test mutation is accepted
+per invocation, and each accepted test file must exercise a behavior identifier
+from the inspected implementation contract. Behavioral setup comes from an
+existing API/helper/fixture or deterministic implementation evidence, never an
+opaque inconsistent value. A duplicate overwrite or unrelated pre-existing
+test is rejected before any write and cannot satisfy the generated-test gate.
+
+After a downstream rejection, inspect `remediation_request` separately from
+the Reviewer audit reason. The request must include the latest relevant failed
+Quality `ToolResult` or Security scanner result, its status, a bounded causal
+output summary, and evidence reference. Developer also receives the prior
+`ImplementationResult`/diff, but the visible evidence does not expand its tool
+allowlist. This distinction proves that causal context propagated without
+granting test or scanner execution authority.
+
+Security evaluation is monotonic. A baseline scanner `PASS` may become model
+`FAIL` only with grounded findings from the bounded implementation/diff,
+scanner output, and RAG fragments. A deterministic `FAIL`, severity, failed
+checklist control, or HITL requirement can never be weakened. RAG prompt
+evidence must show bounded fragment content and source/section/chunk/score
+provenance, rather than identifiers alone.
+
+Langfuse retains every quality attempt. An invalid attempt is recorded as
+`WARNING` while its local repair remains available, with
+`structured_output_success=false` and `LLM_QUALITY_ERROR` preserved in event
+metadata. A successful repair is a subsequent `DEFAULT` generation. If the
+repair is exhausted, the final failed attempt is `ERROR` and the graph records
+the terminal quality-error/fallback route. Offline repair exhaustion ends as
+`HUMAN_REVIEW_REQUIRED` with `LLM_QUALITY_ERROR`, not opaque `INCOMPLETE`.
+This keeps recovered runs visible
+without presenting a corrected transient attempt as an unrecovered Langfuse
+error.
 
 ## Interactive HITL route and autonomous outcomes
 

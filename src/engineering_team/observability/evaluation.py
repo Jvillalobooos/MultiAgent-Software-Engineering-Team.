@@ -331,6 +331,7 @@ def run_multimodel_acceptance(
             retriever=retriever,
             model_runtime=runtime,
             cloud_runtime=cloud_runtime,
+            model_priority=settings.model_priority,
             trace=trace,
             test_paths=None,
             progress=progress,

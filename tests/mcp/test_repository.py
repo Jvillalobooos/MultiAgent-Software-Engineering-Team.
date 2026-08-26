@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from engineering_team.contracts.enums import AgentRole, ToolStatus
+from engineering_team.contracts.enums import AgentRole, ProjectEcosystem, ToolStatus
+from engineering_team.contracts.models import ProjectCapabilityProfile
 from engineering_team.mcp.repository import RepositoryMCP
 from engineering_team.workspace.isolation import create_run_copy
 
@@ -47,6 +48,7 @@ def test_search_code_never_reads_secret_paths_but_keeps_allowed_matches(tmp_path
 
 
 def test_testing_may_write_only_test_paths(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'sample'\n", encoding="utf-8")
     mcp = RepositoryMCP(tmp_path)
 
     denied = mcp.create_file(AgentRole.TESTING, "app/service.py", "x = 1\n")
@@ -58,3 +60,46 @@ def test_testing_may_write_only_test_paths(tmp_path: Path) -> None:
     assert allowed.status is ToolStatus.SUCCESS
     assert not (tmp_path / "app" / "service.py").exists()
     assert (tmp_path / "tests" / "test_generated.py").exists()
+
+
+def test_testing_write_path_must_match_the_detected_native_ecosystem(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text(
+        '{"scripts":{"test":"vitest run"}}\n', encoding="utf-8"
+    )
+    mcp = RepositoryMCP(tmp_path)
+
+    wrong = mcp.create_file(
+        AgentRole.TESTING, "tests/test_generated.py", "def test_ok():\n    assert True\n"
+    )
+    native = mcp.create_file(
+        AgentRole.TESTING,
+        "tests/nova/generated.test.ts",
+        "test('ok', () => expect(true).toBe(true));\n",
+    )
+
+    assert wrong.status is ToolStatus.DENIED
+    assert native.status is ToolStatus.SUCCESS
+
+
+def test_repository_detects_profile_and_guards_testing_reads(tmp_path: Path) -> None:
+    (tmp_path / "app").mkdir()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "app" / "service.py").write_text("value = 1\n", encoding="utf-8")
+    (tmp_path / "tests" / "test_service.py").write_text(
+        "def test_value():\n    assert True\n", encoding="utf-8"
+    )
+    mcp = RepositoryMCP(tmp_path)
+
+    detected = mcp.detect_project_capabilities(AgentRole.ARCHITECTURE)
+    profile = ProjectCapabilityProfile.model_validate_json(detected.output_summary)
+    allowed = mcp.read_test_file(
+        AgentRole.TESTING, "tests/test_service.py", profile.fingerprint
+    )
+    denied = mcp.read_test_file(
+        AgentRole.TESTING, "app/service.py", profile.fingerprint
+    )
+
+    assert detected.status is ToolStatus.SUCCESS
+    assert profile.ecosystem is ProjectEcosystem.PYTHON
+    assert allowed.status is ToolStatus.SUCCESS
+    assert denied.status is ToolStatus.DENIED

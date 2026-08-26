@@ -1,3 +1,4 @@
+import ast
 import re
 from pathlib import PurePosixPath
 from typing import Any, ClassVar
@@ -8,10 +9,12 @@ from engineering_team.models.context import ContextEnvelope
 
 from .base import AgentBase
 
+DEVELOPER_EDITABLE_SOURCE_CHARS = 4_000
+
 
 class DeveloperAgent(AgentBase[ImplementationResult]):
     role = "Developer"
-    _MAX_EDITABLE_SOURCE_CHARS = 4_000
+    _MAX_EDITABLE_SOURCE_CHARS = DEVELOPER_EDITABLE_SOURCE_CHARS
     _GENERATED_PARTS: ClassVar[set[str]] = {
         "workspace", "evaluation", "traces", "rag", "chroma", "__pycache__",
         ".pytest_cache", ".ruff_cache", ".git", ".venv", "node_modules",
@@ -47,6 +50,62 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
         "exactly", "from", "latest", "only", "provide", "return", "safe",
         "that", "their", "this", "using", "with",
     }
+
+    @staticmethod
+    def _python_boundaries(content: str) -> set[str]:
+        tree = ast.parse(content)
+        boundaries: set[str] = set()
+        route_decorators = {
+            "get", "post", "put", "patch", "delete", "route", "api_route",
+        }
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                boundaries.add(f"class:{node.name}")
+                continue
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            is_route = False
+            for decorator in node.decorator_list:
+                target = decorator.func if isinstance(decorator, ast.Call) else decorator
+                name = (
+                    target.attr
+                    if isinstance(target, ast.Attribute)
+                    else target.id if isinstance(target, ast.Name) else ""
+                )
+                is_route |= name in route_decorators
+            prefix = "route" if is_route else "function"
+            boundaries.add(f"{prefix}:{node.name}")
+        return boundaries
+
+    @classmethod
+    def validate_update_preservation(
+        cls,
+        path: str,
+        original: str,
+        proposed: str,
+        removal_basis: str = "",
+    ) -> tuple[bool, list[str]]:
+        """Fail closed unless removal of a Python boundary is explicitly authorized."""
+        if PurePosixPath(path.replace("\\", "/")).suffix.casefold() != ".py":
+            return True, []
+        try:
+            original_boundaries = cls._python_boundaries(original)
+            proposed_boundaries = cls._python_boundaries(proposed)
+        except SyntaxError:
+            return False, ["python-ast:unparseable-update"]
+        removed = sorted(original_boundaries - proposed_boundaries)
+        basis = " ".join(removal_basis.casefold().split())
+        removal_action = r"(?:remove|delete|retire|deprecat\w*|replace)"
+        unauthorized = []
+        for boundary in removed:
+            name = re.escape(boundary.partition(":")[2].casefold())
+            explicitly_authorized = bool(
+                re.search(rf"{removal_action}.{{0,80}}\b{name}\b", basis)
+                or re.search(rf"\b{name}\b.{{0,80}}{removal_action}", basis)
+            )
+            if not explicitly_authorized:
+                unauthorized.append(boundary)
+        return not unauthorized, unauthorized
 
     @classmethod
     def relevance_terms(cls, specification: Any, architecture: Any, requirement: str) -> list[str]:
@@ -332,9 +391,10 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
             ])
         security_terms = " ".join((
             getattr(specification, "source_requirement", ""),
-            apis,
-            data_changes,
+            " ".join(getattr(architecture, "apis", [])),
+            " ".join(getattr(architecture, "data_changes", [])),
             " ".join(getattr(architecture, "risks", [])),
+            *(inspected_content[path] for path in changed_files),
         )).lower()
         return ImplementationResult(
             action_mode=ActionMode.PROPOSED,

@@ -1,9 +1,13 @@
 # Autonomous Software Engineering Team
 
-Equipo local-first de exactamente seis agentes — Product, Architecture,
-Developer, Security, Testing y Reviewer — coordinado únicamente por un
-`LangGraph StateGraph`. Pydantic valida toda salida que afecta estado o rutas;
-routers determinísticos controlan remediación, límites e HITL.
+Equipo de exactamente seis agentes — Product, Architecture, Developer,
+Security, Testing y Reviewer — coordinado únicamente por un `LangGraph
+StateGraph`. La estrategia de modelo es `CLOUD_FIRST` por defecto
+(`MODEL_PRIORITY=cloud_first|local_first|cloud_only|local_only`): un proveedor
+cloud aprobado es primario para las seis agentes, con Ollama local como
+fallback acotado y modo offline explícito. Pydantic valida toda salida que
+afecta estado o rutas; routers determinísticos controlan remediación, límites
+e HITL.
 
 ## Arquitectura y stack
 
@@ -49,6 +53,9 @@ Langfuse live requiere `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` y
 `LANGFUSE_BASE_URL`; sin credenciales el adapter conserva una
 traza local correlacionada y el core continúa. Gemini/Groq son opcionales y no
 cuentan como evidencia multi-model local.
+Use `LANGFUSE_OFFLINE=true` para una ejecución local deliberada incluso cuando
+las credenciales sigan configuradas; así se evita que una interrupción tardía
+del exportador afecte una verificación sin red y la traza JSON local se conserva.
 
 ## Run
 
@@ -66,6 +73,23 @@ chmod +x run.sh
 ```
 
 The project must already be configured before running these scripts.
+
+Antes de ejecutar Product, `ProjectCapabilities` detecta de forma local y
+determinística el proyecto. Se admiten Python, Node/TypeScript, .NET, Java
+(Maven o Gradle), Go y Rust. Cada perfil declara sus patrones nativos de
+fuentes/pruebas y comandos obligatorios. Quality MCP vuelve a detectar el
+proyecto y acepta únicamente el `profile fingerprint`; nunca recibe comandos
+propuestos por un modelo.
+
+Un proyecto desconocido, híbrido/ambiguo o sin comando de pruebas obligatorio
+termina de forma segura como `INCOMPLETE` con `PROJECT_CAPABILITY_ERROR`, antes
+de llamar a un modelo o iniciar un subprocess. El sistema no instala paquetes
+ni descarga herramientas automáticamente. Testing genera únicamente archivos
+de prueba compatibles con el perfil. Cada ruta propuesta debe ser única y cada
+prueba debe referenciar comportamiento presente en el diff; una prueba antigua
+o sobrescrita no cuenta como evidencia generada. Reviewer exige evidencia
+exitosa de cada capacidad obligatoria, como `test` y, para ecosistemas
+compilados, `build`.
 
 Run against `sample_app` by default, or select another project explicitly;
 all automatic writes occur only in an isolated run copy:

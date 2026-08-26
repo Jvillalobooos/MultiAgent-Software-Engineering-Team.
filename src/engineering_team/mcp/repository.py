@@ -1,6 +1,7 @@
 import difflib
 from pathlib import Path
 
+from engineering_team.capabilities import detect_project_capabilities, is_native_test_path
 from engineering_team.contracts.enums import AgentRole, ToolStatus
 from engineering_team.contracts.models import ToolResult
 
@@ -10,12 +11,6 @@ _WRITE_ROLES = {AgentRole.DEVELOPER, AgentRole.TESTING}
 
 def _is_secret_path(path: Path) -> bool:
     return any(part == ".env" or part.startswith(".env.") for part in path.parts)
-
-
-def _is_test_path(relative: str) -> bool:
-    parts = Path(relative).parts
-    name = Path(relative).name
-    return "tests" in parts or name.startswith("test_") or name.endswith("_test.py")
 
 
 class RepositoryMCP:
@@ -95,6 +90,49 @@ class RepositoryMCP:
 
     get_file_content = read_file
 
+    def detect_project_capabilities(self, role: AgentRole) -> ToolResult:
+        if role is not AgentRole.ARCHITECTURE:
+            return self._result(
+                role, "detect_project_capabilities", ToolStatus.DENIED, error="role denied"
+            )
+        profile = detect_project_capabilities(self.root)
+        return self._result(
+            role,
+            "detect_project_capabilities",
+            ToolStatus.SUCCESS,
+            profile.model_dump_json(),
+        )
+
+    def read_test_file(
+        self,
+        role: AgentRole,
+        relative: str,
+        profile_fingerprint: str,
+    ) -> ToolResult:
+        if role is not AgentRole.TESTING:
+            return self._result(role, "read_test_file", ToolStatus.DENIED, error="role denied")
+        profile = detect_project_capabilities(self.root)
+        if profile.fingerprint != profile_fingerprint:
+            return self._result(
+                role,
+                "read_test_file",
+                ToolStatus.DENIED,
+                error="project capability fingerprint mismatch",
+            )
+        if not is_native_test_path(profile, relative):
+            return self._result(
+                role, "read_test_file", ToolStatus.DENIED, error="not a native test path"
+            )
+        try:
+            return self._result(
+                role,
+                "read_test_file",
+                ToolStatus.SUCCESS,
+                self._path(relative).read_text(encoding="utf-8"),
+            ).model_copy(update={"input_summary": f"path={relative}"})
+        except (OSError, ValueError) as exc:
+            return self._result(role, "read_test_file", ToolStatus.DENIED, error=str(exc))
+
     def search_code(self, role: AgentRole, query: str) -> ToolResult:
         if role not in _READ_ROLES:
             return self._result(role, "search_code", ToolStatus.DENIED, error="role denied")
@@ -119,8 +157,15 @@ class RepositoryMCP:
     ) -> ToolResult:
         if role not in _WRITE_ROLES:
             return self._result(role, tool, ToolStatus.DENIED, error="role denied")
-        if role is AgentRole.TESTING and not _is_test_path(relative):
-            return self._result(role, tool, ToolStatus.DENIED, error="testing may write only test paths")
+        if role is AgentRole.TESTING:
+            profile = detect_project_capabilities(self.root)
+            if not is_native_test_path(profile, relative):
+                return self._result(
+                    role,
+                    tool,
+                    ToolStatus.DENIED,
+                    error="testing may write only native test paths",
+                )
         try:
             path = self._path(relative)
             if not create and not path.exists():

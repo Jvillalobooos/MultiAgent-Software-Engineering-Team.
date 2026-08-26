@@ -49,7 +49,7 @@ class RouterRecordingRuntime:
         self.router = ModelRouter(settings)
         self.attempts = []
 
-    def invoke_artifact(self, role, envelope, candidate):
+    def invoke_artifact(self, role, envelope, candidate, *, mode="primary", fallback_reason=None):
         selection = self.router.local_for(role)
         info = ModelExecutionInfo(
             agent=role,
@@ -70,7 +70,7 @@ class RepairRecordingRuntime(RouterRecordingRuntime):
         super().__init__(settings)
         self.repaired = False
 
-    def invoke_artifact(self, role, envelope, candidate):
+    def invoke_artifact(self, role, envelope, candidate, *, mode="primary", fallback_reason=None):
         if not self.repaired:
             selection = self.router.local_for(role)
             self.attempts.append(ModelExecutionInfo(

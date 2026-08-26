@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from engineering_team.contracts.enums import AgentRole, ToolStatus
+from engineering_team.contracts.enums import AgentRole, ProjectEcosystem, ToolStatus
+from engineering_team.contracts.models import ProjectCapabilityProfile
 from engineering_team.mcp.client import MCPQualityClient, MCPRepositoryClient
 
 
@@ -14,11 +15,34 @@ def test_repository_tools_execute_through_real_stdio_mcp_session(tmp_path: Path)
         assert client.transport == "stdio"
 
     assert {"list_files", "read_file", "search_code", "get_file_content",
-            "create_file", "update_file", "get_diff"} <= set(discovery)
+            "create_file", "update_file", "get_diff", "detect_project_capabilities",
+            "read_test_file"} <= set(discovery)
     assert listed.status is ToolStatus.SUCCESS
     assert "app.py" in listed.output_summary
     assert read.status is ToolStatus.SUCCESS
     assert "enabled = True" in read.output_summary
+
+
+def test_repository_capabilities_and_testing_read_execute_over_stdio(tmp_path: Path) -> None:
+    (tmp_path / "app.py").write_text("enabled = True\n", encoding="utf-8")
+    (tmp_path / "test_app.py").write_text(
+        "def test_enabled():\n    assert True\n", encoding="utf-8"
+    )
+
+    with MCPRepositoryClient(tmp_path) as client:
+        detected = client.detect_project_capabilities(AgentRole.ARCHITECTURE)
+        profile = ProjectCapabilityProfile.model_validate_json(detected.output_summary)
+        test_read = client.read_test_file(
+            AgentRole.TESTING, "test_app.py", profile.fingerprint
+        )
+        source_read = client.read_test_file(
+            AgentRole.TESTING, "app.py", profile.fingerprint
+        )
+
+    assert profile.ecosystem is ProjectEcosystem.PYTHON
+    assert detected.evidence_reference == "mcp://repository/detect_project_capabilities"
+    assert test_read.status is ToolStatus.SUCCESS
+    assert source_read.status is ToolStatus.DENIED
 
 
 def test_repository_protocol_preserves_permissions_and_traversal_guard(tmp_path: Path) -> None:

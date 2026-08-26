@@ -89,17 +89,55 @@ equivalente, DEBE leer IDs configurados externamente y asignar inicialmente:
 Los agentes NO DEBEN hardcodear IDs ni elegir modelos por sí mismos. Este
 bonus NO DEBE confundirse con ni sustituirse por fallback cloud.
 
-### IX. Fallback cloud controlado y local-first
+### IX. Prioridad de modelo gobernada y fallback acotado entre proveedores
 
-La política DEBE ser `LOCAL_FIRST`, con `MAX_LOCAL_RETRIES=1`,
-`MAX_LOCAL_REPAIRS=1`,
-`MAX_CLOUD_ESCALATIONS_PER_AGENT=1` y `MAX_CLOUD_ESCALATIONS_PER_RUN=3`.
-Cloud SOLO PUEDE activarse por `LLM_AVAILABILITY_ERROR`, `LLM_QUALITY_ERROR`
-o `SECURITY_CONFLICT` cuando corresponda, usando las asignaciones aprobadas:
-Product, Architecture y Reviewer a Gemini 3.7 Flash; Developer y Security a
-Groq `openai/gpt-oss-120b`; Testing a Groq `openai/gpt-oss-20b`. `TOOL_ERROR`,
-`MCP_ERROR` y `RAG_ERROR` NO DEBEN activar cloud automáticamente. Las
-credenciales cloud son opcionales y NUNCA DEBEN almacenarse en código.
+La estrategia de ejecución DEBE ser explícita y configurable mediante
+`MODEL_PRIORITY` con los valores `CLOUD_FIRST` (default), `LOCAL_FIRST`,
+`CLOUD_ONLY` y `LOCAL_ONLY`. Bajo `CLOUD_FIRST`, el orden gobernado es
+`PRIMARY_CLOUD -> SECONDARY_CLOUD -> LOCAL`: cada rol tiene dos proveedores
+cloud aprobados en cadena determinística (Product/Architecture/Reviewer:
+Gemini primero, Groq segundo; Developer/Security/Testing: Groq primero,
+Gemini segundo) antes de recurrir a Ollama local, que permanece disponible
+como fallback acotado y para ejecución explícita offline/local-only. La razón
+es resiliencia y latencia: una falla temporal de capacidad en un proveedor
+cloud (por ejemplo HTTP 500 "high demand", clasificado `LLM_AVAILABILITY_ERROR`)
+NO DEBE forzar inferencia local lenta mientras el otro proveedor cloud
+aprobado sigue disponible. Bajo `CLOUD_ONLY`, ambos proveedores cloud se
+intentan pero Ollama NUNCA se invoca. Una autoridad central de enrutamiento
+(nunca el agente) decide el proveedor por rol y posición en la cadena; cada
+proveedor se intenta como máximo una vez por invocación. El proveedor primario
+cloud DEBE recibir el mismo system prompt, user prompt, `ContextEnvelope`
+acotado, artefactos gobernados, fragmentos RAG acotados, evidencia de
+repositorio acotada y esquema de salida estructurada por rol que recibiría el
+runtime local; NUNCA DEBE limitarse a devolver el candidato determinístico sin
+generar el artefacto real.
+
+Las llamadas primarias normales NO DEBEN consumir el presupuesto de
+escalamiento entre proveedores. Ese presupuesto (`MAX_CLOUD_ESCALATIONS_PER_AGENT=1`,
+`MAX_CLOUD_ESCALATIONS_PER_RUN=3`) rige solo el fallback cross-provider
+acotado (`MAX_LOCAL_RETRIES=1`, `MAX_LOCAL_REPAIRS=1` acotan reintentos/reparos
+dentro del mismo proveedor). El fallback hacia el otro proveedor SOLO PUEDE
+activarse por `LLM_AVAILABILITY_ERROR`, `LLM_QUALITY_ERROR`,
+`SECURITY_CONFLICT`, `AGENT_TIMEOUT` o `NON_ACTIONABLE_REMEDIATION` cuando
+corresponda, usando las asignaciones aprobadas: Product, Architecture y
+Reviewer a Gemini 3.7 Flash; Developer y Security a Groq
+`openai/gpt-oss-120b`; Testing a Groq `openai/gpt-oss-20b`; fallback local
+mapea a `qwen3.5:9b`/`qwen3.5:4b` según el rol. `TOOL_ERROR`, `MCP_ERROR` y
+`RAG_ERROR` NO DEBEN activar fallback entre proveedores automáticamente. Las
+credenciales cloud son opcionales y NUNCA DEBEN almacenarse en código; sin
+credenciales configuradas, `CLOUD_FIRST` degrada de forma segura al único
+proveedor disponible.
+
+La remediación de Developer es accionable solo si (a) al menos una
+`FileMutation` sobrevive la validación determinística, o (b) Developer
+devuelve un bloqueador estructurado válido (`INSUFFICIENT_CONTEXT`,
+`ARCHITECTURE_GAP`, `REQUIREMENT_AMBIGUITY`, `UNSAFE_CHANGE`). Cuando el
+proveedor primario en remediación no es accionable, el fallback recibe la
+misma evidencia causal exactamente una vez; si tampoco es accionable, el
+sistema DEBE terminar en `HUMAN_REVIEW_REQUIRED` con razón
+`DEVELOPER_REMEDIATION_EXHAUSTED` sin reintentar Reviewer con un candidato
+sin cambios ni consumir una iteración adicional del flujo por el intento de
+proveedor en sí.
 
 ### X. RAG con procedencia verificable
 

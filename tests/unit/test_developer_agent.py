@@ -82,6 +82,46 @@ def test_developer_proposal_is_detailed_and_grounded_in_inspected_paths() -> Non
     assert result.security_surface_changed is True
 
 
+def test_generic_form_word_does_not_invent_ui_api_or_security_surface() -> None:
+    specification = ProductSpecification(
+        objective="Crea una forma de actualizar el perfil",
+        actors=["User"], business_rules=[], constraints=[],
+        acceptance_criteria=["profile changes"], nfrs=[], ambiguities=[], assumptions=[],
+        source_requirement="Crea una forma de actualizar el perfil",
+    )
+    architecture = ArchitectureProposal(
+        components=["profile service"], apis=[], data_changes=[], integrations=[],
+        dependencies=[], decisions=["reuse the existing service"], risks=[], impact="bounded",
+    )
+    state = EngineeringState(
+        run_id="generic-form",
+        requirement=specification.source_requirement,
+        specification=specification,
+        architecture=architecture,
+        tool_results=[
+            ToolResult(
+                tool_name="list_files", allowed_role=AgentRole.DEVELOPER,
+                status=ToolStatus.SUCCESS, input_summary="safe",
+                output_summary="app/profile_service.py", duration_ms=1,
+                evidence_reference="mcp://repository/list_files",
+            ),
+            ToolResult(
+                tool_name="read_file", allowed_role=AgentRole.DEVELOPER,
+                status=ToolStatus.SUCCESS, input_summary="path=app/profile_service.py",
+                output_summary="def update_profile(profile, values):\n    profile.update(values)\n",
+                duration_ms=1, evidence_reference="mcp://repository/read_file",
+            ),
+        ],
+    )
+
+    result = DeveloperAgent().execute(build_context(AgentRole.DEVELOPER, state, "Developer"))
+
+    assert result.changed_files == ["app/profile_service.py"]
+    assert " UI" not in result.diff
+    assert "APIs: no API change declared" in result.diff
+    assert result.security_surface_changed is False
+
+
 def test_structural_references_resolves_python_relative_import() -> None:
     content = "from .service import apply_update\n"
     candidates = ["app/main.py", "app/service.py"]
@@ -238,3 +278,56 @@ def test_developer_selects_inspected_transaction_module_not_first_listed_paths()
     assert "Implement the bounded change above" not in result.diff
     assert any("read_file" in item for item in result.evidence)
     assert result.security_surface_changed is True
+
+
+def test_python_update_rejects_removal_of_unrelated_function_and_decorated_route() -> None:
+    original = (
+        "from framework import app\n\n"
+        "def keep_helper():\n    return 'old'\n\n"
+        "@app.get('/items')\n"
+        "def list_items():\n    return []\n"
+    )
+    proposed = "def new_feature():\n    return True\n"
+
+    allowed, removed = DeveloperAgent.validate_update_preservation(
+        "app/main.py", original, proposed
+    )
+
+    assert allowed is False
+    assert set(removed) == {"function:keep_helper", "route:list_items"}
+
+
+def test_python_update_accepts_changed_bodies_when_top_level_boundaries_remain() -> None:
+    original = (
+        "class Counter:\n"
+        "    def increment(self):\n        return 0\n\n"
+        "def describe():\n    return 'old'\n"
+    )
+    proposed = (
+        "class Counter:\n"
+        "    def __init__(self):\n        self.value = 0\n\n"
+        "    def increment(self):\n        self.value += 1\n        return self.value\n\n"
+        "def describe():\n    return 'new'\n"
+    )
+
+    allowed, removed = DeveloperAgent.validate_update_preservation(
+        "src/counter.py", original, proposed
+    )
+
+    assert allowed is True
+    assert removed == []
+
+
+def test_python_update_accepts_explicit_architecture_removal_intent() -> None:
+    original = "def legacy_adapter():\n    return 'old'\n"
+    proposed = "def replacement_adapter():\n    return 'new'\n"
+
+    allowed, removed = DeveloperAgent.validate_update_preservation(
+        "src/adapters.py",
+        original,
+        proposed,
+        "Architecture decision: remove legacy_adapter after replacing its callers.",
+    )
+
+    assert allowed is True
+    assert removed == []

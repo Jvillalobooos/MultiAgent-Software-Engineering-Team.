@@ -9,6 +9,7 @@ from .models import (
     ImplementationResult,
     ModelExecutionInfo,
     ProductSpecification,
+    ProjectCapabilityProfile,
     RetrievedEvidence,
     ReviewerDecision,
     SecurityReview,
@@ -29,6 +30,7 @@ def append_items(current: Sequence[T], incoming: Sequence[T]) -> list[T]:
 class EngineeringState(StrictModel):
     run_id: str
     requirement: str
+    project_capabilities: ProjectCapabilityProfile | None = None
     specification: ProductSpecification | None = None
     repository_context: dict[str, Any] = Field(default_factory=dict)
     architecture: ArchitectureProposal | None = None

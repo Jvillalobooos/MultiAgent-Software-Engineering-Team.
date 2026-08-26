@@ -1,12 +1,18 @@
+import hashlib
+import json
 from datetime import datetime, timezone
-from typing import Any, Literal
+from pathlib import PurePosixPath
+from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .enums import (
     ActionMode,
     AgentRole,
+    DeveloperBlocker,
     ErrorCode,
+    ProjectCapabilityStatus,
+    ProjectEcosystem,
     RemediationCategory,
     ReviewerStatus,
     RouteTarget,
@@ -58,6 +64,7 @@ class ImplementationResult(StrictModel):
     validation_result: str
     security_surface_changed: bool = False
     mutations: list[FileMutation] = Field(default_factory=list)
+    blocker: DeveloperBlocker | None = None
 
     @model_validator(mode="after")
     def require_detailed_proposal_or_justified_noop(self) -> "ImplementationResult":
@@ -154,6 +161,79 @@ class ToolResult(StrictModel):
     error: str | None = None
 
 
+class ProjectCommand(StrictModel):
+    argv: list[str] = Field(min_length=1)
+    accepts_paths: bool = False
+    cwd: str = "."
+
+    @field_validator("argv")
+    @classmethod
+    def non_empty_argv(cls, value: list[str]) -> list[str]:
+        if any(not item.strip() for item in value):
+            raise ValueError("argv entries must be non-empty")
+        return value
+
+    @field_validator("cwd")
+    @classmethod
+    def safe_relative_cwd(cls, value: str) -> str:
+        normalized = value.replace("\\", "/")
+        path = PurePosixPath(normalized)
+        if (
+            not normalized
+            or path.is_absolute()
+            or ".." in path.parts
+            or (path.parts and ":" in path.parts[0])
+        ):
+            raise ValueError("cwd must be a safe workspace-relative path")
+        return path.as_posix()
+
+
+class ProjectCapabilityProfile(StrictModel):
+    status: ProjectCapabilityStatus
+    ecosystem: ProjectEcosystem
+    project_root: str = "."
+    manifests: list[str] = Field(default_factory=list)
+    source_suffixes: list[str] = Field(default_factory=list)
+    test_path_patterns: list[str] = Field(default_factory=list)
+    commands: dict[str, ProjectCommand] = Field(default_factory=dict)
+    required_capabilities: list[str] = Field(default_factory=list)
+    missing_capabilities: list[str] = Field(default_factory=list)
+    evidence_references: list[str] = Field(default_factory=list)
+    fingerprint: str = ""
+
+    @classmethod
+    def create(cls, **values: Any) -> Self:
+        return cls.model_validate(values)
+
+    def _expected_fingerprint(self) -> str:
+        payload = self.model_dump(
+            mode="json",
+            exclude={"evidence_references", "fingerprint"},
+        )
+        canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode()).hexdigest()
+
+    @model_validator(mode="after")
+    def validate_contract_and_fingerprint(self) -> Self:
+        allowed = {"test", "build", "lint", "dependency_check", "security_scan"}
+        unknown = set(self.commands) - allowed
+        if unknown:
+            raise ValueError(f"unsupported command capabilities: {sorted(unknown)}")
+        missing = [item for item in self.required_capabilities if item not in self.commands]
+        if self.status is ProjectCapabilityStatus.SUPPORTED and missing:
+            raise ValueError(f"required capability has no command: {', '.join(missing)}")
+        if (
+            self.status is ProjectCapabilityStatus.SUPPORTED
+            and self.ecosystem is ProjectEcosystem.UNKNOWN
+        ):
+            raise ValueError("supported profile requires a known ecosystem")
+        expected = self._expected_fingerprint()
+        if self.fingerprint and self.fingerprint != expected:
+            raise ValueError("project capability fingerprint mismatch")
+        object.__setattr__(self, "fingerprint", expected)
+        return self
+
+
 class ModelExecutionInfo(StrictModel):
     agent: AgentRole
     provider: str
@@ -205,3 +285,4 @@ class FinalReport(StrictModel):
     errors_degradations: list[str]
     trace_id: str
     next_action: str
+    project_capabilities: dict[str, Any] | None = None

@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from engineering_team.guardrails.secrets import redact_secrets
 
 _SENSITIVE_KEYS = {
@@ -125,6 +127,10 @@ class LangfuseTracer:
         self._offline_directory = Path(offline_directory) if offline_directory else None
         if client is not None:
             return
+        if os.getenv("LANGFUSE_OFFLINE", "").strip().casefold() in {
+            "1", "true", "yes", "on",
+        }:
+            return
         public_key = public_key or os.getenv("LANGFUSE_PUBLIC_KEY")
         secret_key = secret_key or os.getenv("LANGFUSE_SECRET_KEY")
         base_url = (
@@ -150,7 +156,11 @@ class LangfuseTracer:
         )
         if self._client is not None and not self._auth_checked and hasattr(self._client, "auth_check"):
             self._auth_checked = True
-            auth_errors: tuple[type[BaseException], ...] = (OSError, RuntimeError)
+            auth_errors: tuple[type[BaseException], ...] = (
+                OSError,
+                RuntimeError,
+                httpx.HTTPError,
+            )
             auth_failure_errors: tuple[type[BaseException], ...] = ()
             try:
                 from langfuse.api.commons.errors.unauthorized_error import UnauthorizedError

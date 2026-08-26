@@ -1,9 +1,9 @@
 import subprocess
-import sys
 import time
 from pathlib import Path
 
-from engineering_team.contracts.enums import AgentRole, ToolStatus
+from engineering_team.capabilities import command_for, detect_project_capabilities
+from engineering_team.contracts.enums import AgentRole, ProjectCapabilityStatus, ToolStatus
 from engineering_team.contracts.models import ToolResult
 
 
@@ -28,7 +28,13 @@ class QualityMCP:
         )
 
     def _run(
-        self, role: AgentRole, tool: str, args: list[str], allowed: set[AgentRole]
+        self,
+        role: AgentRole,
+        tool: str,
+        args: list[str],
+        allowed: set[AgentRole],
+        *,
+        cwd: Path | None = None,
     ) -> ToolResult:
         if role not in allowed:
             return ToolResult(
@@ -43,8 +49,13 @@ class QualityMCP:
         started = time.perf_counter()
         try:
             proc = subprocess.run(
-                args, cwd=self.root, capture_output=True, text=True,
-                timeout=self.timeout_seconds, check=False
+                args,
+                cwd=cwd or self.root,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout_seconds,
+                check=False,
+                shell=False,
             )
             output = (proc.stdout + proc.stderr)[-4000:]
             status = ToolStatus.SUCCESS if proc.returncode == 0 else ToolStatus.FAIL
@@ -71,6 +82,70 @@ class QualityMCP:
             self._last[tool] = result
             return result
 
+    def _run_capability(
+        self,
+        role: AgentRole,
+        tool: str,
+        capability: str,
+        allowed: set[AgentRole],
+        *,
+        paths: list[str] | None = None,
+        profile_fingerprint: str | None = None,
+    ) -> ToolResult:
+        if role not in allowed:
+            return self._static(role, tool, allowed, "")
+        profile = detect_project_capabilities(self.root)
+        if profile_fingerprint is not None and profile.fingerprint != profile_fingerprint:
+            return ToolResult(
+                tool_name=tool,
+                allowed_role=role,
+                status=ToolStatus.DENIED,
+                input_summary="profile=invalid",
+                output_summary="",
+                duration_ms=0,
+                error="project capability fingerprint mismatch",
+            )
+        if profile.status is not ProjectCapabilityStatus.SUPPORTED:
+            return ToolResult(
+                tool_name=tool,
+                allowed_role=role,
+                status=ToolStatus.UNAVAILABLE,
+                input_summary="profile=unsupported",
+                output_summary="",
+                duration_ms=0,
+                error="; ".join(profile.missing_capabilities),
+            )
+        try:
+            args = command_for(profile, capability, paths)
+        except ValueError as exc:
+            return ToolResult(
+                tool_name=tool,
+                allowed_role=role,
+                status=ToolStatus.DENIED,
+                input_summary="paths=invalid",
+                output_summary="",
+                duration_ms=0,
+                error=str(exc),
+            )
+        if args is None:
+            return ToolResult(
+                tool_name=tool,
+                allowed_role=role,
+                status=ToolStatus.UNAVAILABLE,
+                input_summary=f"capability={capability}",
+                output_summary="",
+                duration_ms=0,
+                error=f"project does not declare {capability}",
+            )
+        command = profile.commands[capability]
+        return self._run(
+            role,
+            tool,
+            args,
+            allowed,
+            cwd=(self.root / command.cwd).resolve(),
+        )
+
     def _get_last(
         self, role: AgentRole, getter: str, source: str, allowed: set[AgentRole]
     ) -> ToolResult:
@@ -86,9 +161,19 @@ class QualityMCP:
             error=previous.error if previous else f"{source} has not executed",
         )
 
-    def run_tests(self, role: AgentRole, paths: list[str] | None = None) -> ToolResult:
-        return self._run(
-            role, "run_tests", [sys.executable, "-m", "pytest", *(paths or [])], {AgentRole.TESTING}
+    def run_tests(
+        self,
+        role: AgentRole,
+        paths: list[str] | None = None,
+        profile_fingerprint: str | None = None,
+    ) -> ToolResult:
+        return self._run_capability(
+            role,
+            "run_tests",
+            "test",
+            {AgentRole.TESTING},
+            paths=paths,
+            profile_fingerprint=profile_fingerprint,
         )
 
     def get_test_results(self, role: AgentRole) -> ToolResult:
@@ -96,12 +181,15 @@ class QualityMCP:
             role, "get_test_results", "run_tests", {AgentRole.TESTING}
         )
 
-    def run_build(self, role: AgentRole) -> ToolResult:
-        return self._run(
+    def run_build(
+        self, role: AgentRole, profile_fingerprint: str | None = None
+    ) -> ToolResult:
+        return self._run_capability(
             role,
             "run_build",
-            [sys.executable, "-m", "compileall", "."],
+            "build",
             {AgentRole.DEVELOPER, AgentRole.TESTING},
+            profile_fingerprint=profile_fingerprint,
         )
 
     def get_build_status(self, role: AgentRole) -> ToolResult:
@@ -110,30 +198,37 @@ class QualityMCP:
             {AgentRole.DEVELOPER, AgentRole.TESTING},
         )
 
-    def run_linter(self, role: AgentRole) -> ToolResult:
-        return self._run(
+    def run_linter(
+        self, role: AgentRole, profile_fingerprint: str | None = None
+    ) -> ToolResult:
+        return self._run_capability(
             role,
             "run_linter",
-            [sys.executable, "-m", "ruff", "check", "."],
+            "lint",
             {AgentRole.DEVELOPER, AgentRole.TESTING},
+            profile_fingerprint=profile_fingerprint,
         )
 
-    def scan_dependencies(self, role: AgentRole) -> ToolResult:
-        return self._run(
-            role, "scan_dependencies", [sys.executable, "-m", "pip", "check"],
+    def scan_dependencies(
+        self, role: AgentRole, profile_fingerprint: str | None = None
+    ) -> ToolResult:
+        return self._run_capability(
+            role,
+            "scan_dependencies",
+            "dependency_check",
             {AgentRole.SECURITY},
+            profile_fingerprint=profile_fingerprint,
         )
 
-    def run_security_scan(self, role: AgentRole) -> ToolResult:
-        target = (
-            "app" if (self.root / "app").is_dir()
-            else "sample_app/app" if (self.root / "sample_app" / "app").is_dir()
-            else "."
-        )
-        return self._run(
-            role, "run_security_scan",
-            [sys.executable, "-m", "ruff", "check", target, "--select", "S"],
+    def run_security_scan(
+        self, role: AgentRole, profile_fingerprint: str | None = None
+    ) -> ToolResult:
+        return self._run_capability(
+            role,
+            "run_security_scan",
+            "security_scan",
             {AgentRole.SECURITY},
+            profile_fingerprint=profile_fingerprint,
         )
 
     def get_security_report(self, role: AgentRole) -> ToolResult:
