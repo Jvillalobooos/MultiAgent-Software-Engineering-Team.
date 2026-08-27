@@ -46,7 +46,10 @@ export const approvedFixture = (events: StoredEvent[] = []): RunSnapshot => ({
  *  and by the chat UI tests built on top of it (Task 7). */
 export class FakeRunClient implements RunClient {
   requests: Array<{ projectPath: string; message: string }> = [];
+  subscribeCalls = 0;
+  getRunCalls = 0;
   private listener?: (value: StoredEvent | RunSnapshot) => void;
+  private closeHandler?: () => void;
 
   constructor(public snapshot: RunSnapshot = approvedFixture()) {}
 
@@ -64,6 +67,7 @@ export class FakeRunClient implements RunClient {
   }
 
   async getRun(): Promise<RunSnapshot> {
+    this.getRunCalls += 1;
     return this.snapshot;
   }
 
@@ -75,11 +79,14 @@ export class FakeRunClient implements RunClient {
     _runId: string,
     _after: number,
     onEnvelope: (value: StoredEvent | RunSnapshot) => void,
-    _onClose?: () => void,
+    onClose?: () => void,
   ): () => void {
+    this.subscribeCalls += 1;
     this.listener = onEnvelope;
+    this.closeHandler = onClose;
     return () => {
       this.listener = undefined;
+      this.closeHandler = undefined;
     };
   }
 
@@ -99,5 +106,11 @@ export class FakeRunClient implements RunClient {
 
   emit(value: StoredEvent | RunSnapshot): void {
     this.listener?.(value);
+  }
+
+  /** Simulates the transport closing (e.g. websocket onclose), triggering
+   *  whatever reconnect/backoff behavior the consumer registered via onClose. */
+  triggerClose(): void {
+    this.closeHandler?.();
   }
 }

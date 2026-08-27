@@ -51,6 +51,8 @@ export function isFinalReport(value: unknown): value is FinalReport {
     Array.isArray(value.model_usage) &&
     Array.isArray(value.changed_files) &&
     typeof value.applied_diff === 'boolean' &&
+    typeof value.workspace_changed === 'boolean' &&
+    typeof value.source_applied === 'boolean' &&
     typeof value.review.status === 'string' &&
     Array.isArray(value.errors) &&
     Array.isArray(value.rag_evidence) &&

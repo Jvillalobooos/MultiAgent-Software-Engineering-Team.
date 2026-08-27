@@ -51,6 +51,19 @@ describe('run contract guards', () => {
     })).toBe(false);
   });
 
+  it('rejects an approved snapshot whose report is missing workspace_changed or source_applied', () => {
+    const fullReport = approvedFixture().report!;
+
+    const { workspace_changed, ...withoutWorkspaceChanged } = fullReport;
+    expect(isRunSnapshot(baseSnapshot('approved', withoutWorkspaceChanged as RunSnapshot['report']))).toBe(false);
+
+    const { source_applied, ...withoutSourceApplied } = fullReport;
+    expect(isRunSnapshot(baseSnapshot('approved', withoutSourceApplied as RunSnapshot['report']))).toBe(false);
+
+    expect(isRunSnapshot(baseSnapshot('approved', { ...fullReport, workspace_changed: 'yes' } as unknown as RunSnapshot['report']))).toBe(false);
+    expect(isRunSnapshot(baseSnapshot('approved', { ...fullReport, source_applied: 1 } as unknown as RunSnapshot['report']))).toBe(false);
+  });
+
   it('rejects a snapshot missing required fields', () => {
     expect(isRunSnapshot({ run_id: 'run-a' })).toBe(false);
     expect(isRunSnapshot(null)).toBe(false);

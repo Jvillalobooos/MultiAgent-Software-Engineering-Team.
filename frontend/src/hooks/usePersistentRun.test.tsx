@@ -64,4 +64,77 @@ describe('usePersistentRun', () => {
 
     expect(unsubscribe).toHaveBeenCalled();
   });
+
+  it('reconnects with bounded backoff when the connection closes during an active phase', async () => {
+    vi.useFakeTimers();
+    try {
+      const client = new FakeRunClient(approvedFixture([]));
+      client.snapshot = { ...client.snapshot, phase: 'running', report: null };
+      const { result } = renderHook(() => usePersistentRun('run-a', client));
+
+      await vi.waitFor(() => expect(result.current.snapshot?.phase).toBe('running'));
+      expect(client.getRunCalls).toBe(1);
+      expect(client.subscribeCalls).toBe(1);
+
+      act(() => client.triggerClose());
+
+      // Nothing happens until the backoff delay elapses.
+      expect(client.getRunCalls).toBe(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(250);
+      });
+
+      expect(client.getRunCalls).toBe(2);
+      expect(client.subscribeCalls).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not reconnect when the connection closes in a terminal phase', async () => {
+    vi.useFakeTimers();
+    try {
+      const client = new FakeRunClient(approvedFixture([]));
+      const { result } = renderHook(() => usePersistentRun('run-a', client));
+
+      await vi.waitFor(() => expect(result.current.snapshot?.phase).toBe('approved'));
+      expect(client.getRunCalls).toBe(1);
+      expect(client.subscribeCalls).toBe(1);
+
+      act(() => client.triggerClose());
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+
+      expect(client.getRunCalls).toBe(1);
+      expect(client.subscribeCalls).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not fire a pending reconnect after unmount', async () => {
+    vi.useFakeTimers();
+    try {
+      const client = new FakeRunClient(approvedFixture([]));
+      client.snapshot = { ...client.snapshot, phase: 'running', report: null };
+      const { result, unmount } = renderHook(() => usePersistentRun('run-a', client));
+
+      await vi.waitFor(() => expect(result.current.snapshot?.phase).toBe('running'));
+
+      act(() => client.triggerClose());
+      unmount();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000);
+      });
+
+      expect(client.getRunCalls).toBe(1);
+      expect(client.subscribeCalls).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
