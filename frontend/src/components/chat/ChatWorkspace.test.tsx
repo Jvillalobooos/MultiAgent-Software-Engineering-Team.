@@ -1,0 +1,108 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+import { ChatWorkspace } from './ChatWorkspace';
+import { FakeRunClient, approvedFixture } from '../../test/FakeRunClient';
+import { ApplyResult, RunSnapshot } from '../../types/mission';
+
+describe('ChatWorkspace', () => {
+  it('creates independent runs with only the current message', async () => {
+    const client = new FakeRunClient();
+    render(<ChatWorkspace client={client} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /select folder/i }));
+    await userEvent.type(screen.getByRole('textbox', { name: /task/i }), 'first change');
+    await userEvent.click(screen.getByRole('button', { name: /execute/i }));
+    await userEvent.type(screen.getByRole('textbox', { name: /task/i }), 'second change');
+    await userEvent.click(screen.getByRole('button', { name: /execute/i }));
+
+    await waitFor(() =>
+      expect(client.requests).toEqual([
+        { projectPath: 'C:\\projects\\calculator', message: 'first change' },
+        { projectPath: 'C:\\projects\\calculator', message: 'second change' },
+      ])
+    );
+    expect(screen.getAllByRole('article')).toHaveLength(2);
+  });
+
+  it('does not select a project when the native picker is cancelled', async () => {
+    const client = new FakeRunClient();
+    client.pickProject = vi.fn().mockResolvedValue({ status: 'cancelled', project: null });
+    render(<ChatWorkspace client={client} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /select folder/i }));
+
+    expect(screen.getByRole('textbox', { name: /task/i })).toBeDisabled();
+  });
+
+  it('leaves the composer disabled with no project and re-enables once selected', async () => {
+    const client = new FakeRunClient();
+    render(<ChatWorkspace client={client} />);
+
+    expect(screen.getByRole('textbox', { name: /task/i })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: /select folder/i }));
+    await waitFor(() => expect(screen.getByRole('textbox', { name: /task/i })).toBeEnabled());
+  });
+
+  it('shows apply confirmation naming the project and affected paths, and relabels on success', async () => {
+    const client = new FakeRunClient();
+    render(<ChatWorkspace client={client} />);
+    await userEvent.click(screen.getByRole('button', { name: /select folder/i }));
+    await userEvent.type(screen.getByRole('textbox', { name: /task/i }), 'change it');
+    await userEvent.click(screen.getByRole('button', { name: /execute/i }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /^apply$/i })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /^apply$/i }));
+
+    const confirmation = screen.getByRole('group', { name: /confirm apply/i });
+    expect(confirmation).toHaveTextContent('C:\\projects\\calculator');
+    expect(confirmation).toHaveTextContent('app.py');
+
+    await userEvent.click(screen.getByRole('button', { name: /confirm apply/i }));
+    await waitFor(() => expect(screen.getByRole('article')).toHaveTextContent('Applied'));
+  });
+
+  it('leaves the card approved with a visible conflict message on apply conflict', async () => {
+    const client = new FakeRunClient();
+    client.apply = vi.fn().mockResolvedValue({
+      status: 'conflict', written_paths: [], test_exit_code: null,
+      test_output: '', backup_path: null, message: 'Workspace changed since approval',
+    } satisfies ApplyResult);
+    render(<ChatWorkspace client={client} />);
+    await userEvent.click(screen.getByRole('button', { name: /select folder/i }));
+    await userEvent.type(screen.getByRole('textbox', { name: /task/i }), 'change it');
+    await userEvent.click(screen.getByRole('button', { name: /execute/i }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /^apply$/i })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /^apply$/i }));
+    await userEvent.click(screen.getByRole('button', { name: /confirm apply/i }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/workspace changed since approval/i));
+    expect(screen.getByRole('article')).toHaveTextContent('Approved');
+  });
+
+  it('never renders a run as Failed because of a cloud-fallback warning event', async () => {
+    const client = new FakeRunClient();
+    const withWarning: RunSnapshot = {
+      ...approvedFixture(),
+      phase: 'running',
+      report: null,
+      events: [{
+        sequence: 1,
+        payload: {
+          id: 'e1', name: 'Cloud fallback', type: 'error', level: 'warn',
+          status_message: 'Falling back to cloud provider', metadata: {},
+          agent: 'developer', iteration: 0, at: 1,
+        },
+      }],
+    };
+    client.snapshot = withWarning;
+    render(<ChatWorkspace client={client} />);
+    await userEvent.click(screen.getByRole('button', { name: /select folder/i }));
+    await userEvent.type(screen.getByRole('textbox', { name: /task/i }), 'change it');
+    await userEvent.click(screen.getByRole('button', { name: /execute/i }));
+
+    await waitFor(() => expect(screen.getByText(/agents working/i)).toBeInTheDocument());
+    expect(screen.queryByText(/^failed$/i)).not.toBeInTheDocument();
+  });
+});

@@ -167,13 +167,6 @@ export interface FinalReport {
   tool_results: ToolResult[];
 }
 
-export interface LaunchConfig {
-  projectPath: string;
-  specification: string;
-  testSpecification: string;
-  writeMode: 'dry_run' | 'authorized';
-}
-
 /* ---------- Persistent run contract (Task 6) ---------- */
 
 /** Mirrors engineering_team.runs.models.RunPhase exactly. */

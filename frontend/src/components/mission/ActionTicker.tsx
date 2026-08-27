@@ -93,7 +93,7 @@ export function ActionTicker({ events }: ActionTickerProps) {
   return (
     <aside
       aria-label="Live action ticker"
-      className="glass flex h-full min-h-0 flex-col border-y-0 border-r-0 lg:w-[360px]">
+      className="glass flex max-h-[420px] min-h-[240px] flex-col rounded-2xl border-y-0 border-r-0">
       
       <div className="flex items-center justify-between border-b border-hull-400/35 px-4 py-3">
         <h2 className="flex items-center gap-2 text-[12px] font-semibold tracking-tight text-slate-100">

@@ -1,8 +1,7 @@
 import { motion } from 'framer-motion';
-import { HexagonIcon, RotateCcwIcon, SlidersHorizontalIcon } from 'lucide-react';
-import { FinalReport, LaunchConfig } from '../../types/mission';
-import { MAX_ITERATIONS } from '../../data/scenario';
-import { AGENT_LABELS, STATUS_THEME, formatElapsed } from '../../utils/format';
+import { HexagonIcon } from 'lucide-react';
+import { FinalReport } from '../../types/mission';
+import { AGENT_LABELS, STATUS_THEME } from '../../utils/format';
 import { DiffViewer } from './DiffViewer';
 import { Scorecard } from './Scorecard';
 import { DecisionTimeline } from './DecisionTimeline';
@@ -10,23 +9,16 @@ import { EvidenceTabs } from './EvidenceTabs';
 
 interface MissionDebriefProps {
   report: FinalReport;
-  config: LaunchConfig;
-  elapsed: number;
   runId: string;
-  onReplay: () => void;
-  onNewRun: () => void;
+  projectPath: string;
 }
 
 const ease = [0.23, 1, 0.32, 1] as const;
 
-export function MissionDebrief({
-  report,
-  config,
-  elapsed,
-  runId,
-  onReplay,
-  onNewRun
-}: MissionDebriefProps) {
+/** Embedded review section for a RunCard — no page-level chrome, no fixed viewport
+ *  height, and no replay/new-run navigation, all of which belonged to the old
+ *  standalone debrief screen. */
+export function MissionDebrief({ report, runId, projectPath }: MissionDebriefProps) {
   const theme = STATUS_THEME[report.review.status];
   const totalTokens = report.model_usage.reduce(
     (sum, u) => sum + u.input_tokens + u.output_tokens,
@@ -39,26 +31,26 @@ export function MissionDebrief({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease }}
-      className="circuit-grid min-h-screen w-full px-4 py-8 md:px-8">
-      
-      <div className="mx-auto w-full max-w-[1500px]">
+      className="w-full"
+      aria-label="Mission debrief">
+
+      <div className="w-full">
         <header className="glass flex flex-wrap items-center gap-x-8 gap-y-5 rounded-2xl px-6 py-5 shadow-panel">
           <div className="flex items-center gap-3">
             <div className={`flex h-10 w-10 items-center justify-center rounded-lg border ${theme.border} ${theme.bg}`}>
               <HexagonIcon className={`h-4 w-4 ${theme.text}`} strokeWidth={2.2} />
             </div>
             <div>
-              <h1 className="text-xl font-semibold tracking-tight text-slate-50">Mission Debrief</h1>
+              <h4 className="text-sm font-semibold tracking-tight text-slate-50">Mission Debrief</h4>
               <p className="font-mono text-[11px] text-mist/70">
-                {runId} · {config.projectPath}
+                {runId} · {projectPath}
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-x-8 gap-y-3 font-mono text-[11px]">
             {[
-            ['elapsed', formatElapsed(elapsed)],
-            ['iterations', `${report.route_history.length}/${MAX_ITERATIONS}`],
+            ['iterations', String(report.route_history.length)],
             ['model calls', String(totalCalls)],
             ['tokens', totalTokens.toLocaleString()],
             ['files changed', String(report.changed_files.length)]].
@@ -73,34 +65,22 @@ export function MissionDebrief({
           <div className="ml-auto flex items-center gap-2.5">
             <span
               className={`rounded-md border px-3 py-1.5 font-mono text-[11px] tracking-[0.14em] ${theme.border} ${theme.bg} ${theme.text} ${theme.shadow}`}>
-              
+
               {theme.label}
             </span>
-            <button
-              onClick={onReplay}
-              className="flex items-center gap-2 rounded-md border border-hull-400/60 bg-hull-700/60 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-mist/85 transition-colors duration-200 ease-command hover:border-electric/50 hover:text-slate-100">
-              
-              <RotateCcwIcon className="h-3.5 w-3.5" /> replay
-            </button>
-            <button
-              onClick={onNewRun}
-              className="flex items-center gap-2 rounded-md border border-electric/50 bg-electric/15 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-slate-50 transition-colors duration-200 ease-command hover:bg-electric/25">
-              
-              <SlidersHorizontalIcon className="h-3.5 w-3.5 text-electric" /> new run
-            </button>
           </div>
         </header>
 
         <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
           <div className="flex min-h-0 flex-col gap-6">
-            <div className="flex h-[560px] min-h-0 flex-col">
+            <div className="flex max-h-[560px] min-h-[280px] flex-col">
               <DiffViewer files={report.changed_files} applied={report.applied_diff} />
             </div>
             <EvidenceTabs
               rag={report.rag_evidence}
               tools={report.tool_results}
               errors={report.errors} />
-            
+
           </div>
 
           <div className="flex flex-col gap-6">
@@ -113,7 +93,7 @@ export function MissionDebrief({
                 <li
                   key={`${usage.agent}-${usage.model}`}
                   className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-hull-400/25 pb-2.5 last:border-0 last:pb-0">
-                  
+
                     <span className="w-[92px] text-[12.5px] text-slate-200">
                       {AGENT_LABELS[usage.agent]}
                     </span>
@@ -124,7 +104,7 @@ export function MissionDebrief({
                     'border-plasma/45 bg-plasma/10 text-plasma' :
                     'border-neon/40 bg-neon/10 text-neon'}`
                     }>
-                    
+
                       {usage.provider}
                     </span>
                     <span className="ml-auto font-mono text-[11px] tabular-nums text-mist/80">

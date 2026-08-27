@@ -11,10 +11,17 @@ import {
   CpuIcon,
   type LucideIcon } from
 'lucide-react';
-import { AgentId, Provider } from '../../types/mission';
+import { AgentId, EdgeKind, Provider } from '../../types/mission';
 import { AGENTS, EDGES, EDGE_MAP, NODE_H, NODE_W, VIEW_H, VIEW_W } from '../../data/agents';
 import { EDGE_COLOR } from '../../utils/format';
-import { ActiveEdge } from '../../hooks/useRunSimulation';
+
+export interface ActiveEdge {
+  key: number;
+  from: AgentId;
+  to: AgentId;
+  kind: EdgeKind;
+  duration: number;
+}
 
 interface AgentGraphProps {
   activeAgent: AgentId | null;
@@ -88,10 +95,10 @@ export function AgentGraph({
       animate={{ opacity: dimmed ? 0.25 : 1, filter: dimmed ? 'blur(3px)' : 'blur(0px)' }}
       transition={{ duration: 0.35, ease }}
       aria-label="Live agent graph"
-      className="thin-scroll relative h-full w-full overflow-x-auto overflow-y-hidden">
-      
-      <div className="relative mx-auto flex h-full min-w-[1120px] justify-center">
-        <div className="relative h-full" style={{ aspectRatio: `${VIEW_W} / ${VIEW_H}` }}>
+      className="thin-scroll relative w-full overflow-x-auto">
+
+      <div className="relative mx-auto flex min-w-[1120px] justify-center">
+        <div className="relative w-full" style={{ aspectRatio: `${VIEW_W} / ${VIEW_H}` }}>
           <svg
             viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
             className="absolute inset-0 h-full w-full"
