@@ -22,5 +22,12 @@ def ensure_topics(bootstrap_servers: str, *, timeout_seconds: float = 10.0) -> N
     if not to_create:
         return
     futures = admin.create_topics(to_create, request_timeout=timeout_seconds)
-    for future in futures.values():
-        future.result(timeout=timeout_seconds)  # raises on failure
+    failures: list[tuple[str, BaseException]] = []
+    for name, future in futures.items():
+        try:
+            future.result(timeout=timeout_seconds)
+        except Exception as exc:  # noqa: BLE001 - collected below, not swallowed
+            failures.append((name, exc))
+    if failures:
+        details = "; ".join(f"{name}: {exc}" for name, exc in failures)
+        raise RuntimeError(f"failed to create {len(failures)} topic(s): {details}") from failures[0][1]
