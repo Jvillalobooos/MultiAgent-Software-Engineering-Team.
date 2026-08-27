@@ -90,3 +90,124 @@ def test_drain_once_is_a_noop_when_outbox_is_empty(tmp_path, kafka_broker):
     publisher = OutboxPublisher(db_path, kafka_broker)
 
     assert publisher.drain_once() == 0
+
+
+class _FakeProducer:
+    """Deterministic delivery-report double for confluent_kafka.Producer.
+
+    A real broker can't be made to fail or time out a specific message on
+    demand, so success/failure/timeout/partial-delivery scenarios are
+    exercised through this double instead — everything else in this file
+    still runs against the real broker via the kafka_broker fixture.
+    """
+
+    def __init__(self, outcomes: list[str]) -> None:
+        self._outcomes = list(outcomes)
+        self._pending_callback = None
+        self.calls: list[tuple[str, str, bytes]] = []
+
+    def produce(self, topic, *, key, value, on_delivery):
+        self.calls.append((topic, key, value))
+        self._pending_callback = on_delivery
+
+    def flush(self, timeout):
+        outcome = self._outcomes.pop(0)
+        if outcome == "timeout":
+            return 1  # delivery report never arrived within the timeout
+        if outcome == "error":
+            self._pending_callback(Exception("simulated broker failure"), None)
+        else:
+            self._pending_callback(None, None)
+        return 0
+
+
+def test_drain_once_leaves_row_unpublished_on_delivery_failure(tmp_path):
+    db_path = tmp_path / "engineering.db"
+    migrate(db_path)
+    sink = SqliteOutboxEventSink(db_path)
+    sink.emit(_event("run-fail-1", 0))
+
+    publisher = OutboxPublisher(db_path, "unused:9092", producer=_FakeProducer(["error"]))
+    published_count = publisher.drain_once()
+
+    assert published_count == 0
+    conn = connect(db_path)
+    row = conn.execute(
+        "SELECT published FROM event_outbox WHERE run_id='run-fail-1' AND seq=0"
+    ).fetchone()
+    conn.close()
+    assert row["published"] == 0
+
+
+def test_drain_once_leaves_row_unpublished_on_flush_timeout(tmp_path):
+    db_path = tmp_path / "engineering.db"
+    migrate(db_path)
+    sink = SqliteOutboxEventSink(db_path)
+    sink.emit(_event("run-timeout-1", 0))
+
+    publisher = OutboxPublisher(db_path, "unused:9092", producer=_FakeProducer(["timeout"]))
+    published_count = publisher.drain_once()
+
+    assert published_count == 0
+    conn = connect(db_path)
+    row = conn.execute(
+        "SELECT published FROM event_outbox WHERE run_id='run-timeout-1' AND seq=0"
+    ).fetchone()
+    conn.close()
+    assert row["published"] == 0
+
+
+def test_drain_once_confirms_success_via_the_delivery_callback(tmp_path):
+    db_path = tmp_path / "engineering.db"
+    migrate(db_path)
+    sink = SqliteOutboxEventSink(db_path)
+    sink.emit(_event("run-ok-1", 0))
+    fake = _FakeProducer(["success"])
+
+    publisher = OutboxPublisher(db_path, "unused:9092", producer=fake)
+    published_count = publisher.drain_once()
+
+    assert published_count == 1
+    assert len(fake.calls) == 1
+    topic, key, value = fake.calls[0]
+    assert topic == RUN_EVENTS_TOPIC
+    assert key == "run-ok-1"
+    assert json.loads(value)["seq"] == 0
+    conn = connect(db_path)
+    row = conn.execute(
+        "SELECT published FROM event_outbox WHERE run_id='run-ok-1' AND seq=0"
+    ).fetchone()
+    conn.close()
+    assert row["published"] == 1
+
+
+def test_drain_once_publishes_confirmed_rows_and_leaves_the_rest_for_retry(tmp_path):
+    """Partial delivery: two rows in one drain_once() call, only one confirms."""
+    db_path = tmp_path / "engineering.db"
+    migrate(db_path)
+    sink = SqliteOutboxEventSink(db_path)
+    sink.emit(_event("run-partial-1", 0))
+    sink.emit(_event("run-partial-1", 1))
+
+    first_pass = OutboxPublisher(db_path, "unused:9092", producer=_FakeProducer(["success", "error"]))
+    published_count = first_pass.drain_once()
+
+    assert published_count == 1
+    conn = connect(db_path)
+    rows = conn.execute(
+        "SELECT seq, published FROM event_outbox WHERE run_id='run-partial-1' ORDER BY seq"
+    ).fetchall()
+    conn.close()
+    assert [(row["seq"], row["published"]) for row in rows] == [(0, 1), (1, 0)]
+
+    # A later drain_once() call retries only the still-unpublished row.
+    second_pass = OutboxPublisher(db_path, "unused:9092", producer=_FakeProducer(["success"]))
+    retried_count = second_pass.drain_once()
+
+    assert retried_count == 1
+    conn = connect(db_path)
+    rows = conn.execute(
+        "SELECT seq, published FROM event_outbox WHERE run_id='run-partial-1' ORDER BY seq"
+    ).fetchall()
+    conn.close()
+    assert [(row["seq"], row["published"]) for row in rows] == [(0, 1), (1, 1)]
