@@ -26,7 +26,9 @@ _ALLOWED_TRANSITIONS: dict[RunPhase, set[RunPhase]] = {
     RunPhase.REVIEW_REQUIRED: set(),
     RunPhase.APPROVED: {RunPhase.APPLYING},
     RunPhase.FAILED: set(),
-    RunPhase.APPLYING: {RunPhase.APPLIED, RunPhase.APPLY_FAILED},
+    # APPLYING -> APPROVED covers a conflict revert: detected before any source
+    # file was written, so the run is safe to hand back for a fresh apply attempt.
+    RunPhase.APPLYING: {RunPhase.APPLIED, RunPhase.APPLY_FAILED, RunPhase.APPROVED},
     RunPhase.APPLIED: set(),
     RunPhase.APPLY_FAILED: {RunPhase.APPROVED},
 }

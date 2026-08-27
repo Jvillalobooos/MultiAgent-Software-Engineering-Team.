@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import os
 import tempfile
 import threading
@@ -11,13 +10,14 @@ import time
 import uuid
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.websockets import WebSocketDisconnect
 
 from engineering_team.apply_run import execute_on_project
+from engineering_team.apply_service import ApplyService, snapshot_project
 from engineering_team.config import Settings
 from engineering_team.guardrails.secrets import redact_secrets
 from engineering_team.run_events import failure_state, final_report_from_state, run_event_from_trace
@@ -49,9 +49,6 @@ _SNAPSHOT_FIELDS = (
     "created_at",
     "updated_at",
 )
-_IGNORED_DIRECTORY_NAMES = {".git", ".venv", "__pycache__"}
-
-
 class LaunchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
@@ -66,20 +63,17 @@ class LaunchRequest(BaseModel):
         return value
 
 
-def _source_snapshot(root: Path) -> dict[str, str | None]:
-    """Capture the durable source baseline until the apply service owns this operation."""
-    hashes: dict[str, str | None] = {}
-    for path in sorted(root.rglob("*")):
-        relative = path.relative_to(root)
-        parts = relative.parts
-        if _IGNORED_DIRECTORY_NAMES.intersection(parts):
-            continue
-        if len(parts) >= 2 and parts[:2] in {("workspace", "runs"), ("rag", "chroma")}:
-            continue
-        if path.is_symlink() or not path.is_file():
-            continue
-        hashes[relative.as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
-    return hashes
+class ApplyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    project_path: str = Field(alias="projectPath", min_length=1)
+    confirmed: Literal[True]
+
+
+class RestoreRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    confirmed: Literal[True]
 
 
 def _public_snapshot(snapshot: RunSnapshot) -> dict[str, Any]:
@@ -150,7 +144,7 @@ class RunManager:
         try:
             self.store.transition(run_id, RunPhase.PREPARING)
             snapshot = self.store.load(run_id)
-            self.store.record_source_hashes(run_id, _source_snapshot(Path(snapshot.project_path)))
+            self.store.record_source_hashes(run_id, snapshot_project(Path(snapshot.project_path)))
             snapshot = self.store.load(run_id)
             create_run_copy(run_id, snapshot.project_path, Path(snapshot.workspace_path).parent)
             self.store.transition(run_id, RunPhase.RUNNING)
@@ -217,8 +211,13 @@ class RunManager:
         return state
 
 
-def create_runs_router(manager: RunManager | None = None) -> APIRouter:
+def create_runs_router(
+    manager: RunManager | None = None,
+    *,
+    apply_service: ApplyService | None = None,
+) -> APIRouter:
     run_manager = manager or RunManager()
+    apply_service = apply_service or ApplyService(run_manager.store)
     router = APIRouter()
 
     def load_or_404(run_id: str) -> RunSnapshot:
@@ -246,6 +245,28 @@ def create_runs_router(manager: RunManager | None = None) -> APIRouter:
             event.model_dump(mode="json")
             for event in run_manager.store.events_after(run_id, after)
         ]
+
+    @router.post("/api/runs/{run_id}/apply")
+    def apply_run(run_id: str, request: ApplyRequest) -> dict[str, Any]:
+        snapshot = load_or_404(run_id)
+        if snapshot.phase not in {RunPhase.APPROVED, RunPhase.APPLIED, RunPhase.APPLY_FAILED}:
+            raise HTTPException(status_code=409, detail=f"run is not approved for apply: {snapshot.phase.value}")
+        requested = Path(request.project_path).expanduser().resolve()
+        if requested != Path(snapshot.project_path).resolve():
+            raise HTTPException(status_code=409, detail="projectPath does not match this run")
+        result = apply_service.apply(run_id, confirmed_project=requested)
+        return result.model_dump(mode="json")
+
+    @router.post("/api/runs/{run_id}/restore")
+    def restore_run(run_id: str, _request: RestoreRequest) -> dict[str, Any]:
+        snapshot = load_or_404(run_id)
+        already_restored = (
+            snapshot.apply_result is not None and snapshot.apply_result.status == "restored"
+        )
+        if snapshot.phase is not RunPhase.APPLY_FAILED and not already_restored:
+            raise HTTPException(status_code=409, detail="run has no backup available to restore")
+        result = apply_service.restore(run_id)
+        return result.model_dump(mode="json")
 
     @router.websocket("/ws/runs/{run_id}")
     async def run_events(websocket: WebSocket, run_id: str, after: int = Query(default=0, ge=0)) -> None:

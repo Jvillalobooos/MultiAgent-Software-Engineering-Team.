@@ -10,6 +10,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from engineering_team.apply_service import ApplyService, snapshot_project
 from engineering_team.config import Settings
 from engineering_team.graph.stategraph import build_engineering_graph
 from engineering_team.observability.langfuse import TraceSession
@@ -85,10 +86,33 @@ def _manager(
     )
 
 
-def _client(manager: RunManager) -> TestClient:
+def _client(manager: RunManager, apply_service: ApplyService | None = None) -> TestClient:
     app = FastAPI()
-    app.include_router(create_runs_router(manager))
+    app.include_router(create_runs_router(manager, apply_service=apply_service))
     return TestClient(app)
+
+
+class _PassingVerification:
+    def run(self, project: Path) -> tuple[int, str]:
+        return 0, "1 passed"
+
+
+def _approved_run_client(
+    tmp_path: Path, source: Path, workspace: Path, changed_paths: list[str],
+) -> tuple[TestClient, RunStore, str]:
+    store = RunStore(tmp_path / "records")
+    store.create(RunSnapshot(
+        run_id="run-a", project_path=str(source.resolve()),
+        workspace_path=str(workspace.resolve()), message="work",
+        phase=RunPhase.APPROVED, source_hashes=snapshot_project(source),
+        changed_paths=changed_paths, report={"review": {"status": "APPROVED"}},
+    ))
+    manager = RunManager(
+        settings=_settings(tmp_path), store=store,
+        executor=lambda *_: (_ for _ in ()).throw(AssertionError("executor must not run")),
+    )
+    client = _client(manager, ApplyService(store, verification=_PassingVerification()))
+    return client, store, str(source.resolve())
 
 
 def _wait_for_phase(client: TestClient, run_id: str, phase: str) -> dict[str, Any]:
@@ -276,10 +300,10 @@ def test_start_persists_queued_snapshot_immediately_with_empty_source_hashes(
     release_hash = threading.Event()
 
     def blocking_snapshot(_root: Path) -> dict[str, str | None]:
-        assert release_hash.wait(timeout=2), "worker never called _source_snapshot"
+        assert release_hash.wait(timeout=2), "worker never called snapshot_project"
         return {"app.py": "deadbeef"}
 
-    monkeypatch.setattr("engineering_team.run_api._source_snapshot", blocking_snapshot)
+    monkeypatch.setattr("engineering_team.run_api.snapshot_project", blocking_snapshot)
     manager = RunManager(
         settings=_settings(tmp_path), store=store,
         executor=lambda *_: (_ for _ in ()).throw(AssertionError("executor must not run")),
@@ -635,3 +659,158 @@ def test_post_to_real_langgraph_to_websocket_delivers_real_final_report(tmp_path
     assert visited == ["Product", "Architecture", "Developer", "Security", "Testing", "Reviewer"]
     assert payloads[-1]["snapshot"]["report"]["review"]["status"] == "APPROVED"
     assert payloads[-1]["snapshot"]["report"]["route_history"][-1]["decision"] == "APPROVED"
+
+
+def test_apply_endpoint_writes_source_and_persists_applied_result(tmp_path: Path) -> None:
+    source, workspace = tmp_path / "source", tmp_path / "workspace"
+    source.mkdir(); workspace.mkdir()
+    (source / "app.py").write_text("old\n", encoding="utf-8")
+    (workspace / "app.py").write_text("new\n", encoding="utf-8")
+    client, store, project_path = _approved_run_client(tmp_path, source, workspace, ["app.py"])
+
+    response = client.post(
+        "/api/runs/run-a/apply", json={"projectPath": project_path, "confirmed": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "applied"
+    assert (source / "app.py").read_text(encoding="utf-8") == "new\n"
+    assert store.load("run-a").phase is RunPhase.APPLIED
+
+
+def test_apply_endpoint_rejects_unapproved_run_with_409(tmp_path: Path) -> None:
+    source, workspace = tmp_path / "source", tmp_path / "workspace"
+    source.mkdir(); workspace.mkdir()
+    store = RunStore(tmp_path / "records")
+    store.create(RunSnapshot(
+        run_id="run-a", project_path=str(source.resolve()),
+        workspace_path=str(workspace.resolve()), message="work",
+        phase=RunPhase.RUNNING, source_hashes={},
+    ))
+    manager = RunManager(
+        settings=_settings(tmp_path), store=store,
+        executor=lambda *_: (_ for _ in ()).throw(AssertionError("executor must not run")),
+    )
+    client = _client(manager, ApplyService(store, verification=_PassingVerification()))
+
+    response = client.post(
+        "/api/runs/run-a/apply",
+        json={"projectPath": str(source.resolve()), "confirmed": True},
+    )
+
+    assert response.status_code == 409
+
+
+def test_apply_endpoint_rejects_mismatched_project_path_with_409(tmp_path: Path) -> None:
+    source, workspace = tmp_path / "source", tmp_path / "workspace"
+    source.mkdir(); workspace.mkdir()
+    (source / "app.py").write_text("old\n", encoding="utf-8")
+    (workspace / "app.py").write_text("new\n", encoding="utf-8")
+    client, _store, _project_path = _approved_run_client(tmp_path, source, workspace, ["app.py"])
+    other = tmp_path / "elsewhere"
+    other.mkdir()
+
+    response = client.post(
+        "/api/runs/run-a/apply", json={"projectPath": str(other), "confirmed": True},
+    )
+
+    assert response.status_code == 409
+
+
+def test_apply_endpoint_rejects_unconfirmed_request_with_422(tmp_path: Path) -> None:
+    source, workspace = tmp_path / "source", tmp_path / "workspace"
+    source.mkdir(); workspace.mkdir()
+    (source / "app.py").write_text("old\n", encoding="utf-8")
+    (workspace / "app.py").write_text("new\n", encoding="utf-8")
+    client, _store, project_path = _approved_run_client(tmp_path, source, workspace, ["app.py"])
+
+    response = client.post(
+        "/api/runs/run-a/apply", json={"projectPath": project_path, "confirmed": False},
+    )
+
+    assert response.status_code == 422
+    assert (source / "app.py").read_text(encoding="utf-8") == "old\n"
+
+
+def test_apply_endpoint_is_idempotent_on_repeat(tmp_path: Path) -> None:
+    source, workspace = tmp_path / "source", tmp_path / "workspace"
+    source.mkdir(); workspace.mkdir()
+    (source / "app.py").write_text("old\n", encoding="utf-8")
+    (workspace / "app.py").write_text("new\n", encoding="utf-8")
+    client, _store, project_path = _approved_run_client(tmp_path, source, workspace, ["app.py"])
+    body = {"projectPath": project_path, "confirmed": True}
+
+    first = client.post("/api/runs/run-a/apply", json=body)
+    mtime_before = (source / "app.py").stat().st_mtime_ns
+    second = client.post("/api/runs/run-a/apply", json=body)
+
+    assert first.status_code == second.status_code == 200
+    assert first.json() == second.json()
+    assert (source / "app.py").stat().st_mtime_ns == mtime_before
+
+
+def test_restore_endpoint_reverts_apply_failed_run_and_rejects_without_backup(tmp_path: Path) -> None:
+    source, workspace = tmp_path / "source", tmp_path / "workspace"
+    source.mkdir(); workspace.mkdir()
+    (source / "app.py").write_text("old\n", encoding="utf-8")
+    (workspace / "app.py").write_text("new\n", encoding="utf-8")
+    store = RunStore(tmp_path / "records")
+    store.create(RunSnapshot(
+        run_id="run-a", project_path=str(source.resolve()),
+        workspace_path=str(workspace.resolve()), message="work",
+        phase=RunPhase.APPROVED, source_hashes=snapshot_project(source),
+        changed_paths=["app.py"], report={"review": {"status": "APPROVED"}},
+    ))
+    manager = RunManager(
+        settings=_settings(tmp_path), store=store,
+        executor=lambda *_: (_ for _ in ()).throw(AssertionError("executor must not run")),
+    )
+
+    class _FailingVerification:
+        def run(self, project: Path) -> tuple[int, str]:
+            return 1, "1 failed"
+
+    apply_service = ApplyService(store, verification=_FailingVerification())
+    client = _client(manager, apply_service)
+    client.post(
+        "/api/runs/run-a/apply",
+        json={"projectPath": str(source.resolve()), "confirmed": True},
+    )
+
+    store.create(RunSnapshot(
+        run_id="run-b", project_path=str(source.resolve()),
+        workspace_path=str(workspace.resolve()), message="work",
+        phase=RunPhase.APPROVED, source_hashes={}, report={"review": {"status": "APPROVED"}},
+    ))
+    no_backup_response = _client(manager, apply_service).post(
+        "/api/runs/run-b/restore", json={"confirmed": True},
+    )
+
+    response = client.post("/api/runs/run-a/restore", json={"confirmed": True})
+
+    assert no_backup_response.status_code == 409
+    assert response.status_code == 200
+    assert response.json()["status"] == "restored"
+    assert (source / "app.py").read_text(encoding="utf-8") == "old\n"
+    assert store.load("run-a").phase is RunPhase.APPROVED
+
+
+def test_restore_endpoint_rejects_unconfirmed_request_with_422(tmp_path: Path) -> None:
+    source, workspace = tmp_path / "source", tmp_path / "workspace"
+    source.mkdir(); workspace.mkdir()
+    store = RunStore(tmp_path / "records")
+    store.create(RunSnapshot(
+        run_id="run-a", project_path=str(source.resolve()),
+        workspace_path=str(workspace.resolve()), message="work",
+        phase=RunPhase.APPLY_FAILED, source_hashes={},
+        apply_result=None,
+    ))
+    manager = RunManager(
+        settings=_settings(tmp_path), store=store,
+        executor=lambda *_: (_ for _ in ()).throw(AssertionError("executor must not run")),
+    )
+    client = _client(manager, ApplyService(store, verification=_PassingVerification()))
+
+    response = client.post("/api/runs/run-a/restore", json={"confirmed": False})
+
+    assert response.status_code == 422
