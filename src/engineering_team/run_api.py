@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import tempfile
 import threading
 import time
 import uuid
@@ -33,6 +34,7 @@ _ACTIVE_PHASES = {
     RunPhase.RUNNING,
     RunPhase.APPLYING,
 }
+_INTERRUPTED_PHASES = {RunPhase.QUEUED, RunPhase.PREPARING, RunPhase.RUNNING}
 _SNAPSHOT_FIELDS = (
     "run_id",
     "project_path",
@@ -85,6 +87,13 @@ def _public_snapshot(snapshot: RunSnapshot) -> dict[str, Any]:
     return {field: durable[field] for field in _SNAPSHOT_FIELDS}
 
 
+def _workspace_root(source: Path, configured_root: str | Path) -> Path:
+    configured = Path(configured_root).expanduser().resolve()
+    if configured == source or source in configured.parents:
+        return (Path(tempfile.gettempdir()).resolve() / "nova" / "runs").resolve()
+    return configured
+
+
 class RunManager:
     def __init__(
         self,
@@ -96,11 +105,21 @@ class RunManager:
         self.settings = settings or Settings()
         self.store = store or RunStore(self.settings.workspace_root)
         self._executor = executor or self._execute_real_run
+        self._reconcile_interrupted_runs()
+
+    def _reconcile_interrupted_runs(self) -> None:
+        for summary in self.store.list_summaries():
+            if summary.phase in _INTERRUPTED_PHASES:
+                self._fail(
+                    summary.run_id,
+                    RuntimeError("Run interrupted before completion; service restarted."),
+                )
 
     def start(self, request: LaunchRequest) -> str:
         run_id = f"run-{uuid.uuid4()}"
         source = Path(request.project_path).expanduser().resolve()
-        workspace = (Path(self.settings.workspace_root).expanduser().resolve() / run_id).resolve()
+        workspace_root = _workspace_root(source, self.settings.workspace_root)
+        workspace = (workspace_root / run_id).resolve()
         snapshot = RunSnapshot(
             run_id=run_id,
             project_path=str(source),
@@ -123,7 +142,7 @@ class RunManager:
         try:
             self.store.transition(run_id, RunPhase.PREPARING)
             snapshot = self.store.load(run_id)
-            create_run_copy(run_id, snapshot.project_path, self.settings.workspace_root)
+            create_run_copy(run_id, snapshot.project_path, Path(snapshot.workspace_path).parent)
             self.store.transition(run_id, RunPhase.RUNNING)
             running = self.store.load(run_id)
             state = self._executor(
@@ -142,11 +161,6 @@ class RunManager:
 
     def _fail(self, run_id: str, exc: Exception) -> None:
         message = redact_secrets(str(exc))
-        snapshot = self.store.load(run_id)
-        if snapshot.phase is RunPhase.PREPARING:
-            # RunStore currently exposes FAILED only from RUNNING. Preserve its public
-            # transition contract while still making copy failures terminal and queryable.
-            self.store.transition(run_id, RunPhase.RUNNING)
         self.store.append_event(run_id, {
             "id": f"{run_id}-error",
             "name": "workflow error",
@@ -241,6 +255,14 @@ def create_runs_router(manager: RunManager | None = None) -> APIRouter:
                     cursor = event.sequence
                 snapshot = run_manager.store.load(run_id)
                 if snapshot.phase not in _ACTIVE_PHASES:
+                    final_events = run_manager.store.events_after(run_id, cursor)
+                    for event in final_events:
+                        await websocket.send_json({
+                            "kind": "event",
+                            **event.model_dump(mode="json"),
+                        })
+                        cursor = event.sequence
+                    snapshot = run_manager.store.load(run_id)
                     await websocket.send_json({
                         "kind": "snapshot",
                         "snapshot": _public_snapshot(snapshot),

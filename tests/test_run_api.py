@@ -6,6 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -214,6 +215,39 @@ def test_completed_snapshot_survives_manager_restart(tmp_path: Path) -> None:
     assert response.json()["report"]["review"]["status"] == "APPROVED"
 
 
+@pytest.mark.parametrize(
+    "interrupted_phase",
+    [RunPhase.QUEUED, RunPhase.PREPARING, RunPhase.RUNNING],
+)
+def test_manager_restart_reconciles_interrupted_run_to_queryable_failure(
+    tmp_path: Path, interrupted_phase: RunPhase,
+) -> None:
+    records = tmp_path / "records"
+    store = RunStore(records)
+    store.create(RunSnapshot(
+        run_id=f"run-{interrupted_phase.value}",
+        project_path=str(tmp_path / "source"),
+        workspace_path=str(tmp_path / "workspace"),
+        message="resume safely",
+        phase=interrupted_phase,
+        source_hashes={},
+    ))
+
+    manager = RunManager(
+        settings=_settings(tmp_path),
+        store=RunStore(records),
+        executor=lambda *_: (_ for _ in ()).throw(AssertionError("must not resume")),
+    )
+    run_id = f"run-{interrupted_phase.value}"
+    response = _client(manager).get(f"/api/runs/{run_id}")
+
+    assert response.status_code == 200
+    assert response.json()["phase"] == "failed"
+    assert response.json()["report"]["review"]["status"] == "HUMAN_REVIEW_REQUIRED"
+    assert len(response.json()["events"]) == 1
+    assert RunStore(records).load(run_id).phase is RunPhase.FAILED
+
+
 def test_public_snapshots_omit_durable_source_hashes(tmp_path: Path) -> None:
     source = _source(tmp_path)
     manager = _manager(tmp_path, lambda snapshot, _emit: _completed_state(snapshot.run_id))
@@ -241,6 +275,8 @@ def test_queued_run_is_persisted_before_copy_and_copy_failure_remains_queryable(
     store = RunStore(tmp_path / "records")
     entered_copy, release_copy = threading.Event(), threading.Event()
     observed_phase: list[RunPhase] = []
+    requested_transitions: list[RunPhase] = []
+    transition = store.transition
 
     def fail_copy(run_id: str, _source: Path, _root: str) -> Path:
         observed_phase.append(store.load(run_id).phase)
@@ -248,7 +284,12 @@ def test_queued_run_is_persisted_before_copy_and_copy_failure_remains_queryable(
         release_copy.wait(timeout=2)
         raise OSError("copy failed with api_key=top-secret")
 
+    def record_transition(run_id: str, phase: RunPhase) -> RunSnapshot:
+        requested_transitions.append(phase)
+        return transition(run_id, phase)
+
     monkeypatch.setattr("engineering_team.run_api.create_run_copy", fail_copy)
+    monkeypatch.setattr(store, "transition", record_transition)
     manager = RunManager(
         settings=_settings(tmp_path), store=store,
         executor=lambda *_: (_ for _ in ()).throw(AssertionError("executor must not run")),
@@ -265,6 +306,7 @@ def test_queued_run_is_persisted_before_copy_and_copy_failure_remains_queryable(
 
     assert response.status_code == 202
     assert observed_phase == [RunPhase.PREPARING]
+    assert requested_transitions == [RunPhase.PREPARING]
     assert failed["report"]["review"]["status"] == "HUMAN_REVIEW_REQUIRED"
     assert "top-secret" not in str(failed)
     assert client.get(f"/api/runs/{run_id}").status_code == 200
@@ -293,6 +335,47 @@ def test_real_execution_boundary_writes_only_to_isolated_workspace(
     assert captured["authorize_writes"] is True
     assert captured["specification"] == "make the change"
     assert captured["run_id"] == run_id
+
+
+@pytest.mark.parametrize("configured_location", ["same", "descendant"])
+def test_workspace_falls_back_outside_source_when_configured_root_overlaps(
+    tmp_path: Path, monkeypatch: Any, configured_location: str,
+) -> None:
+    source = _source(tmp_path)
+    configured_root = source if configured_location == "same" else source / "configured-runs"
+    copied_roots: list[Path] = []
+
+    def copy_without_recursing(run_id: str, _source: Path, root: str | Path) -> Path:
+        root_path = Path(root).resolve()
+        copied_roots.append(root_path)
+        destination = root_path / run_id
+        destination.mkdir(parents=True)
+        return destination
+
+    def executor(snapshot: RunSnapshot, _emit: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
+        (Path(snapshot.workspace_path) / "agent-output.py").write_text(
+            "changed = True\n", encoding="utf-8",
+        )
+        return _completed_state(snapshot.run_id)
+
+    monkeypatch.setattr("engineering_team.run_api.create_run_copy", copy_without_recursing)
+    manager = RunManager(
+        settings=Settings(workspace_root=str(configured_root)),
+        store=RunStore(tmp_path / "records"),
+        executor=executor,
+    )
+    client = _client(manager)
+    run_id = client.post(
+        "/api/runs", json={"projectPath": str(source), "message": "stay isolated"},
+    ).json()["run_id"]
+    snapshot = _wait_for_phase(client, run_id, "approved")
+    workspace = Path(snapshot["workspace_path"])
+
+    assert workspace != source
+    assert source not in workspace.parents
+    assert workspace not in source.parents
+    assert copied_roots == [workspace.parent]
+    assert not (source / "agent-output.py").exists()
 
 
 def test_event_get_and_websocket_reconnect_replay_only_missing_events(tmp_path: Path) -> None:
@@ -324,6 +407,46 @@ def test_event_get_and_websocket_reconnect_replay_only_missing_events(tmp_path: 
     assert terminal["snapshot"]["run_id"] == "run-a"
     assert "source_hashes" not in terminal["snapshot"]
     assert client.get("/api/runs/run-a").status_code == 200
+
+
+def test_websocket_replays_event_appended_during_terminal_transition(
+    tmp_path: Path, monkeypatch: Any,
+) -> None:
+    store = RunStore(tmp_path / "records")
+    manager = RunManager(
+        settings=_settings(tmp_path), store=store,
+        executor=lambda *_: _completed_state("run-race"),
+    )
+    store.create(RunSnapshot(
+        run_id="run-race", project_path=str(tmp_path / "source"),
+        workspace_path=str(tmp_path / "copy"), message="work", phase=RunPhase.RUNNING,
+        source_hashes={},
+    ))
+    load = store.load
+    load_count = 0
+
+    def finish_between_replay_and_terminal_read(run_id: str) -> RunSnapshot:
+        nonlocal load_count
+        load_count += 1
+        if load_count == 2:
+            store.append_event(run_id, _event("last"))
+            store.finish(
+                run_id,
+                {"review": {"status": "APPROVED"}},
+                RunPhase.APPROVED,
+            )
+        return load(run_id)
+
+    monkeypatch.setattr(store, "load", finish_between_replay_and_terminal_read)
+    client = _client(manager)
+
+    with client.websocket_connect("/ws/runs/run-race") as websocket:
+        event = websocket.receive_json()
+        terminal = websocket.receive_json()
+
+    assert event == {"kind": "event", "sequence": 1, "payload": _event("last")}
+    assert terminal["kind"] == "snapshot"
+    assert [item["sequence"] for item in terminal["snapshot"]["events"]] == [1]
 
 
 def test_websocket_disconnect_does_not_discard_active_or_terminal_run(tmp_path: Path) -> None:

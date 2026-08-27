@@ -53,6 +53,25 @@ def test_finish_persists_terminal_report_and_lists_summary(tmp_path: Path) -> No
     assert [summary.run_id for summary in restarted.list_summaries()] == ["run-a"]
 
 
+@pytest.mark.parametrize("phase", [RunPhase.QUEUED, RunPhase.PREPARING])
+def test_run_can_fail_directly_before_execution(tmp_path: Path, phase: RunPhase) -> None:
+    store = RunStore(tmp_path)
+    store.create(RunSnapshot(
+        run_id="run-a", project_path=str(tmp_path / "source"),
+        workspace_path=str(tmp_path / "copy"), message="change one thing",
+        phase=phase, source_hashes={},
+    ))
+
+    failed = store.finish(
+        "run-a",
+        {"review": {"status": "HUMAN_REVIEW_REQUIRED"}},
+        RunPhase.FAILED,
+    )
+
+    assert failed.phase is RunPhase.FAILED
+    assert RunStore(tmp_path).load("run-a").phase is RunPhase.FAILED
+
+
 def test_wait_after_returns_event_published_while_waiting(tmp_path: Path) -> None:
     store = RunStore(tmp_path)
     store.create(RunSnapshot(

@@ -20,8 +20,8 @@ from engineering_team.runs.models import (
 )
 
 _ALLOWED_TRANSITIONS: dict[RunPhase, set[RunPhase]] = {
-    RunPhase.QUEUED: {RunPhase.PREPARING},
-    RunPhase.PREPARING: {RunPhase.RUNNING},
+    RunPhase.QUEUED: {RunPhase.PREPARING, RunPhase.FAILED},
+    RunPhase.PREPARING: {RunPhase.RUNNING, RunPhase.FAILED},
     RunPhase.RUNNING: {RunPhase.REVIEW_REQUIRED, RunPhase.APPROVED, RunPhase.FAILED},
     RunPhase.REVIEW_REQUIRED: set(),
     RunPhase.APPROVED: {RunPhase.APPLYING},
