@@ -10,6 +10,7 @@ from .enums import (
     RemediationCategory,
     ReviewerStatus,
     RouteTarget,
+    RunEventKind,
     SecuritySeverity,
     SecurityStatus,
     ToolStatus,
@@ -198,3 +199,20 @@ class FinalReport(StrictModel):
     errors_degradations: list[str]
     trace_id: str
     next_action: str
+
+
+class RunEvent(StrictModel):
+    schema_version: int = 1
+    event_id: str
+    run_id: str
+    seq: int = Field(ge=0)
+    trace_id: str | None = None
+    kind: RunEventKind
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    agent: str | None = None
+    iteration: int | None = None
+    status: str | None = None
+    summary: str
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    payload: dict[str, Any] | None = None
+    payload_ref: str | None = None
