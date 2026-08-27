@@ -268,6 +268,63 @@ def test_public_snapshots_omit_durable_source_hashes(tmp_path: Path) -> None:
     assert "source_hashes" not in terminal["snapshot"]
 
 
+def test_start_persists_queued_snapshot_immediately_with_empty_source_hashes(
+    tmp_path: Path, monkeypatch: Any,
+) -> None:
+    source = _source(tmp_path)
+    store = RunStore(tmp_path / "records")
+    release_hash = threading.Event()
+
+    def blocking_snapshot(_root: Path) -> dict[str, str | None]:
+        assert release_hash.wait(timeout=2), "worker never called _source_snapshot"
+        return {"app.py": "deadbeef"}
+
+    monkeypatch.setattr("engineering_team.run_api._source_snapshot", blocking_snapshot)
+    manager = RunManager(
+        settings=_settings(tmp_path), store=store,
+        executor=lambda *_: (_ for _ in ()).throw(AssertionError("executor must not run")),
+    )
+    client = _client(manager)
+
+    response = client.post("/api/runs", json={"projectPath": str(source), "message": "quick"})
+    run_id = response.json()["run_id"]
+    snapshot = store.load(run_id)
+
+    assert response.status_code == 202
+    assert snapshot.phase in {RunPhase.QUEUED, RunPhase.PREPARING}
+    assert snapshot.source_hashes == {}
+    release_hash.set()
+
+
+def test_source_hashes_populated_before_workspace_copy_runs(
+    tmp_path: Path, monkeypatch: Any,
+) -> None:
+    source = _source(tmp_path)
+    store = RunStore(tmp_path / "records")
+    captured: dict[str, Any] = {}
+
+    def capture_copy(run_id: str, _source: Path, _root: str) -> Path:
+        captured["hashes"] = store.load(run_id).source_hashes
+        captured["phase"] = store.load(run_id).phase
+        destination = tmp_path / "workspace-copy"
+        destination.mkdir(exist_ok=True)
+        return destination
+
+    monkeypatch.setattr("engineering_team.run_api.create_run_copy", capture_copy)
+    manager = RunManager(
+        settings=_settings(tmp_path), store=store,
+        executor=lambda snapshot, _emit: _completed_state(snapshot.run_id),
+    )
+    client = _client(manager)
+    run_id = client.post(
+        "/api/runs", json={"projectPath": str(source), "message": "hash before copy"},
+    ).json()["run_id"]
+    _wait_for_phase(client, run_id, "approved")
+
+    assert captured["phase"] is RunPhase.PREPARING
+    assert captured["hashes"].get("app.py")
+
+
 def test_queued_run_is_persisted_before_copy_and_copy_failure_remains_queryable(
     tmp_path: Path, monkeypatch: Any,
 ) -> None:
@@ -337,12 +394,17 @@ def test_real_execution_boundary_writes_only_to_isolated_workspace(
     assert captured["run_id"] == run_id
 
 
-@pytest.mark.parametrize("configured_location", ["same", "descendant"])
+@pytest.mark.parametrize("configured_location", ["same", "descendant", "same-different-case"])
 def test_workspace_falls_back_outside_source_when_configured_root_overlaps(
     tmp_path: Path, monkeypatch: Any, configured_location: str,
 ) -> None:
     source = _source(tmp_path)
-    configured_root = source if configured_location == "same" else source / "configured-runs"
+    if configured_location == "same":
+        configured_root = source
+    elif configured_location == "descendant":
+        configured_root = source / "configured-runs"
+    else:
+        configured_root = Path(str(source).swapcase())
     copied_roots: list[Path] = []
 
     def copy_without_recursing(run_id: str, _source: Path, root: str | Path) -> Path:

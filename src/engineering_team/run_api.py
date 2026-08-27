@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
 import tempfile
 import threading
 import time
@@ -87,9 +88,16 @@ def _public_snapshot(snapshot: RunSnapshot) -> dict[str, Any]:
     return {field: durable[field] for field in _SNAPSHOT_FIELDS}
 
 
+def _normcase_path(path: Path) -> Path:
+    """Normalize a resolved path's casing for filesystem-appropriate comparison."""
+    return Path(os.path.normcase(str(path)))
+
+
 def _workspace_root(source: Path, configured_root: str | Path) -> Path:
     configured = Path(configured_root).expanduser().resolve()
-    if configured == source or source in configured.parents:
+    normalized_configured = _normcase_path(configured)
+    normalized_source = _normcase_path(source)
+    if normalized_configured == normalized_source or normalized_source in normalized_configured.parents:
         return (Path(tempfile.gettempdir()).resolve() / "nova" / "runs").resolve()
     return configured
 
@@ -126,7 +134,7 @@ class RunManager:
             workspace_path=str(workspace),
             message=request.message.strip(),
             phase=RunPhase.QUEUED,
-            source_hashes=_source_snapshot(source),
+            source_hashes={},
         )
         self.store.create(snapshot)
         threading.Thread(target=self._worker, args=(run_id,), daemon=True).start()
@@ -141,6 +149,8 @@ class RunManager:
     def _worker(self, run_id: str) -> None:
         try:
             self.store.transition(run_id, RunPhase.PREPARING)
+            snapshot = self.store.load(run_id)
+            self.store.record_source_hashes(run_id, _source_snapshot(Path(snapshot.project_path)))
             snapshot = self.store.load(run_id)
             create_run_copy(run_id, snapshot.project_path, Path(snapshot.workspace_path).parent)
             self.store.transition(run_id, RunPhase.RUNNING)

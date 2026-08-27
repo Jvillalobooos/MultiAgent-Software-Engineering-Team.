@@ -95,6 +95,16 @@ class RunStore:
             self._condition.notify_all()
             return stored.model_copy(deep=True)
 
+    def record_source_hashes(self, run_id: str, hashes: dict[str, str | None]) -> RunSnapshot:
+        """Persist the computed source baseline hashes for an existing run."""
+        with self._condition:
+            snapshot = self._candidate(run_id)
+            snapshot.source_hashes = copy.deepcopy(hashes)
+            snapshot.updated_at = datetime.now(UTC)
+            self._commit(snapshot)
+            self._condition.notify_all()
+            return snapshot.model_copy(deep=True)
+
     def record_apply_result(self, run_id: str, result: ApplyResult) -> RunSnapshot:
         """Persist an apply or restore audit record for an existing run."""
         with self._condition:
