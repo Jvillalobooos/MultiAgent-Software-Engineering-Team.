@@ -193,6 +193,53 @@ def test_final_report_marks_successful_write_evidence_as_workspace_change() -> N
     assert report["tool_results"][-1]["name"] == "update_file"
 
 
+def test_recovered_cloud_fallback_stays_a_warning_and_run_still_approves() -> None:
+    state = _completed_state()
+    state["model_usage"] = [
+        {
+            "agent": "Product", "provider": "google", "actual_model": None,
+            "requested_model": "gemini-3.7-flash", "latency_ms": 80,
+            "usage": None, "error": "CLOUD_FALLBACK_UNAVAILABLE: provider_unavailable (HTTP 503)",
+            "http_status": 503, "error_category": "provider_unavailable", "retryable": True,
+        },
+        {
+            "agent": "Product", "provider": "ollama", "actual_model": "qwen3.5:4b",
+            "requested_model": "qwen3.5:4b", "latency_ms": 120,
+            "usage": {"input_tokens": 10, "output_tokens": 20},
+        },
+    ]
+
+    failed_event = run_event_from_trace(
+        run_id="run-1", sequence=1,
+        trace_event={
+            "name": "product cloud primary", "type": "generation", "level": "ERROR",
+            "status_message": "CLOUD_FALLBACK_UNAVAILABLE: provider_unavailable (HTTP 503)",
+            "metadata": {
+                "agent": "Product", "http_status": 503,
+                "error_category": "provider_unavailable", "retryable": "true",
+            },
+        },
+    )
+    assert failed_event["level"] == "error"
+    assert failed_event["type"] == "error"
+    assert failed_event["metadata"]["error_category"] == "provider_unavailable"
+
+    report = final_report_from_state(state)
+
+    assert report["review"]["status"] == "APPROVED"
+    local_entry = next(
+        item for item in report["model_usage"] if item["provider"] == "local"
+    )
+    cloud_entry = next(
+        item for item in report["model_usage"] if item["provider"] == "cloud"
+    )
+    assert local_entry["fallback_succeeded"] is True
+    assert cloud_entry["error_category"] == "provider_unavailable"
+    assert cloud_entry["http_status"] == 503
+    assert cloud_entry["retryable"] is True
+    assert "fallback_succeeded" not in cloud_entry
+
+
 def test_post_creates_independent_persisted_runs(tmp_path: Path) -> None:
     source = _source(tmp_path)
 

@@ -92,6 +92,23 @@ class CloudRouter:
         return self._settings.cloud_enabled and bool(key)
 
 
+def _http_category(status: int) -> tuple[str, bool]:
+    """Classify a provider HTTP status into a sanitized, actionable cause.
+
+    Never inspect the response body here: only the status code is safe to
+    surface without risking a leaked credential or provider-specific detail.
+    """
+    if status in {401, 403}:
+        return "authentication", False
+    if status == 404:
+        return "model_unavailable", False
+    if status == 429:
+        return "rate_limit", True
+    if status >= 500:
+        return "provider_unavailable", True
+    return "request_rejected", False
+
+
 def is_cloud_eligible(error: ErrorCode) -> bool:
     return error in {
         ErrorCode.LLM_AVAILABILITY_ERROR,
@@ -215,6 +232,27 @@ class CloudModelRuntime:
             artifact = type(candidate).model_validate_json(raw)
             if not _preserves_governed_facts(candidate.model_dump(mode="json"), artifact):
                 raise ValueError("governed artifact contradiction")
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            category, retryable = _http_category(status)
+            error = f"CLOUD_FALLBACK_UNAVAILABLE: {category} (HTTP {status})"
+            info = ModelExecutionInfo(
+                agent=role, provider=selection.provider, requested_model=selection.model,
+                actual_model=None, model_profile=selection.model_profile,
+                fallback_used=True, fallback_reason=fallback_reason, degraded=True,
+                latency_ms=int((time.perf_counter() - started) * 1000),
+                structured_output_success=False, error=error,
+                http_status=status, error_category=category, retryable=retryable,
+            )
+            self.attempts.append(info)
+            if self.trace is not None:
+                self.trace.record(
+                    f"{role.value} cloud {'primary' if self.primary else 'fallback'}",
+                    as_type="generation",
+                    metadata=info.model_dump(mode="json"), level="ERROR",
+                    status_message=error,
+                )
+            raise RuntimeError(error) from exc
         except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError, ValidationError) as exc:
             error = f"CLOUD_FALLBACK_UNAVAILABLE: {type(exc).__name__}"
             info = ModelExecutionInfo(

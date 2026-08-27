@@ -266,19 +266,37 @@ def final_report_from_state(state_value: Any, *, completed_at: str | None = None
         provider = "local" if str(item.get("provider", "")).lower() in {"ollama", "local"} else "cloud"
         model = str(item.get("actual_model") or item.get("requested_model") or "unavailable")
         grouped[(agent, model, provider)].append(item)
+    failed_agents = {
+        _agent(_plain(raw).get("agent"))
+        for raw in state.get("model_usage", [])
+        if _plain(raw).get("error")
+    }
     model_usage = []
     for (agent, model, provider), items in grouped.items():
         inputs = outputs = latency = 0
+        last_failure: Mapping[str, Any] | None = None
         for item in items:
             usage = item.get("usage") or {}
             inputs += int(usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0)
             outputs += int(usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0)
             latency += int(item.get("latency_ms", 0) or 0)
-        model_usage.append({
+            if item.get("error"):
+                last_failure = item
+        entry: dict[str, Any] = {
             "agent": agent, "model": model, "provider": provider, "calls": len(items),
             "input_tokens": inputs, "output_tokens": outputs,
             "avg_latency_ms": round(latency / len(items)),
-        })
+        }
+        if last_failure is not None:
+            if last_failure.get("http_status") is not None:
+                entry["http_status"] = int(last_failure["http_status"])
+            if last_failure.get("error_category"):
+                entry["error_category"] = str(last_failure["error_category"])
+            if last_failure.get("retryable") is not None:
+                entry["retryable"] = bool(last_failure["retryable"])
+        elif agent in failed_agents:
+            entry["fallback_succeeded"] = True
+        model_usage.append(entry)
 
     errors = []
     for raw in state.get("errors", []):

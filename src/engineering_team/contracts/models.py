@@ -160,6 +160,9 @@ class ModelExecutionInfo(StrictModel):
     usage: dict[str, Any] | None = None
     structured_output_success: bool = False
     error: str | None = None
+    http_status: int | None = None
+    error_category: str | None = None
+    retryable: bool | None = None
 
 
 class CloudFallbackContext(StrictModel):
