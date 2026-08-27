@@ -72,7 +72,7 @@ class EventEmittingTrace:
             timestamp=datetime.now(UTC),
             agent=safe_metadata.get("agent"),
             iteration=safe_metadata.get("iteration"),
-            status=level or status_message,
+            status=level or _safe(status_message),
             summary=name,
             metrics={"usage": usage_details} if usage_details else {},
             payload={"input": _safe(input), "output": _safe(output), "metadata": _safe(metadata)},
@@ -80,10 +80,9 @@ class EventEmittingTrace:
         return observation_id
 
     def finish(self, final_report: Any) -> None:
+        # Closes/flushes the underlying Langfuse trace only. Does NOT emit a
+        # RunEvent: stategraph.py calls this from inside the graph (FinalReport
+        # and HUMAN_REVIEW_REQUIRED nodes), which would otherwise produce a
+        # second RUN_FINISHED alongside the authoritative one that
+        # apply_run._run_graph_with_events emits after graph.invoke() returns.
         self._trace.finish(final_report)
-        self._sink.emit(RunEvent(
-            event_id=str(uuid.uuid4()), run_id=self._run_id, seq=next(self._seq),
-            trace_id=self._trace.trace_id, kind=RunEventKind.RUN_FINISHED,
-            timestamp=datetime.now(UTC), agent=None, iteration=None, status=None,
-            summary="run finished", metrics={}, payload={"final_report": _safe(final_report)},
-        ))

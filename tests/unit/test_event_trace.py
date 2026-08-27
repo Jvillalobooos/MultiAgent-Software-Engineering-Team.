@@ -51,23 +51,31 @@ def test_record_redacts_secrets_in_the_emitted_event_payload():
     assert payload["metadata"] == {"agent": "Developer", "secret": "[REDACTED]"}
 
 
-def test_finish_redacts_secrets_in_the_emitted_event_payload():
-    trace = TraceSession(trace_id="t1", run_id="run-1", live=False)
-    sink = ListRunEventSink()
-    wrapped = EventEmittingTrace(trace=trace, sink=sink, run_id="run-1")
-
-    wrapped.finish({"status": "APPROVED", "api_key": "sk-live-98765"})
-
-    payload = sink.events[-1].payload
-    assert payload["final_report"] == {"status": "APPROVED", "api_key": "[REDACTED]"}
-
-
-def test_finish_emits_a_run_finished_event():
+def test_finish_does_not_emit_a_run_event_but_still_closes_the_underlying_trace():
+    # apply_run._run_graph_with_events owns the single authoritative
+    # RUN_FINISHED event (emitted after graph.invoke() returns, with
+    # final_status). If EventEmittingTrace.finish() also emitted one, a
+    # normal run would produce two RUN_FINISHED events, because
+    # stategraph.py's FinalReport/HUMAN_REVIEW_REQUIRED nodes call
+    # trace.finish() from inside the graph.
     trace = TraceSession(trace_id="t1", run_id="run-1", live=False)
     sink = ListRunEventSink()
     wrapped = EventEmittingTrace(trace=trace, sink=sink, run_id="run-1")
 
     wrapped.finish({"status": "APPROVED"})
 
-    assert trace.finished is True
-    assert sink.events[-1].kind == RunEventKind.RUN_FINISHED
+    assert trace.finished is True  # the underlying Langfuse trace is still closed/flushed
+    assert sink.events == []
+
+
+def test_record_redacts_the_status_message_field():
+    trace = TraceSession(trace_id="t1", run_id="run-1", live=False)
+    sink = ListRunEventSink()
+    wrapped = EventEmittingTrace(trace=trace, sink=sink, run_id="run-1")
+
+    wrapped.record(
+        "Developer", as_type="agent",
+        status_message="upstream error: api_key=sk-live-12345 rejected",
+    )
+
+    assert sink.events[0].status == "upstream error: api_key=[REDACTED] rejected"

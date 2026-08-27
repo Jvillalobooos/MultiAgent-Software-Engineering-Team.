@@ -73,7 +73,15 @@ def _run_graph_with_events(
     handler = RunEventCallbackHandler(
         sink=active_sink, run_id=run_id, trace_id=trace_id, seq_counter=active_seq,
     )
-    state = graph.invoke(initial_state, config={"callbacks": [handler]})
+    try:
+        state = graph.invoke(initial_state, config={"callbacks": [handler]})
+    except Exception:
+        active_sink.emit(RunEvent(
+            event_id=str(uuid.uuid4()), run_id=run_id, seq=next(active_seq), trace_id=trace_id,
+            kind=RunEventKind.RUN_FINISHED, agent=None, iteration=None,
+            status="ERROR", summary="run finished", metrics={},
+        ))
+        raise
     active_sink.emit(RunEvent(
         event_id=str(uuid.uuid4()), run_id=run_id, seq=next(active_seq), trace_id=trace_id,
         kind=RunEventKind.RUN_FINISHED, agent=None, iteration=None,
