@@ -317,11 +317,15 @@ def final_report_from_state(state_value: Any, *, completed_at: str | None = None
         })
     tools = []
     workspace_changed = False
+    written_paths: list[str] = []
     for raw in state.get("tool_results", []):
         item = _plain(raw)
         raw_status = str(getattr(item.get("status"), "value", item.get("status", "FAIL")))
         if item.get("tool_name") in {"create_file", "update_file"} and raw_status == "SUCCESS":
             workspace_changed = True
+            written_path = str(item.get("output_summary") or "").strip()
+            if written_path and written_path not in written_paths:
+                written_paths.append(written_path)
         tools.append({
             "name": str(item.get("tool_name", "")),
             "status": raw_status if raw_status in {"SUCCESS", "FAIL", "DENIED"} else "FAIL",
@@ -335,6 +339,7 @@ def final_report_from_state(state_value: Any, *, completed_at: str | None = None
         "changed_files": _diff_files(implementation),
         "applied_diff": bool(implementation and implementation.get("action_mode") == "APPLIED"),
         "workspace_changed": workspace_changed,
+        "actual_changed_paths": written_paths,
         "source_applied": False,
         "review": {
             "status": public_status, "score": float(review.get("score") or 0),

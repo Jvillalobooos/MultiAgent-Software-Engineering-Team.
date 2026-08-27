@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query, WebSocket
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 from starlette.websockets import WebSocketDisconnect
 
 from engineering_team.apply_run import execute_on_project
@@ -21,7 +21,7 @@ from engineering_team.apply_service import ApplyService, snapshot_project
 from engineering_team.config import Settings
 from engineering_team.guardrails.secrets import redact_secrets
 from engineering_team.run_events import failure_state, final_report_from_state, run_event_from_trace
-from engineering_team.runs import RunPhase, RunSnapshot, RunStore
+from engineering_team.runs import ApplyResult, RunPhase, RunSnapshot, RunStore
 from engineering_team.workspace.isolation import create_run_copy
 
 RunExecutor = Callable[
@@ -49,18 +49,20 @@ _SNAPSHOT_FIELDS = (
     "created_at",
     "updated_at",
 )
+def _error(code: str, message: str, *, recoverable: bool, **details: Any) -> dict[str, Any]:
+    """Build the stable {code, message, recoverable, details?} envelope used for every
+    run/apply/restore error -- the backend, not the frontend, owns recoverability."""
+    body: dict[str, Any] = {"code": code, "message": message, "recoverable": recoverable}
+    if details:
+        body["details"] = details
+    return body
+
+
 class LaunchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     project_path: str = Field(alias="projectPath", min_length=1)
     message: str = Field(min_length=1)
-
-    @field_validator("project_path")
-    @classmethod
-    def existing_project(cls, value: str) -> str:
-        if not Path(value).expanduser().resolve().is_dir():
-            raise ValueError("projectPath must reference an existing directory")
-        return value
 
 
 class ApplyRequest(BaseModel):
@@ -116,6 +118,27 @@ class RunManager:
                     summary.run_id,
                     RuntimeError("Run interrupted before completion; service restarted."),
                 )
+            elif summary.phase is RunPhase.APPLYING:
+                self._reconcile_interrupted_apply(summary.run_id)
+
+    def _reconcile_interrupted_apply(self, run_id: str) -> None:
+        """A process death mid-apply leaves the run stuck in APPLYING forever unless
+        reconciled: transition it to apply_failed so it becomes queryable and, when a
+        valid backup manifest exists, restorable. Never inspect or touch the actual
+        source project files here -- only check whether a manifest was written."""
+        backup_dir = self.store.root / "_backups" / run_id
+        manifest_path = backup_dir / "manifest.json"
+        backup_path = str(backup_dir) if manifest_path.exists() else None
+        result = ApplyResult(
+            status="apply_failed",
+            backup_path=backup_path,
+            message=(
+                "interrupted mid-apply; verify project state manually"
+                + ("" if backup_path else " (no backup manifest found)")
+            ),
+        )
+        self.store.record_apply_result(run_id, result)
+        self.store.transition(run_id, RunPhase.APPLY_FAILED)
 
     def start(self, request: LaunchRequest) -> str:
         run_id = f"run-{uuid.uuid4()}"
@@ -159,11 +182,12 @@ class RunManager:
                 if report["review"]["status"] == "APPROVED"
                 else RunPhase.REVIEW_REQUIRED
             )
-            changed_paths = (
-                [item["path"] for item in report.get("changed_files", []) if item.get("path")]
-                if report.get("workspace_changed")
-                else []
-            )
+            # Deliberately NOT derived from report["changed_files"], which parses the
+            # model-authored diff text. The set of paths the apply layer is allowed to
+            # write must come only from actual recorded create_file/update_file tool
+            # results (the same evidence workspace_changed is derived from) -- never
+            # from anything the model merely claims to have changed.
+            changed_paths = list(report.get("actual_changed_paths", []))
             self.store.finish(run_id, report, phase, changed_paths=changed_paths)
         except Exception as exc:  # noqa: BLE001 - every background run must terminate durably.
             self._fail(run_id, exc)
@@ -228,11 +252,23 @@ def create_runs_router(
     def load_or_404(run_id: str) -> RunSnapshot:
         snapshot = run_manager.get(run_id)
         if snapshot is None:
-            raise HTTPException(status_code=404, detail="run_id not found")
+            raise HTTPException(
+                status_code=404,
+                detail=_error("RUN_NOT_FOUND", "This run could not be found.", recoverable=False),
+            )
         return snapshot
 
     @router.post("/api/runs", status_code=202)
     def start_run(request: LaunchRequest) -> dict[str, str]:
+        if not Path(request.project_path).expanduser().resolve().is_dir():
+            raise HTTPException(
+                status_code=422,
+                detail=_error(
+                    "PROJECT_PATH_NOT_FOUND",
+                    "The selected project folder could not be found. Choose a valid directory.",
+                    recoverable=True,
+                ),
+            )
         return {"run_id": run_manager.start(request)}
 
     @router.get("/api/runs")
@@ -255,10 +291,25 @@ def create_runs_router(
     def apply_run(run_id: str, request: ApplyRequest) -> dict[str, Any]:
         snapshot = load_or_404(run_id)
         if snapshot.phase not in {RunPhase.APPROVED, RunPhase.APPLIED, RunPhase.APPLY_FAILED}:
-            raise HTTPException(status_code=409, detail=f"run is not approved for apply: {snapshot.phase.value}")
+            raise HTTPException(
+                status_code=409,
+                detail=_error(
+                    "RUN_NOT_APPROVED",
+                    f"This run is not approved for apply (current status: {snapshot.phase.value}).",
+                    recoverable=False,
+                    phase=snapshot.phase.value,
+                ),
+            )
         requested = Path(request.project_path).expanduser().resolve()
         if requested != Path(snapshot.project_path).resolve():
-            raise HTTPException(status_code=409, detail="projectPath does not match this run")
+            raise HTTPException(
+                status_code=409,
+                detail=_error(
+                    "PROJECT_PATH_MISMATCH",
+                    "The confirmed project path does not match this run's project.",
+                    recoverable=False,
+                ),
+            )
         result = apply_service.apply(run_id, confirmed_project=requested)
         return result.model_dump(mode="json")
 
@@ -268,8 +319,25 @@ def create_runs_router(
         already_restored = (
             snapshot.apply_result is not None and snapshot.apply_result.status == "restored"
         )
+        no_backup = snapshot.apply_result is None or snapshot.apply_result.backup_path is None
         if snapshot.phase is not RunPhase.APPLY_FAILED and not already_restored:
-            raise HTTPException(status_code=409, detail="run has no backup available to restore")
+            raise HTTPException(
+                status_code=409,
+                detail=_error(
+                    "NO_RESTORABLE_BACKUP",
+                    "This run has no backup available to restore.",
+                    recoverable=False,
+                ),
+            )
+        if not already_restored and no_backup:
+            raise HTTPException(
+                status_code=409,
+                detail=_error(
+                    "NO_RESTORABLE_BACKUP",
+                    "This run's apply attempt made no changes, so there is nothing to restore.",
+                    recoverable=False,
+                ),
+            )
         result = apply_service.restore(run_id)
         return result.model_dump(mode="json")
 

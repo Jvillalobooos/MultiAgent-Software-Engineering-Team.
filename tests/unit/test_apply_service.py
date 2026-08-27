@@ -221,6 +221,21 @@ def test_snapshot_project_skips_ignored_directories(tmp_path: Path) -> None:
     assert set(hashes) == {"app.py"}
 
 
+def test_snapshot_project_skips_backup_and_record_directories(tmp_path: Path) -> None:
+    """If the workspace root overlaps the selected project, backups/records must not
+    be hashed into conflict-detection fingerprints."""
+    project = tmp_path / "project"
+    (project / "_backups" / "run-a").mkdir(parents=True)
+    (project / "_backups" / "run-a" / "app.py").write_text("old\n", encoding="utf-8")
+    (project / "_records").mkdir(parents=True)
+    (project / "_records" / "run-a.json").write_text("{}", encoding="utf-8")
+    (project / "app.py").write_text("value = 1\n", encoding="utf-8")
+
+    hashes = snapshot_project(project)
+
+    assert set(hashes) == {"app.py"}
+
+
 def test_safe_target_rejects_traversal_and_absolute_paths(tmp_path: Path) -> None:
     root = tmp_path / "root"
     root.mkdir()

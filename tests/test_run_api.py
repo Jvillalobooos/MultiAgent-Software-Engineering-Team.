@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import threading
 import time
 from collections.abc import Callable
@@ -10,7 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from engineering_team.apply_service import ApplyService, snapshot_project
+from engineering_team.apply_service import ApplyService, file_hash, snapshot_project
 from engineering_team.config import Settings
 from engineering_team.graph.stategraph import build_engineering_graph
 from engineering_team.observability.langfuse import TraceSession
@@ -20,7 +21,7 @@ from engineering_team.run_events import (
     final_report_from_state,
     run_event_from_trace,
 )
-from engineering_team.runs import RunPhase, RunSnapshot, RunStore
+from engineering_team.runs import ApplyResult, RunPhase, RunSnapshot, RunStore
 
 
 def _completed_state(run_id: str = "run-1") -> dict[str, Any]:
@@ -159,8 +160,8 @@ def test_final_report_distinguishes_proposals_from_workspace_writes() -> None:
 
     assert set(report) == {
         "route_history", "model_usage", "changed_files", "applied_diff",
-        "workspace_changed", "source_applied", "review", "errors",
-        "rag_evidence", "tool_results",
+        "workspace_changed", "actual_changed_paths", "source_applied", "review",
+        "errors", "rag_evidence", "tool_results",
     }
     assert report["review"]["status"] == "APPROVED"
     assert report["changed_files"][0]["additions"] == 1
@@ -286,6 +287,67 @@ def test_completed_run_persists_changed_paths_from_successful_writes(tmp_path: P
     assert body["changed_paths"] == ["app/service.py"]
 
 
+def test_changed_paths_ignore_model_claimed_diff_paths_never_actually_written(
+    tmp_path: Path,
+) -> None:
+    """The model's diff can claim any path -- only real tool writes may be applied."""
+    source = _source(tmp_path)
+
+    def executor(
+        snapshot: RunSnapshot, emit: Callable[[dict[str, Any]], None],
+    ) -> dict[str, Any]:
+        state = _completed_state(snapshot.run_id)
+        # Model diff claims a path, but no create_file/update_file tool call for it
+        # actually succeeded -- this must NOT end up in changed_paths.
+        state["implementation"]["changed_files"] = ["app/never_written.py"]
+        state["implementation"]["diff"] = (
+            "--- a/app/never_written.py\n+++ b/app/never_written.py\n"
+            "@@ -1 +1 @@\n-old\n+new\n"
+        )
+        return state
+
+    manager = _manager(tmp_path, executor)
+    client = _client(manager)
+    run_id = client.post(
+        "/api/runs", json={"projectPath": str(source), "message": "alpha"},
+    ).json()["run_id"]
+
+    body = _wait_for_phase(client, run_id, "approved")
+
+    assert body["changed_paths"] == []
+    assert body["report"]["changed_files"][0]["path"] == "app/never_written.py"
+
+
+def test_changed_paths_include_tool_written_path_even_when_absent_from_model_diff(
+    tmp_path: Path,
+) -> None:
+    """A path a tool call actually wrote must count even if the model's diff omits it."""
+    source = _source(tmp_path)
+
+    def executor(
+        snapshot: RunSnapshot, emit: Callable[[dict[str, Any]], None],
+    ) -> dict[str, Any]:
+        state = _completed_state(snapshot.run_id)
+        state["implementation"]["changed_files"] = []
+        state["implementation"]["diff"] = ""
+        state["tool_results"].append({
+            "tool_name": "create_file", "status": "SUCCESS", "duration_ms": 5,
+            "allowed_role": "Developer", "output_summary": "app/really_written.py",
+            "error": None,
+        })
+        return state
+
+    manager = _manager(tmp_path, executor)
+    client = _client(manager)
+    run_id = client.post(
+        "/api/runs", json={"projectPath": str(source), "message": "alpha"},
+    ).json()["run_id"]
+
+    body = _wait_for_phase(client, run_id, "approved")
+
+    assert body["changed_paths"] == ["app/really_written.py"]
+
+
 def test_completed_run_leaves_changed_paths_empty_without_workspace_write(tmp_path: Path) -> None:
     source = _source(tmp_path)
     manager = _manager(tmp_path, lambda snapshot, _emit: _completed_state(snapshot.run_id))
@@ -353,6 +415,80 @@ def test_manager_restart_reconciles_interrupted_run_to_queryable_failure(
     assert response.json()["report"]["review"]["status"] == "HUMAN_REVIEW_REQUIRED"
     assert len(response.json()["events"]) == 1
     assert RunStore(records).load(run_id).phase is RunPhase.FAILED
+
+
+def test_manager_restart_reconciles_stranded_applying_run_to_apply_failed(
+    tmp_path: Path,
+) -> None:
+    source, workspace = tmp_path / "source", tmp_path / "workspace"
+    source.mkdir(); workspace.mkdir()
+    (source / "app.py").write_text("old\n", encoding="utf-8")
+    records = tmp_path / "records"
+    store = RunStore(records)
+    store.create(RunSnapshot(
+        run_id="run-stuck", project_path=str(source.resolve()),
+        workspace_path=str(workspace.resolve()), message="work",
+        phase=RunPhase.APPROVED, source_hashes=snapshot_project(source),
+        changed_paths=["app.py"], report={"review": {"status": "APPROVED"}},
+    ))
+    store.transition("run-stuck", RunPhase.APPLYING)
+
+    manager = RunManager(
+        settings=_settings(tmp_path),
+        store=RunStore(records),
+        executor=lambda *_: (_ for _ in ()).throw(AssertionError("must not resume")),
+    )
+    client = _client(manager)
+
+    response = client.get("/api/runs/run-stuck")
+
+    assert response.status_code == 200
+    assert response.json()["phase"] == "apply_failed"
+    assert response.json()["apply_result"]["status"] == "apply_failed"
+    assert response.json()["apply_result"]["backup_path"] is None
+    assert RunStore(records).load("run-stuck").phase is RunPhase.APPLY_FAILED
+
+
+def test_manager_restart_reconciles_stranded_applying_run_with_valid_backup_and_restores(
+    tmp_path: Path,
+) -> None:
+    source, workspace = tmp_path / "source", tmp_path / "workspace"
+    source.mkdir(); workspace.mkdir()
+    (source / "app.py").write_text("new\n", encoding="utf-8")
+    (workspace / "app.py").write_text("new\n", encoding="utf-8")
+    records = tmp_path / "records"
+    store = RunStore(records)
+    store.create(RunSnapshot(
+        run_id="run-stuck", project_path=str(source.resolve()),
+        workspace_path=str(workspace.resolve()), message="work",
+        phase=RunPhase.APPROVED, source_hashes=snapshot_project(source),
+        changed_paths=["app.py"], report={"review": {"status": "APPROVED"}},
+    ))
+    store.transition("run-stuck", RunPhase.APPLYING)
+    backup_dir = records / "_backups" / "run-stuck"
+    backup_dir.mkdir(parents=True)
+    (backup_dir / "app.py").write_text("old\n", encoding="utf-8")
+    (backup_dir / "manifest.json").write_text(
+        json.dumps({"app.py": {"existed": True, "applied_hash": file_hash(source / "app.py")}}),
+        encoding="utf-8",
+    )
+
+    manager = RunManager(
+        settings=_settings(tmp_path),
+        store=RunStore(records),
+        executor=lambda *_: (_ for _ in ()).throw(AssertionError("must not resume")),
+    )
+    client = _client(manager, ApplyService(manager.store, verification=_PassingVerification()))
+
+    reconciled = client.get("/api/runs/run-stuck").json()
+    assert reconciled["phase"] == "apply_failed"
+    assert reconciled["apply_result"]["backup_path"] == str(backup_dir)
+
+    restore_response = client.post("/api/runs/run-stuck/restore", json={"confirmed": True})
+
+    assert restore_response.status_code == 200
+    assert restore_response.json()["status"] == "restored"
+    assert (source / "app.py").read_text(encoding="utf-8") == "old\n"
 
 
 def test_public_snapshots_omit_durable_source_hashes(tmp_path: Path) -> None:
@@ -876,6 +1012,56 @@ def test_restore_endpoint_reverts_apply_failed_run_and_rejects_without_backup(tm
     assert response.json()["status"] == "restored"
     assert (source / "app.py").read_text(encoding="utf-8") == "old\n"
     assert store.load("run-a").phase is RunPhase.APPROVED
+
+
+def test_restore_endpoint_returns_structured_409_when_apply_failed_with_no_backup(
+    tmp_path: Path,
+) -> None:
+    """apply_failed via write-failure/auto-rollback has backup_path None; restoring
+    must return a clean structured 409, not an unhandled 500 from ApplyService."""
+    source, workspace = tmp_path / "source", tmp_path / "workspace"
+    source.mkdir(); workspace.mkdir()
+    store = RunStore(tmp_path / "records")
+    store.create(RunSnapshot(
+        run_id="run-a", project_path=str(source.resolve()),
+        workspace_path=str(workspace.resolve()), message="work",
+        phase=RunPhase.APPLY_FAILED, source_hashes={},
+        apply_result=ApplyResult(
+            status="apply_failed", written_paths=[], backup_path=None,
+            message="apply failed and was rolled back: boom",
+        ),
+    ))
+    manager = RunManager(
+        settings=_settings(tmp_path), store=store,
+        executor=lambda *_: (_ for _ in ()).throw(AssertionError("executor must not run")),
+    )
+    client = _client(manager, ApplyService(store, verification=_PassingVerification()))
+
+    response = client.post("/api/runs/run-a/restore", json={"confirmed": True})
+
+    assert response.status_code == 409
+    body = response.json()["detail"]
+    assert body["code"] == "NO_RESTORABLE_BACKUP"
+    assert body["recoverable"] is False
+
+
+def test_error_envelopes_are_structured_across_run_endpoints(tmp_path: Path) -> None:
+    source, workspace = tmp_path / "source", tmp_path / "workspace"
+    source.mkdir(); workspace.mkdir()
+    client = _client(_manager(
+        tmp_path, lambda snapshot, _emit: _completed_state(snapshot.run_id),
+    ))
+
+    not_found = client.get("/api/runs/does-not-exist")
+    bad_project = client.post(
+        "/api/runs", json={"projectPath": str(tmp_path / "missing"), "message": "hi"},
+    )
+
+    for response, expected_status in ((not_found, 404), (bad_project, 422)):
+        assert response.status_code == expected_status
+        detail = response.json()["detail"]
+        assert set(detail) >= {"code", "message", "recoverable"}
+        assert isinstance(detail["recoverable"], bool)
 
 
 def test_restore_endpoint_rejects_unconfirmed_request_with_422(tmp_path: Path) -> None:

@@ -14,7 +14,7 @@ from typing import Any, Protocol
 
 from engineering_team.runs import ApplyResult, RunPhase, RunSnapshot, RunStore
 
-_IGNORED_DIRECTORY_NAMES = {".git", ".venv", "__pycache__"}
+_IGNORED_DIRECTORY_NAMES = {".git", ".venv", "__pycache__", "_backups", "_records"}
 _IGNORED_TWO_PART_DIRECTORIES = {("workspace", "runs"), ("rag", "chroma")}
 _MANIFEST_NAME = "manifest.json"
 

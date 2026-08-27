@@ -72,7 +72,7 @@ def approved_state_with_applied_diff(
             {
                 "tool_name": "update_file", "status": "SUCCESS", "duration_ms": 1,
                 "allowed_role": "Developer", "input_summary": "safe",
-                "output_summary": f"{path} updated", "error": None,
+                "output_summary": path, "error": None,
             },
             {
                 "tool_name": "run_tests", "status": "SUCCESS", "duration_ms": 1,
