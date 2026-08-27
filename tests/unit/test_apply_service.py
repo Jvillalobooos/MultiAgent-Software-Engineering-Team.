@@ -107,6 +107,29 @@ def test_apply_rolls_back_automatically_when_write_fails(tmp_path: Path, monkeyp
     assert (source / "a.py").read_text(encoding="utf-8") == "old-a\n"
     assert (source / "b.py").read_text(encoding="utf-8") == "old-b\n"
     assert store.load("run-a").phase is RunPhase.APPLY_FAILED
+    assert result.backup_path is None
+
+    with pytest.raises(ValueError):
+        service.restore("run-a")
+
+
+def test_apply_fails_cleanly_when_workspace_file_is_missing(tmp_path: Path) -> None:
+    source, workspace = tmp_path / "source", tmp_path / "workspace"
+    source.mkdir(); workspace.mkdir()
+    (source / "a.py").write_text("old-a\n", encoding="utf-8")
+    (workspace / "a.py").write_text("new-a\n", encoding="utf-8")
+    # "missing.py" is listed as changed but was never materialized in the workspace.
+    store = approved_store(tmp_path / "records", source, workspace, ["a.py", "missing.py"])
+    service = ApplyService(store, verification=PassingVerification())
+
+    result = service.apply("run-a", confirmed_project=source)
+
+    assert result.status == "apply_failed"
+    assert "missing.py" in result.message
+    assert (source / "a.py").read_text(encoding="utf-8") == "old-a\n"
+    assert not (source / "missing.py").exists()
+    assert result.backup_path is None
+    assert store.load("run-a").phase is RunPhase.APPLY_FAILED
 
 
 def test_apply_keeps_written_files_and_offers_restore_when_verification_fails(tmp_path: Path) -> None:

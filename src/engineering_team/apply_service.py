@@ -123,7 +123,11 @@ class ApplyService:
                     backup_target = backup_dir / relative
                     backup_target.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(target, backup_target)
-                content = workspace_file.read_bytes() if workspace_file.exists() else b""
+                if not workspace_file.exists():
+                    raise FileNotFoundError(
+                        f"workspace file missing for changed path: {relative}",
+                    )
+                content = workspace_file.read_bytes()
                 self._atomic_write(run_id, target, content)
                 written.append(relative)
                 manifest[relative]["applied_hash"] = file_hash(target)
@@ -133,7 +137,7 @@ class ApplyService:
             result = ApplyResult(
                 status="apply_failed",
                 written_paths=[],
-                backup_path=str(backup_dir),
+                backup_path=None,
                 message=f"apply failed and was rolled back: {exc}",
             )
             self.store.record_apply_result(run_id, result)
@@ -178,8 +182,13 @@ class ApplyService:
             raise ValueError("no backup available to restore for this run")
 
         backup_dir = Path(snapshot.apply_result.backup_path)
+        manifest_path = backup_dir / _MANIFEST_NAME
+        if not manifest_path.exists():
+            raise ValueError(
+                f"no restorable backup manifest found for this run: {manifest_path}",
+            )
         manifest: dict[str, dict[str, Any]] = json.loads(
-            (backup_dir / _MANIFEST_NAME).read_text(encoding="utf-8"),
+            manifest_path.read_text(encoding="utf-8"),
         )
         source = Path(snapshot.project_path).resolve()
 
