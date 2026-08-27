@@ -115,6 +115,40 @@ npm run lint
 npm run build
 ```
 
+### Escenario de demostración: calculadora QA
+
+`demo-projects/calculadora-qa-demo` es un proyecto real e independiente
+(no un mock) usado para ejercer el flujo completo desde el chat: copia
+aislada, ejecución del workflow, aprobación y Apply seguro contra el
+proyecto fuente. Instálelo en modo editable antes de usarlo como destino de
+un chat:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[sample-app,rag,observability,dev]"
+.\.venv\Scripts\python.exe -m pip install -e .\demo-projects\calculadora-qa-demo
+.\.venv\Scripts\python.exe -m uvicorn sample_app.app.main:app --host 127.0.0.1 --port 8000
+Set-Location frontend
+npm.cmd install
+npm.cmd run dev
+```
+
+Seleccione en la UI una **copia temporal** de `demo-projects/calculadora-qa-demo`
+(nunca el original) y envíe un mensaje de chat acotado. Cómo verificar cada
+etapa sin confiar en la sola respuesta de la UI:
+
+- Las trazas de eventos del run (`GET /api/runs/{run_id}/events` o el panel
+  de la corrida) confirman que el workflow realmente se ejecutó.
+- Los archivos bajo la carpeta de workspace aislada del run (no el proyecto
+  original) confirman que la implementación ocurrió antes de cualquier Apply.
+- Solo tras `POST /api/runs/{run_id}/apply` con `confirmed: true` el estado
+  pasa a `applied`, y únicamente entonces el proyecto fuente cambia; el
+  campo `test_exit_code` de la respuesta refleja la ejecución real de
+  pytest sobre el proyecto fuente ya modificado, no sobre la copia aislada.
+
+`tests/e2e/test_chat_apply_flow.py` reproduce este mismo recorrido de forma
+determinista y automatizada (sin LLM real) contra una copia temporal de
+`calculadora-qa-demo`, y es la prueba de referencia para este flujo.
+
 ## Ejecución y evidencia
 
 ```powershell
