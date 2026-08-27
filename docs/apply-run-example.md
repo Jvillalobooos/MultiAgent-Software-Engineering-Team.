@@ -60,10 +60,30 @@ demo:
 .venv/bin/engineering-team reset-project demo-projects/calculadora-qa-demo
 ```
 
-Hace `git reset --hard` al commit raíz del proyecto y `git clean -fd` para
-borrar archivos sin trackear (como el test nuevo). Se niega a correr si
-`project_path` no es un repositorio git independiente, o si apunta a este
-mismo repositorio.
+Detecta automáticamente cómo está guardado el proyecto y elige el modo:
+
+- **Repo independiente** (`<proyecto>/.git` existe): `git reset --hard` al
+  commit raíz de ESE repo + `git clean -fd` para borrar archivos sin
+  trackear.
+- **Subárbol trackeado** (sin `.git` propio — el caso actual de
+  `calculadora-qa-demo`, incorporado a este repo): restaura el contenido de
+  la carpeta al commit más antiguo que la agregó, con `git checkout
+  <commit> -- <ruta>`; borra con `git clean -fd -- <ruta>` cualquier
+  archivo nuevo sin trackear que `run-project` haya creado (como
+  `tests/test_mediana_par.py`, ya que las escrituras de `create_file`/
+  `update_file` nunca hacen `git add`); y si queda algo por commitear, crea
+  un commit **acotado a esa ruta únicamente** (`git commit -- <ruta>`), sin
+  tocar ningún otro cambio pendiente en el repo.
+
+En ambos modos se niega a correr si `project_path` apunta a este mismo
+repositorio.
+
+Si ya commiteaste sin querer los cambios que aplicó `run-project` (como
+puede pasar con el modo subárbol, ya que no tiene su propio `.git` para
+aislar el `reset --hard`), no se pierde nada: seguís en el historial de
+este repo, y `reset-project` corrige el estado igual, agregando un commit
+nuevo que revierte esa carpeta a su línea base — nunca reescribe ni
+descarta commits existentes.
 
 ## Sin `--authorize-writes`
 
