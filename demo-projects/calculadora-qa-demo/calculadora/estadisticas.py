@@ -32,8 +32,13 @@ def mediana(datos: Sequence[Numero]) -> float:
     """
     _validar(datos)
     ordenados = sorted(datos)
-    medio = len(ordenados) // 2
-    return ordenados[medio]
+    n = len(ordenados)
+    if n % 2 == 1:
+        return ordenados[n // 2]
+    else:
+        medio1 = ordenados[n // 2 - 1]
+        medio2 = ordenados[n // 2]
+        return (medio1 + medio2) / 2
 
 
 def moda(datos: Sequence[Numero]) -> Numero:
