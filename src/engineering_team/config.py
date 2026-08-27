@@ -1,13 +1,21 @@
 """Externally configurable runtime settings."""
 
+from pathlib import Path
+
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Anchored to the repo root, not the caller's cwd: pydantic-settings resolves a
+# relative env_file against the current working directory at instantiation
+# time, so running the CLI from any other directory would otherwise silently
+# fall back to class defaults (cloud_enabled=False) instead of .env's values.
+_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 class Settings(BaseSettings):
     """Settings with local-first safe defaults required by the SDD contracts."""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_ENV_FILE, env_file_encoding="utf-8", extra="ignore")
 
     fast_model: str = "qwen3.5:4b"
     deep_model: str = "qwen3.5:9b"
