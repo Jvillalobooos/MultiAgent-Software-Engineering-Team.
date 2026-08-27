@@ -59,7 +59,11 @@ describe('ChatWorkspace', () => {
     expect(confirmation).toHaveTextContent('app.py');
 
     await userEvent.click(screen.getByRole('button', { name: /confirm apply/i }));
-    await waitFor(() => expect(screen.getByRole('article')).toHaveTextContent('Applied'));
+
+    await waitFor(() => expect(screen.getByTestId('run-phase-badge')).toHaveTextContent(/applied/i));
+    expect(screen.getByRole('region', { name: /apply result/i })).toHaveTextContent('app.py');
+    expect(screen.getByRole('region', { name: /apply result/i })).toHaveTextContent('1 passed');
+    expect(screen.queryByRole('button', { name: /^apply$/i })).not.toBeInTheDocument();
   });
 
   it('leaves the card approved with a visible conflict message on apply conflict', async () => {
@@ -79,6 +83,29 @@ describe('ChatWorkspace', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/workspace changed since approval/i));
     expect(screen.getByRole('article')).toHaveTextContent('Approved');
+  });
+
+  it('renders the persisted apply result from a reloaded snapshot with no apply ever called', async () => {
+    const client = new FakeRunClient({
+      ...approvedFixture(),
+      phase: 'applied',
+      apply_result: {
+        status: 'applied', written_paths: ['app.py', 'app2.py'], test_exit_code: 0,
+        test_output: 'reloaded test output', backup_path: 'C:\\runs\\run-a\\backup',
+        message: 'applied successfully',
+      },
+    });
+    render(<ChatWorkspace client={client} />);
+    await userEvent.click(screen.getByRole('button', { name: /select folder/i }));
+    await userEvent.type(screen.getByRole('textbox', { name: /task/i }), 'change it');
+    await userEvent.click(screen.getByRole('button', { name: /execute/i }));
+
+    await waitFor(() => expect(screen.getByTestId('run-phase-badge')).toHaveTextContent(/applied/i));
+    const section = screen.getByRole('region', { name: /apply result/i });
+    expect(section).toHaveTextContent('app.py, app2.py');
+    expect(section).toHaveTextContent('reloaded test output');
+    expect(section).toHaveTextContent('available');
+    expect(screen.queryByRole('button', { name: /^apply$/i })).not.toBeInTheDocument();
   });
 
   it('never renders a run as Failed because of a cloud-fallback warning event', async () => {

@@ -42,7 +42,7 @@ const PHASE_BADGE_CLASS: Record<RunPhase, string> = {
 type Banner = { kind: 'error' | 'success'; text: string };
 
 export function RunCard({ runId, client }: RunCardProps) {
-  const { snapshot, events } = usePersistentRun(runId, client);
+  const { snapshot, events, refresh } = usePersistentRun(runId, client);
   const [confirming, setConfirming] = useState(false);
   const [applyPending, setApplyPending] = useState(false);
   const [restorePending, setRestorePending] = useState(false);
@@ -83,6 +83,10 @@ export function RunCard({ runId, client }: RunCardProps) {
     } finally {
       setApplyPending(false);
       setConfirming(false);
+      // The backend has already persisted the new phase and apply_result -- the
+      // websocket may be closed by now (phase left the active set), so nothing
+      // else will push this update. Re-fetch so the card reflects durable state.
+      await refresh();
     }
   };
 
@@ -95,6 +99,7 @@ export function RunCard({ runId, client }: RunCardProps) {
       setBanner({ kind: 'error', text: caught instanceof Error ? caught.message : 'Restore failed' });
     } finally {
       setRestorePending(false);
+      await refresh();
     }
   };
 
@@ -106,6 +111,7 @@ export function RunCard({ runId, client }: RunCardProps) {
           <p className="mt-0.5 truncate font-mono text-[11px] text-mist/60">{project_path}</p>
         </div>
         <span
+          data-testid="run-phase-badge"
           className={`shrink-0 rounded-md border px-3 py-1 font-mono text-[11px] uppercase tracking-[0.14em] ${PHASE_BADGE_CLASS[phase]}`}>
 
           {PHASE_LABEL[phase]}
@@ -131,6 +137,35 @@ export function RunCard({ runId, client }: RunCardProps) {
 
       {showDebrief && report &&
       <MissionDebrief report={report} runId={runId} projectPath={project_path} />
+      }
+
+      {apply_result &&
+      <section
+        aria-label="Apply result"
+        className="flex flex-col gap-2 rounded-xl border border-hull-400/35 bg-hull-800/40 p-3">
+          <h4 className="font-mono text-[11px] uppercase tracking-[0.14em] text-mist/70">
+            Apply result: {apply_result.status}
+          </h4>
+          <p className="font-mono text-[11.5px] leading-snug text-slate-200">{apply_result.message}</p>
+          {apply_result.written_paths.length > 0 &&
+          <p className="font-mono text-[11px] text-mist/70">
+              Written: {apply_result.written_paths.join(', ')}
+            </p>
+          }
+          {apply_result.test_exit_code !== null &&
+          <p className="font-mono text-[11px] text-mist/70">
+              Test exit code: {apply_result.test_exit_code}
+            </p>
+          }
+          {apply_result.test_output &&
+          <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded-md border border-hull-400/30 bg-hull-900/50 p-2 font-mono text-[10.5px] text-mist/70">
+              {apply_result.test_output.slice(-2000)}
+            </pre>
+          }
+          <p className="font-mono text-[11px] text-mist/70">
+            Backup: {apply_result.backup_path ? 'available' : 'none'}
+          </p>
+        </section>
       }
 
       {(canApply || canRestore) &&

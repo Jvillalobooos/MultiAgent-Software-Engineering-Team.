@@ -137,4 +137,29 @@ describe('usePersistentRun', () => {
       vi.useRealTimers();
     }
   });
+
+  it('refresh() re-fetches the run and merges the newly persisted snapshot', async () => {
+    const client = new FakeRunClient(approvedFixture([]));
+    const { result } = renderHook(() => usePersistentRun('run-a', client));
+
+    await waitFor(() => expect(result.current.snapshot?.phase).toBe('approved'));
+    const callsBeforeRefresh = client.getRunCalls;
+
+    client.snapshot = {
+      ...client.snapshot,
+      phase: 'applied',
+      apply_result: {
+        status: 'applied', written_paths: ['app.py'], test_exit_code: 0,
+        test_output: '1 passed', backup_path: 'backup', message: 'applied successfully',
+      },
+    };
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(client.getRunCalls).toBe(callsBeforeRefresh + 1);
+    expect(result.current.snapshot?.phase).toBe('applied');
+    expect(result.current.snapshot?.apply_result?.status).toBe('applied');
+  });
 });

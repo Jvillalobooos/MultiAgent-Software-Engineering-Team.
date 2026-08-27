@@ -91,17 +91,23 @@ export class FakeRunClient implements RunClient {
   }
 
   async apply(): Promise<ApplyResult> {
-    return {
+    const result: ApplyResult = {
       status: 'applied', written_paths: ['app.py'], test_exit_code: 0,
       test_output: '1 passed', backup_path: 'backup', message: 'Applied',
     };
+    // Mirror the real backend: a successful apply persists the new phase and
+    // apply_result, which a post-apply refresh() must be able to observe.
+    this.snapshot = { ...this.snapshot, phase: 'applied', apply_result: result };
+    return result;
   }
 
   async restore(): Promise<ApplyResult> {
-    return {
+    const result: ApplyResult = {
       status: 'restored', written_paths: ['app.py'], test_exit_code: null,
       test_output: '', backup_path: 'backup', message: 'Restored',
     };
+    this.snapshot = { ...this.snapshot, phase: 'approved', apply_result: result };
+    return result;
   }
 
   emit(value: StoredEvent | RunSnapshot): void {

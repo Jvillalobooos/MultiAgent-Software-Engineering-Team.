@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { RunClient } from '../api/runClient';
 import { RunSnapshot, StoredEvent } from '../types/mission';
 
@@ -9,6 +9,11 @@ export interface PersistentRunState {
   snapshot: RunSnapshot | null;
   events: StoredEvent[];
   error: unknown;
+  /** Force a fresh client.getRun() load and merge it into state. Used after an
+   *  action (apply/restore) whose result is only durably reflected in a re-fetched
+   *  snapshot -- the websocket may already be closed (phase left the active set) so
+   *  nothing else will push this update to the consumer. */
+  refresh: () => Promise<void>;
 }
 
 /** Snapshot-first, deduplicating subscription to one durable run.
@@ -26,6 +31,7 @@ export function usePersistentRun(runId: string, client: RunClient): PersistentRu
   const disposedRef = useRef(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshRef = useRef<() => Promise<void>>(async () => {});
 
   useEffect(() => {
     disposedRef.current = false;
@@ -59,6 +65,18 @@ export function usePersistentRun(runId: string, client: RunClient): PersistentRu
       phaseRef.current = next.phase;
       setSnapshot(next);
       for (const event of next.events) mergeEvent(event);
+    };
+
+    refreshRef.current = async () => {
+      if (disposedRef.current) return;
+      try {
+        const loaded = await client.getRun(runId);
+        if (disposedRef.current) return;
+        applySnapshot(loaded);
+      } catch (caught) {
+        if (disposedRef.current) return;
+        setError(caught);
+      }
     };
 
     const scheduleReconnect = () => {
@@ -115,5 +133,7 @@ export function usePersistentRun(runId: string, client: RunClient): PersistentRu
     };
   }, [runId, client]);
 
-  return { snapshot, events, error };
+  const refresh = useCallback(() => refreshRef.current(), []);
+
+  return { snapshot, events, error, refresh };
 }

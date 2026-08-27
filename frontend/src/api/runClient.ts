@@ -134,19 +134,23 @@ export function isRunApiError(value: unknown): value is RunApiError {
 }
 
 async function toRunApiError(response: Response): Promise<RunApiError> {
-  const recoverable = response.status >= 500;
+  // Recoverability is a fact the backend owns via detail.recoverable -- it is never
+  // inferred from the HTTP status code here. The status-code heuristic below is only
+  // a fallback for the rare case a response lacks the structured error shape.
+  const fallbackRecoverable = response.status >= 500;
   const body = await response.json().catch(() => null) as { detail?: unknown } | null;
   const detail = body?.detail;
   if (object(detail) && typeof detail.code === 'string' && typeof detail.message === 'string') {
+    const recoverable = typeof detail.recoverable === 'boolean' ? detail.recoverable : fallbackRecoverable;
     return new RunApiError(detail.code, detail.message, recoverable, detail);
   }
   if (typeof detail === 'string') {
-    return new RunApiError(`HTTP_${response.status}`, detail, recoverable, detail);
+    return new RunApiError(`HTTP_${response.status}`, detail, fallbackRecoverable, detail);
   }
   return new RunApiError(
     `HTTP_${response.status}`,
     `HTTP ${response.status}`,
-    recoverable,
+    fallbackRecoverable,
     detail ?? null,
   );
 }

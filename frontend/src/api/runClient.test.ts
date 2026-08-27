@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  HttpRunClient,
   isApplyResult,
   isProjectPickResponse,
   isRunApiError,
@@ -120,5 +121,53 @@ describe('run contract guards', () => {
     expect(isRunApiError(error)).toBe(true);
     expect(error.recoverable).toBe(true);
     expect(isRunApiError(new Error('plain'))).toBe(false);
+  });
+});
+
+function stubFetchOnce(status: number, body: unknown) {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    ok: false,
+    status,
+    json: () => Promise.resolve(body),
+  }));
+}
+
+describe('HttpRunClient error envelopes', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('uses the backend recoverable flag on a 4xx response instead of the status heuristic', async () => {
+    stubFetchOnce(409, {
+      detail: { code: 'RUN_NOT_APPROVED', message: 'not approved', recoverable: true },
+    });
+    const client = new HttpRunClient();
+
+    await expect(client.apply('run-a', 'C:\\proj')).rejects.toMatchObject({
+      code: 'RUN_NOT_APPROVED',
+      recoverable: true,
+    });
+  });
+
+  it('uses the backend recoverable flag on a 5xx response instead of the status heuristic', async () => {
+    stubFetchOnce(500, {
+      detail: { code: 'WORKFLOW_ERROR', message: 'internal', recoverable: false },
+    });
+    const client = new HttpRunClient();
+
+    await expect(client.getRun('run-a')).rejects.toMatchObject({
+      code: 'WORKFLOW_ERROR',
+      recoverable: false,
+    });
+  });
+
+  it('falls back to a status-code heuristic only when the response lacks the structured shape', async () => {
+    stubFetchOnce(500, {});
+    const client = new HttpRunClient();
+
+    await expect(client.getRun('run-a')).rejects.toMatchObject({
+      code: 'HTTP_500',
+      recoverable: true,
+    });
   });
 });

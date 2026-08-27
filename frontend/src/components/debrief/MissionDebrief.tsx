@@ -92,25 +92,42 @@ export function MissionDebrief({ report, runId, projectPath }: MissionDebriefPro
                 {report.model_usage.map((usage) =>
                 <li
                   key={`${usage.agent}-${usage.model}`}
-                  className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-hull-400/25 pb-2.5 last:border-0 last:pb-0">
+                  className="flex flex-col gap-1.5 border-b border-hull-400/25 pb-2.5 last:border-0 last:pb-0">
 
-                    <span className="w-[92px] text-[12.5px] text-slate-200">
-                      {AGENT_LABELS[usage.agent]}
-                    </span>
-                    <span className="font-mono text-[11px] text-mist/75">{usage.model}</span>
-                    <span
-                    className={`rounded border px-1.5 py-[1px] font-mono text-[9px] uppercase tracking-[0.12em] ${
-                    usage.provider === 'cloud' ?
-                    'border-plasma/45 bg-plasma/10 text-plasma' :
-                    'border-neon/40 bg-neon/10 text-neon'}`
-                    }>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span className="w-[92px] text-[12.5px] text-slate-200">
+                        {AGENT_LABELS[usage.agent]}
+                      </span>
+                      <span className="font-mono text-[11px] text-mist/75">{usage.model}</span>
+                      <span
+                      className={`rounded border px-1.5 py-[1px] font-mono text-[9px] uppercase tracking-[0.12em] ${
+                      usage.provider === 'cloud' ?
+                      'border-plasma/45 bg-plasma/10 text-plasma' :
+                      'border-neon/40 bg-neon/10 text-neon'}`
+                      }>
 
-                      {usage.provider}
-                    </span>
-                    <span className="ml-auto font-mono text-[11px] tabular-nums text-mist/80">
-                      {usage.calls}× · {(usage.input_tokens + usage.output_tokens).toLocaleString()} tok ·{' '}
-                      {usage.avg_latency_ms}ms
-                    </span>
+                        {usage.provider}
+                      </span>
+                      <span className="ml-auto font-mono text-[11px] tabular-nums text-mist/80">
+                        {usage.calls}× · {(usage.input_tokens + usage.output_tokens).toLocaleString()} tok ·{' '}
+                        {usage.avg_latency_ms}ms
+                      </span>
+                    </div>
+                    {usage.error_category &&
+                  <p
+                    role="alert"
+                    className="rounded border border-amber/45 bg-amber/10 px-2 py-1 font-mono text-[10.5px] text-amber">
+
+                        Provider warning: {usage.error_category}
+                        {usage.http_status !== undefined ? ` (HTTP ${usage.http_status})` : ''}
+                        {usage.retryable ? ' · retryable' : ''}
+                      </p>
+                  }
+                    {usage.fallback_succeeded &&
+                  <p className="rounded border border-neon/40 bg-neon/10 px-2 py-1 font-mono text-[10.5px] text-neon">
+                        A later fallback attempt for this agent succeeded.
+                      </p>
+                  }
                   </li>
                 )}
               </ul>
