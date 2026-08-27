@@ -1,4 +1,6 @@
-from engineering_team.observability.langfuse import LangfuseTracer
+from unittest.mock import MagicMock
+
+from engineering_team.observability.langfuse import LangfuseTracer, TraceSession
 
 
 class FakeSpan:
@@ -128,3 +130,17 @@ def test_adapter_uses_canonical_base_url_and_exports_live(monkeypatch) -> None:
     }
     assert trace.live is True
     assert client.flushed is True
+
+
+def test_trace_url_is_none_when_offline():
+    session = TraceSession(trace_id="t1", run_id="run-1", live=False)
+    assert session.trace_url() is None
+
+
+def test_trace_url_delegates_to_the_live_client():
+    client = MagicMock()
+    client.get_trace_url.return_value = "https://cloud.langfuse.com/project/p1/traces/t1"
+    session = TraceSession(trace_id="t1", run_id="run-1", live=True, client=client)
+
+    assert session.trace_url() == "https://cloud.langfuse.com/project/p1/traces/t1"
+    client.get_trace_url.assert_called_once_with(trace_id="t1")

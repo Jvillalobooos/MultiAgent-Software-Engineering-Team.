@@ -86,6 +86,11 @@ class TraceSession:
         span.end()
         return span.id
 
+    def trace_url(self) -> str | None:
+        if self.client is None or not hasattr(self.client, "get_trace_url"):
+            return None
+        return self.client.get_trace_url(trace_id=self.trace_id)
+
     def finish(self, final_report: Any) -> None:
         if self.finished:
             return
