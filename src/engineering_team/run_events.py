@@ -298,9 +298,12 @@ def final_report_from_state(state_value: Any, *, completed_at: str | None = None
             "snippet": str(item.get("fragment", "")),
         })
     tools = []
+    workspace_changed = False
     for raw in state.get("tool_results", []):
         item = _plain(raw)
         raw_status = str(getattr(item.get("status"), "value", item.get("status", "FAIL")))
+        if item.get("tool_name") in {"create_file", "update_file"} and raw_status == "SUCCESS":
+            workspace_changed = True
         tools.append({
             "name": str(item.get("tool_name", "")),
             "status": raw_status if raw_status in {"SUCCESS", "FAIL", "DENIED"} else "FAIL",
@@ -313,6 +316,8 @@ def final_report_from_state(state_value: Any, *, completed_at: str | None = None
         "model_usage": model_usage,
         "changed_files": _diff_files(implementation),
         "applied_diff": bool(implementation and implementation.get("action_mode") == "APPLIED"),
+        "workspace_changed": workspace_changed,
+        "source_applied": False,
         "review": {
             "status": public_status, "score": float(review.get("score") or 0),
             "subscores": {key: float(raw_subscores.get(key, 0)) for key in subscore_keys},
