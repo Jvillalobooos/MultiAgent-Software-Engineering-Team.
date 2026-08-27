@@ -1,0 +1,76 @@
+/* @import url() FONT IMPORTS MUST ALWAYS BE AT THE VERY TOP OF THIS FILE, ABOVE THE TAILWIND IMPORTS — DO NOT DELETE THIS COMMENT */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+/* CRITICAL: THE FOLLOWING TAILWIND IMPORTS MUST NEVER BE DELETED OR REORDERED — DO NOT DELETE THIS COMMENT */
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* END TAILWIND IMPORTS — ALL OTHER CSS MUST GO BELOW THIS LINE */
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  background-color: #04060c;
+}
+body {
+  color: #dce6f7;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+/* Circuit-grid texture used behind every screen */
+.circuit-grid {
+  background-color: #04060c;
+  background-image: linear-gradient(rgba(63, 182, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(63, 182, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(rgba(63, 182, 255, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(63, 182, 255, 0.028) 1px, transparent 1px),
+    radial-gradient(circle at 18% 12%, rgba(63, 182, 255, 0.1), transparent 45%),
+    radial-gradient(circle at 82% 82%, rgba(169, 139, 255, 0.08), transparent 50%);
+  background-size: 128px 128px, 128px 128px, 32px 32px, 32px 32px, 100% 100%, 100% 100%;
+}
+.glass {
+  background-color: rgba(11, 17, 32, 0.66);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(90, 122, 170, 0.22);
+}
+.glass-soft {
+  background-color: rgba(11, 17, 32, 0.42);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(90, 122, 170, 0.16);
+}
+.scan-line {
+  background: linear-gradient(90deg, transparent, rgba(63, 182, 255, 0.5), transparent);
+}
+.thin-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(90, 122, 170, 0.45) transparent;
+}
+.thin-scroll::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+.thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: rgba(90, 122, 170, 0.4);
+  border-radius: 999px;
+}
+.thin-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(63, 182, 255, 0.55);
+}
+::selection {
+  background: rgba(63, 182, 255, 0.3);
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

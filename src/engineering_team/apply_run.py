@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,7 @@ from engineering_team.llm.runtime import LocalModelRuntime
 from engineering_team.mcp.client import MCPQualityClient, MCPRepositoryClient
 from engineering_team.observability.langfuse import LangfuseTracer
 from engineering_team.rag import build_retriever
+from engineering_team.run_events import EventForwardingTrace
 
 
 def _default_test_paths(changed_files: list[str]) -> list[str] | None:
@@ -36,6 +38,85 @@ def _default_test_paths(changed_files: list[str]) -> list[str] | None:
         or Path(path).name.endswith("_test.py")
     ]
     return selected or None
+
+
+def execute_on_project(
+    settings: Settings,
+    *,
+    project_path: str | Path,
+    specification: str,
+    test_specification: str | None = None,
+    authorize_writes: bool = False,
+    test_paths: list[str] | None = None,
+    run_id: str | None = None,
+    event_observer: Callable[[dict[str, Any]], None] | None = None,
+) -> tuple[dict[str, Any], Any, float, bool]:
+    """Execute the one production LangGraph and return its real terminal state."""
+    project_root = Path(project_path).resolve()
+    if not project_root.is_dir():
+        raise ValueError(f"project path does not exist or is not a directory: {project_root}")
+
+    requirement = specification.strip()
+    if test_specification and test_specification.strip():
+        requirement = f"{requirement}\n\nTest specification: {test_specification.strip()}"
+
+    run_id = run_id or f"apply-{uuid.uuid4()}"
+    trace_session = LangfuseTracer(
+        public_key=settings.langfuse_public_key,
+        secret_key=(
+            settings.langfuse_secret_key.get_secret_value()
+            if settings.langfuse_secret_key else None
+        ),
+        base_url=settings.langfuse_base_url,
+        offline_directory="evaluation/reports/traces",
+    ).start_run(run_id, requirement)
+    trace = (
+        EventForwardingTrace(trace_session, event_observer)
+        if event_observer is not None else trace_session
+    )
+
+    cloud_first = bool(settings.cloud_enabled and not settings.local_first)
+    if cloud_first:
+        primary_runtime: Any = CloudModelRuntime(settings, trace=trace, primary=True)
+        secondary_runtime: Any | None = LocalModelRuntime(settings, trace=trace)
+    else:
+        primary_runtime = LocalModelRuntime(settings, trace=trace)
+        secondary_runtime = CloudModelRuntime(settings, trace=trace) if settings.cloud_enabled else None
+
+    retriever = build_retriever(settings, settings.rag_persist_directory, reindex=True)
+    resolved_test_paths = test_paths or _default_test_paths(
+        DeveloperAgent.requested_targets(requirement)
+    )
+
+    started = time.perf_counter()
+    with (
+        MCPRepositoryClient(project_root, timeout_seconds=120) as repository_mcp,
+        MCPQualityClient(project_root, timeout_seconds=120) as quality_mcp,
+    ):
+        graph = build_engineering_graph(
+            repository_mcp=repository_mcp,
+            quality_mcp=quality_mcp,
+            retriever=retriever,
+            model_runtime=primary_runtime,
+            cloud_runtime=secondary_runtime,
+            trace=trace,
+            test_paths=resolved_test_paths,
+        )
+        state: dict[str, Any] | None = None
+        for streamed_state in graph.stream({
+            "run_id": run_id,
+            "requirement": requirement,
+            "repository_context": {
+                "apply_changes": True,
+                "authorized": authorize_writes,
+                "project_path": str(project_root),
+            },
+        }, stream_mode="values"):
+            state = streamed_state
+        if state is None:
+            raise RuntimeError("workflow completed without a terminal state")
+    duration = time.perf_counter() - started
+    return state, trace, duration, cloud_first
 
 
 def run_on_project(
@@ -56,61 +137,16 @@ def run_on_project(
     LLM-authored ``file_contents``, but nothing is written to disk and the run is
     routed to human review instead.
     """
-    project_root = Path(project_path).resolve()
-    if not project_root.is_dir():
-        raise ValueError(f"project path does not exist or is not a directory: {project_root}")
-
-    requirement = specification.strip()
-    if test_specification and test_specification.strip():
-        requirement = f"{requirement}\n\nTest specification: {test_specification.strip()}"
-
-    run_id = f"apply-{uuid.uuid4()}"
-    trace = LangfuseTracer(
-        public_key=settings.langfuse_public_key,
-        secret_key=(
-            settings.langfuse_secret_key.get_secret_value()
-            if settings.langfuse_secret_key else None
-        ),
-        base_url=settings.langfuse_base_url,
-        offline_directory="evaluation/reports/traces",
-    ).start_run(run_id, requirement)
-
-    cloud_first = bool(settings.cloud_enabled and not settings.local_first)
-    if cloud_first:
-        primary_runtime: Any = CloudModelRuntime(settings, trace=trace, primary=True)
-        secondary_runtime: Any | None = LocalModelRuntime(settings, trace=trace)
-    else:
-        primary_runtime = LocalModelRuntime(settings, trace=trace)
-        secondary_runtime = CloudModelRuntime(settings, trace=trace) if settings.cloud_enabled else None
-
-    retriever = build_retriever(settings, settings.rag_persist_directory, reindex=True)
-    resolved_test_paths = test_paths or _default_test_paths(
-        DeveloperAgent.requested_targets(requirement)
+    state, trace, duration, cloud_first = execute_on_project(
+        settings,
+        project_path=project_path,
+        specification=specification,
+        test_specification=test_specification,
+        authorize_writes=authorize_writes,
+        test_paths=test_paths,
     )
-
-    started = time.perf_counter()
-    with (
-        MCPRepositoryClient(project_root, timeout_seconds=120) as repository_mcp,
-        MCPQualityClient(project_root, timeout_seconds=120) as quality_mcp,
-    ):
-        state = build_engineering_graph(
-            repository_mcp=repository_mcp,
-            quality_mcp=quality_mcp,
-            retriever=retriever,
-            model_runtime=primary_runtime,
-            cloud_runtime=secondary_runtime,
-            trace=trace,
-            test_paths=resolved_test_paths,
-        ).invoke({
-            "run_id": run_id,
-            "requirement": requirement,
-            "repository_context": {
-                "apply_changes": True,
-                "authorized": authorize_writes,
-                "project_path": str(project_root),
-            },
-        })
-    duration = time.perf_counter() - started
+    project_root = Path(project_path).resolve()
+    run_id = str(state["run_id"])
 
     implementation = state.get("implementation")
     review = state.get("review")

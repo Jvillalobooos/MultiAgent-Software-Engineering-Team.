@@ -81,6 +81,40 @@ chmod +x run.sh
 
 The project must already be configured before running these scripts.
 
+### Frontend y API en tiempo real
+
+El frontend Vite consume la aplicación FastAPI existente mediante
+`POST /api/runs` y `WebSocket /ws/runs/{run_id}`. Ejecute ambos procesos desde
+la raíz del repositorio, en terminales separadas.
+
+Terminal 1 — API y workflow Python:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn sample_app.app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+Terminal 2 — frontend:
+
+```powershell
+Set-Location frontend
+npm install
+npm run dev -- --host 127.0.0.1 --port 5173
+```
+
+Abra `http://127.0.0.1:5173`. Vite redirige `/api` y `/ws` hacia FastAPI en
+el puerto 8000. Las rutas de proyecto ingresadas en la UI se resuelven desde la
+raíz donde se inició FastAPI; `sample_app` funciona como escenario incluido.
+
+Validaciones del frontend:
+
+```powershell
+Set-Location frontend
+npm test
+npm run typecheck
+npm run lint
+npm run build
+```
+
 ## Ejecución y evidencia
 
 ```powershell

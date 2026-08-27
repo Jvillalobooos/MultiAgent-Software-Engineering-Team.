@@ -1,8 +1,11 @@
 from fastapi import FastAPI, HTTPException
 
+from engineering_team.run_api import router as runs_router
+
 from .service import BankService
 
 app = FastAPI(title="Sample Bank App")
+app.include_router(runs_router)
 service = BankService(":memory:")
 
 
