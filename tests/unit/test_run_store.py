@@ -2,8 +2,9 @@ import threading
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
-from engineering_team.runs import ApplyResult, RunPhase, RunSnapshot, RunStore
+from engineering_team.runs import ApplyResult, RunPhase, RunSnapshot, RunStore, StoredEvent
 
 
 def test_store_reloads_snapshot_and_replays_only_events_after_cursor(tmp_path: Path) -> None:
@@ -116,3 +117,40 @@ def test_recorded_restore_audit_persists_before_reapproval(tmp_path: Path) -> No
     assert restored.phase is RunPhase.APPROVED
     assert restored.apply_result is not None
     assert restored.apply_result.status == "restored"
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda store: store.transition("run-a", RunPhase.APPROVED),
+        lambda store: store.append_event("run-a", {"name": "Product"}),
+        lambda store: store.record_apply_result(
+            "run-a", ApplyResult(status="applied", message="applied"),
+        ),
+        lambda store: store.finish("run-a", {"review": {"status": "APPROVED"}}, RunPhase.APPROVED),
+    ],
+    ids=["transition", "append_event", "record_apply_result", "finish"],
+)
+def test_failed_persistence_does_not_publish_in_memory_mutation(tmp_path: Path, monkeypatch, mutation) -> None:
+    store = RunStore(tmp_path)
+    store.create(RunSnapshot(
+        run_id="run-a", project_path=str(tmp_path / "source"),
+        workspace_path=str(tmp_path / "copy"), message="change one thing",
+        phase=RunPhase.RUNNING, source_hashes={},
+    ))
+    before = store.load("run-a")
+
+    def fail_persist(_: RunSnapshot) -> None:
+        raise OSError("disk unavailable")
+
+    monkeypatch.setattr(store, "_persist", fail_persist)
+
+    with pytest.raises(OSError, match="disk unavailable"):
+        mutation(store)
+
+    assert store.load("run-a") == before
+
+
+def test_models_reject_coercible_field_values() -> None:
+    with pytest.raises(ValidationError, match="valid integer"):
+        StoredEvent(sequence="1", payload={})

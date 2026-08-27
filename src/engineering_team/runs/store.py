@@ -75,33 +75,33 @@ class RunStore:
     def transition(self, run_id: str, phase: RunPhase) -> RunSnapshot:
         """Move a run through one explicitly allowed state transition."""
         with self._condition:
-            snapshot = self._snapshot(run_id)
+            snapshot = self._candidate(run_id)
             self._validate_transition(snapshot, phase)
             snapshot.phase = phase
             snapshot.updated_at = datetime.now(UTC)
-            self._persist(snapshot)
+            self._commit(snapshot)
             self._condition.notify_all()
             return snapshot.model_copy(deep=True)
 
     def append_event(self, run_id: str, event: dict[str, Any]) -> StoredEvent:
         """Append an event, assigning its next durable sequence number."""
         with self._condition:
-            snapshot = self._snapshot(run_id)
+            snapshot = self._candidate(run_id)
             sequence = snapshot.events[-1].sequence + 1 if snapshot.events else 1
             stored = StoredEvent(sequence=sequence, payload=copy.deepcopy(event))
             snapshot.events.append(stored)
             snapshot.updated_at = datetime.now(UTC)
-            self._persist(snapshot)
+            self._commit(snapshot)
             self._condition.notify_all()
             return stored.model_copy(deep=True)
 
     def record_apply_result(self, run_id: str, result: ApplyResult) -> RunSnapshot:
         """Persist an apply or restore audit record for an existing run."""
         with self._condition:
-            snapshot = self._snapshot(run_id)
+            snapshot = self._candidate(run_id)
             snapshot.apply_result = result.model_copy(deep=True)
             snapshot.updated_at = datetime.now(UTC)
-            self._persist(snapshot)
+            self._commit(snapshot)
             self._condition.notify_all()
             return snapshot.model_copy(deep=True)
 
@@ -115,12 +115,12 @@ class RunStore:
         if phase not in _FINISH_PHASES:
             raise ValueError(f"finish phase must be terminal workflow phase, got {phase.value}")
         with self._condition:
-            snapshot = self._snapshot(run_id)
+            snapshot = self._candidate(run_id)
             self._validate_transition(snapshot, phase)
             snapshot.report = copy.deepcopy(report)
             snapshot.phase = phase
             snapshot.updated_at = datetime.now(UTC)
-            self._persist(snapshot)
+            self._commit(snapshot)
             self._condition.notify_all()
             return snapshot.model_copy(deep=True)
 
@@ -146,6 +146,13 @@ class RunStore:
             return self._snapshots[run_id]
         except KeyError as exc:
             raise KeyError(f"run not found: {run_id}") from exc
+
+    def _candidate(self, run_id: str) -> RunSnapshot:
+        return self._snapshot(run_id).model_copy(deep=True)
+
+    def _commit(self, snapshot: RunSnapshot) -> None:
+        self._persist(snapshot)
+        self._snapshots[snapshot.run_id] = snapshot
 
     def _record_path(self, run_id: str) -> Path:
         candidate = Path(run_id)

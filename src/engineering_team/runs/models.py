@@ -22,14 +22,14 @@ class RunPhase(StrEnum):
 
 
 class StoredEvent(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     sequence: int = Field(ge=1)
     payload: dict[str, Any]
 
 
 class ApplyResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     status: Literal["applied", "apply_failed", "restored", "conflict"]
     written_paths: list[str] = Field(default_factory=list)
@@ -40,7 +40,7 @@ class ApplyResult(BaseModel):
 
 
 class RunSnapshot(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     run_id: str
     project_path: str
@@ -59,7 +59,7 @@ class RunSnapshot(BaseModel):
 class RunSummary(BaseModel):
     """The compact representation used by run-history listings."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     run_id: str
     project_path: str
