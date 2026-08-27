@@ -159,7 +159,12 @@ class RunManager:
                 if report["review"]["status"] == "APPROVED"
                 else RunPhase.REVIEW_REQUIRED
             )
-            self.store.finish(run_id, report, phase)
+            changed_paths = (
+                [item["path"] for item in report.get("changed_files", []) if item.get("path")]
+                if report.get("workspace_changed")
+                else []
+            )
+            self.store.finish(run_id, report, phase, changed_paths=changed_paths)
         except Exception as exc:  # noqa: BLE001 - every background run must terminate durably.
             self._fail(run_id, exc)
 

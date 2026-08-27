@@ -53,6 +53,37 @@ def test_finish_persists_terminal_report_and_lists_summary(tmp_path: Path) -> No
     assert [summary.run_id for summary in restarted.list_summaries()] == ["run-a"]
 
 
+def test_finish_populates_changed_paths_when_provided(tmp_path: Path) -> None:
+    store = RunStore(tmp_path)
+    store.create(RunSnapshot(
+        run_id="run-a", project_path=str(tmp_path / "source"),
+        workspace_path=str(tmp_path / "copy"), message="change one thing",
+        phase=RunPhase.RUNNING, source_hashes={},
+    ))
+
+    finished = store.finish(
+        "run-a", {"review": {"status": "APPROVED"}}, RunPhase.APPROVED,
+        changed_paths=["app/service.py"],
+    )
+
+    assert finished.changed_paths == ["app/service.py"]
+    restarted = RunStore(tmp_path)
+    assert restarted.load("run-a").changed_paths == ["app/service.py"]
+
+
+def test_finish_leaves_changed_paths_untouched_when_omitted(tmp_path: Path) -> None:
+    store = RunStore(tmp_path)
+    store.create(RunSnapshot(
+        run_id="run-a", project_path=str(tmp_path / "source"),
+        workspace_path=str(tmp_path / "copy"), message="change one thing",
+        phase=RunPhase.RUNNING, source_hashes={}, changed_paths=["preexisting.py"],
+    ))
+
+    finished = store.finish("run-a", {"review": {"status": "APPROVED"}}, RunPhase.APPROVED)
+
+    assert finished.changed_paths == ["preexisting.py"]
+
+
 @pytest.mark.parametrize("phase", [RunPhase.QUEUED, RunPhase.PREPARING])
 def test_run_can_fail_directly_before_execution(tmp_path: Path, phase: RunPhase) -> None:
     store = RunStore(tmp_path)

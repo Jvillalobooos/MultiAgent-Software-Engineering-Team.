@@ -122,7 +122,14 @@ class RunStore:
         with self._lock:
             return self._events_after(run_id, sequence)
 
-    def finish(self, run_id: str, report: dict[str, Any], phase: RunPhase) -> RunSnapshot:
+    def finish(
+        self,
+        run_id: str,
+        report: dict[str, Any],
+        phase: RunPhase,
+        *,
+        changed_paths: list[str] | None = None,
+    ) -> RunSnapshot:
         """Atomically persist a terminal workflow report and phase."""
         if phase not in _FINISH_PHASES:
             raise ValueError(f"finish phase must be terminal workflow phase, got {phase.value}")
@@ -131,6 +138,8 @@ class RunStore:
             self._validate_transition(snapshot, phase)
             snapshot.report = copy.deepcopy(report)
             snapshot.phase = phase
+            if changed_paths is not None:
+                snapshot.changed_paths = list(changed_paths)
             snapshot.updated_at = datetime.now(UTC)
             self._commit(snapshot)
             self._condition.notify_all()

@@ -215,6 +215,42 @@ def test_post_creates_independent_persisted_runs(tmp_path: Path) -> None:
     assert {item["run_id"] for item in client.get("/api/runs").json()} == {first_id, second_id}
 
 
+def test_completed_run_persists_changed_paths_from_successful_writes(tmp_path: Path) -> None:
+    source = _source(tmp_path)
+
+    def executor(
+        snapshot: RunSnapshot, emit: Callable[[dict[str, Any]], None],
+    ) -> dict[str, Any]:
+        state = _completed_state(snapshot.run_id)
+        state["implementation"]["action_mode"] = "APPLIED"
+        state["tool_results"].append({
+            "tool_name": "update_file", "status": "SUCCESS", "duration_ms": 8,
+            "allowed_role": "Developer", "output_summary": "app/service.py", "error": None,
+        })
+        return state
+
+    manager = _manager(tmp_path, executor)
+    client = _client(manager)
+    response = client.post("/api/runs", json={"projectPath": str(source), "message": "alpha"})
+    run_id = response.json()["run_id"]
+
+    body = _wait_for_phase(client, run_id, "approved")
+
+    assert body["changed_paths"] == ["app/service.py"]
+
+
+def test_completed_run_leaves_changed_paths_empty_without_workspace_write(tmp_path: Path) -> None:
+    source = _source(tmp_path)
+    manager = _manager(tmp_path, lambda snapshot, _emit: _completed_state(snapshot.run_id))
+    client = _client(manager)
+    response = client.post("/api/runs", json={"projectPath": str(source), "message": "alpha"})
+    run_id = response.json()["run_id"]
+
+    body = _wait_for_phase(client, run_id, "approved")
+
+    assert body["changed_paths"] == []
+
+
 def test_completed_snapshot_survives_manager_restart(tmp_path: Path) -> None:
     source = _source(tmp_path)
     records = tmp_path / "records"
