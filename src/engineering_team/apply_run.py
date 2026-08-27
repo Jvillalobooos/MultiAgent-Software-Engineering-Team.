@@ -11,6 +11,7 @@ file content is written for real via ``create_file``/``update_file`` — see
 
 from __future__ import annotations
 
+import itertools
 import json
 import time
 import uuid
@@ -19,11 +20,15 @@ from typing import Any
 
 from engineering_team.agents.developer import DeveloperAgent
 from engineering_team.config import Settings
-from engineering_team.contracts.enums import ErrorCode
+from engineering_team.contracts.enums import ErrorCode, RunEventKind
+from engineering_team.contracts.models import RunEvent
 from engineering_team.graph.stategraph import build_engineering_graph
 from engineering_team.llm.cloud import CloudModelRuntime
 from engineering_team.llm.runtime import LocalModelRuntime
 from engineering_team.mcp.client import MCPQualityClient, MCPRepositoryClient
+from engineering_team.observability.event_callbacks import RunEventCallbackHandler
+from engineering_team.observability.event_trace import EventEmittingTrace
+from engineering_team.observability.events import NullRunEventSink, RunEventSink
 from engineering_team.observability.langfuse import LangfuseTracer
 from engineering_team.rag import build_retriever
 
@@ -38,6 +43,45 @@ def _default_test_paths(changed_files: list[str]) -> list[str] | None:
     return selected or None
 
 
+def _run_graph_with_events(
+    graph: Any,
+    initial_state: dict[str, Any],
+    *,
+    run_id: str,
+    trace: Any | None,
+    sink: RunEventSink | None = None,
+    seq_counter: Any | None = None,
+) -> dict[str, Any]:
+    """Invoke a compiled graph, emitting RUN_STARTED/RUN_FINISHED and, via
+    RunEventCallbackHandler, NODE_STARTED/NODE_FINISHED for every node.
+
+    ``seq_counter``, when supplied, is the same counter passed to the
+    ``EventEmittingTrace`` wrapping ``trace`` (Task 5), so RUN_STARTED,
+    every NODE_STARTED/FINISHED, and every GENERATION/TOOL/RETRIEVER/AGENT
+    event recorded during the run share one strictly increasing sequence.
+    Falls back to a fresh counter when not supplied (this task's own tests,
+    which use ``trace=None`` and never construct an ``EventEmittingTrace``).
+    """
+    active_sink = sink or NullRunEventSink()
+    trace_id = getattr(trace, "trace_id", None)
+    active_seq = seq_counter if seq_counter is not None else itertools.count()
+    active_sink.emit(RunEvent(
+        event_id=str(uuid.uuid4()), run_id=run_id, seq=next(active_seq), trace_id=trace_id,
+        kind=RunEventKind.RUN_STARTED, agent=None, iteration=None, status=None,
+        summary="run started", metrics={},
+    ))
+    handler = RunEventCallbackHandler(
+        sink=active_sink, run_id=run_id, trace_id=trace_id, seq_counter=active_seq,
+    )
+    state = graph.invoke(initial_state, config={"callbacks": [handler]})
+    active_sink.emit(RunEvent(
+        event_id=str(uuid.uuid4()), run_id=run_id, seq=next(active_seq), trace_id=trace_id,
+        kind=RunEventKind.RUN_FINISHED, agent=None, iteration=None,
+        status=state.get("final_status"), summary="run finished", metrics={},
+    ))
+    return state
+
+
 def run_on_project(
     settings: Settings,
     *,
@@ -47,6 +91,7 @@ def run_on_project(
     authorize_writes: bool = False,
     test_paths: list[str] | None = None,
     report_path: str | Path | None = None,
+    event_sink: RunEventSink | None = None,
 ) -> dict[str, Any]:
     """Run Product→...→Reviewer against ``project_path`` and, if authorized, apply changes.
 
@@ -55,6 +100,11 @@ def run_on_project(
     — without it the Developer still produces a full ``ImplementationResult`` with
     LLM-authored ``file_contents``, but nothing is written to disk and the run is
     routed to human review instead.
+
+    ``event_sink``, when supplied, receives a ``RunEvent`` for every RAG
+    retrieval, MCP tool call, model call, node start/finish, and the run's
+    own start/finish — see ``observability/events.py``. When ``None``
+    (the default), behavior is identical to before this parameter existed.
     """
     project_root = Path(project_path).resolve()
     if not project_root.is_dir():
@@ -75,13 +125,19 @@ def run_on_project(
         offline_directory="evaluation/reports/traces",
     ).start_run(run_id, requirement)
 
+    seq_counter = itertools.count()
+    event_trace: Any = (
+        EventEmittingTrace(trace=trace, sink=event_sink, run_id=run_id, seq_counter=seq_counter)
+        if event_sink is not None else trace
+    )
+
     cloud_first = bool(settings.cloud_enabled and not settings.local_first)
     if cloud_first:
-        primary_runtime: Any = CloudModelRuntime(settings, trace=trace, primary=True)
-        secondary_runtime: Any | None = LocalModelRuntime(settings, trace=trace)
+        primary_runtime: Any = CloudModelRuntime(settings, trace=event_trace, primary=True)
+        secondary_runtime: Any | None = LocalModelRuntime(settings, trace=event_trace)
     else:
-        primary_runtime = LocalModelRuntime(settings, trace=trace)
-        secondary_runtime = CloudModelRuntime(settings, trace=trace) if settings.cloud_enabled else None
+        primary_runtime = LocalModelRuntime(settings, trace=event_trace)
+        secondary_runtime = CloudModelRuntime(settings, trace=event_trace) if settings.cloud_enabled else None
 
     retriever = build_retriever(settings, settings.rag_persist_directory, reindex=True)
     resolved_test_paths = test_paths or _default_test_paths(
@@ -93,23 +149,28 @@ def run_on_project(
         MCPRepositoryClient(project_root, timeout_seconds=120) as repository_mcp,
         MCPQualityClient(project_root, timeout_seconds=120) as quality_mcp,
     ):
-        state = build_engineering_graph(
+        graph = build_engineering_graph(
             repository_mcp=repository_mcp,
             quality_mcp=quality_mcp,
             retriever=retriever,
             model_runtime=primary_runtime,
             cloud_runtime=secondary_runtime,
-            trace=trace,
+            trace=event_trace,
             test_paths=resolved_test_paths,
-        ).invoke({
-            "run_id": run_id,
-            "requirement": requirement,
-            "repository_context": {
-                "apply_changes": True,
-                "authorized": authorize_writes,
-                "project_path": str(project_root),
+        )
+        state = _run_graph_with_events(
+            graph,
+            {
+                "run_id": run_id,
+                "requirement": requirement,
+                "repository_context": {
+                    "apply_changes": True,
+                    "authorized": authorize_writes,
+                    "project_path": str(project_root),
+                },
             },
-        })
+            run_id=run_id, trace=event_trace, sink=event_sink, seq_counter=seq_counter,
+        )
     duration = time.perf_counter() - started
 
     implementation = state.get("implementation")
