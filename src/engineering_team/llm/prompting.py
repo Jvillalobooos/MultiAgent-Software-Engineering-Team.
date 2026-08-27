@@ -49,7 +49,10 @@ def build_role_prompts(
             "everything in the current file content that the requirement does not ask you to "
             "change. Use the current file content given in tool_results as your starting "
             "point for files that already exist; write a new, complete file for paths that "
-            "do not exist yet."
+            "do not exist yet. file_contents MUST have exactly one key per changed_files "
+            "path and no other keys — do not invent, rename, or add any extra path (e.g. "
+            "no __init__.py, no config file, no README) even if you think it would help; "
+            "an unrequested path is a validation failure, not a helpful addition."
         )
     else:
         system += (

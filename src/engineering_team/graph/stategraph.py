@@ -348,18 +348,20 @@ def build_engineering_graph(
                                     status_message=str(cloud_exc),
                                     metadata={"agent": role.value},
                                 )
-                            return {
+                            fallback_patch: dict[str, Any] = {
                                 "route_history": [*current.route_history, role.value],
                                 "errors": errors, "model_usage": model_usage,
                                 "rag_evidence": rag_evidence, "tool_results": tool_results,
                                 "human_review_required": True,
                                 "trace_id": trace.trace_id if trace is not None else current.trace_id,
-                                "cloud_escalations_by_agent": {
+                            }
+                            if hasattr(cloud_runtime, "budget"):
+                                fallback_patch["cloud_escalations_by_agent"] = {
                                     item.value: count
                                     for item, count in cloud_runtime.budget.by_agent.items()
-                                },
-                                "cloud_escalations_run": cloud_runtime.budget.run_count,
-                            }
+                                }
+                                fallback_patch["cloud_escalations_run"] = cloud_runtime.budget.run_count
+                            return fallback_patch
                     else:
                         if trace is not None:
                             trace.record(
