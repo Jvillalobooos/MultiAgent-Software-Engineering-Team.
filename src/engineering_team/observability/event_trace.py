@@ -17,7 +17,7 @@ from typing import Any
 from engineering_team.contracts.enums import RunEventKind
 from engineering_team.contracts.models import RunEvent
 from engineering_team.observability.events import RunEventSink
-from engineering_team.observability.langfuse import TraceSession
+from engineering_team.observability.langfuse import TraceSession, _safe
 
 _KIND_BY_AS_TYPE = {
     "generation": RunEventKind.GENERATION,
@@ -75,7 +75,7 @@ class EventEmittingTrace:
             status=level or status_message,
             summary=name,
             metrics={"usage": usage_details} if usage_details else {},
-            payload={"input": input, "output": output, "metadata": metadata},
+            payload={"input": _safe(input), "output": _safe(output), "metadata": _safe(metadata)},
         ))
         return observation_id
 
@@ -85,5 +85,5 @@ class EventEmittingTrace:
             event_id=str(uuid.uuid4()), run_id=self._run_id, seq=next(self._seq),
             trace_id=self._trace.trace_id, kind=RunEventKind.RUN_FINISHED,
             timestamp=datetime.now(UTC), agent=None, iteration=None, status=None,
-            summary="run finished", metrics={}, payload={"final_report": final_report},
+            summary="run finished", metrics={}, payload={"final_report": _safe(final_report)},
         ))
