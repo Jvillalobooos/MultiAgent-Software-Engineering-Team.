@@ -109,6 +109,10 @@ export interface ModelUsage {
   input_tokens: number;
   output_tokens: number;
   avg_latency_ms: number;
+  http_status?: number;
+  error_category?: string;
+  retryable?: boolean;
+  fallback_succeeded?: boolean;
 }
 
 export type SubscoreKey =
@@ -155,6 +159,8 @@ export interface FinalReport {
   model_usage: ModelUsage[];
   changed_files: ChangedFile[];
   applied_diff: boolean;
+  workspace_changed: boolean;
+  source_applied: boolean;
   review: ReviewResult;
   errors: RunError[];
   rag_evidence: RagEvidence[];
@@ -167,3 +173,76 @@ export interface LaunchConfig {
   testSpecification: string;
   writeMode: 'dry_run' | 'authorized';
 }
+
+/* ---------- Persistent run contract (Task 6) ---------- */
+
+/** Mirrors engineering_team.runs.models.RunPhase exactly. */
+export type RunPhase =
+'queued' |
+'preparing' |
+'running' |
+'review_required' |
+'approved' |
+'failed' |
+'applying' |
+'applied' |
+'apply_failed';
+
+/** Mirrors engineering_team.runs.models.StoredEvent. */
+export interface StoredEvent {
+  sequence: number;
+  payload: RunEvent;
+}
+
+/** Mirrors the public projection of RunSnapshot returned by GET /api/runs/{run_id}
+ *  and by the terminal websocket snapshot envelope. `source_hashes` is intentionally
+ *  never exposed to the browser and must not appear here. */
+export interface RunSnapshot {
+  run_id: string;
+  project_path: string;
+  workspace_path: string;
+  message: string;
+  phase: RunPhase;
+  events: StoredEvent[];
+  report: FinalReport | null;
+  changed_paths: string[];
+  apply_result: ApplyResult | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Mirrors engineering_team.runs.models.RunSummary. */
+export interface RunSummary {
+  run_id: string;
+  project_path: string;
+  message: string;
+  phase: RunPhase;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Mirrors engineering_team.runs.models.ApplyResult. */
+export interface ApplyResult {
+  status: 'applied' | 'apply_failed' | 'restored' | 'conflict';
+  written_paths: string[];
+  test_exit_code: number | null;
+  test_output: string;
+  backup_path: string | null;
+  message: string;
+}
+
+/** Mirrors engineering_team.project_api.ProjectRef / ProjectPickResponse. */
+export interface ProjectRef {
+  path: string;
+  name: string;
+}
+
+export interface ProjectPickResponse {
+  status: 'selected' | 'cancelled';
+  project: ProjectRef | null;
+}
+
+/** One websocket envelope frame from /ws/runs/{run_id}. */
+export type RunEnvelope =
+| ({ kind: 'event' } & StoredEvent)
+| { kind: 'snapshot'; snapshot: RunSnapshot };

@@ -121,6 +121,8 @@ const readmeDiff: ChangedFile = {
 
 export const FINAL_REPORT: FinalReport = {
   applied_diff: false,
+  workspace_changed: false,
+  source_applied: false,
   changed_files: [calculatorDiff, parserDiff, testDiff, readmeDiff],
   review: {
     status: 'APPROVED',

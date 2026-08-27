@@ -1,0 +1,67 @@
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { usePersistentRun } from './usePersistentRun';
+import { approvedFixture, storedEvent } from '../test/FakeRunClient';
+import { FakeRunClient } from '../test/FakeRunClient';
+import { RunSnapshot, StoredEvent } from '../types/mission';
+
+describe('usePersistentRun', () => {
+  it('loads a snapshot and ignores replayed event sequences', async () => {
+    const client = new FakeRunClient(approvedFixture([storedEvent(1, 'Product'), storedEvent(2, 'Developer')]));
+    const { result } = renderHook(() => usePersistentRun('run-a', client));
+
+    await waitFor(() => expect(result.current.events.map((e) => e.sequence)).toEqual([1, 2]));
+
+    act(() => client.emit(storedEvent(2, 'duplicate')));
+    act(() => client.emit(storedEvent(3, 'Testing')));
+
+    expect(result.current.events.map((e) => e.sequence)).toEqual([1, 2, 3]);
+  });
+
+  it('exposes the loaded snapshot phase and report', async () => {
+    const client = new FakeRunClient(approvedFixture([]));
+    const { result } = renderHook(() => usePersistentRun('run-a', client));
+
+    await waitFor(() => expect(result.current.snapshot).not.toBeNull());
+
+    expect(result.current.snapshot?.phase).toBe('approved');
+    expect(result.current.snapshot?.report).not.toBeNull();
+  });
+
+  it('merges a terminal snapshot envelope pushed over the subscription', async () => {
+    const client = new FakeRunClient(approvedFixture([storedEvent(1, 'Product')]));
+    client.snapshot = { ...client.snapshot, phase: 'running', report: null };
+    const { result } = renderHook(() => usePersistentRun('run-a', client));
+
+    await waitFor(() => expect(result.current.snapshot?.phase).toBe('running'));
+
+    const terminal = approvedFixture([storedEvent(1, 'Product')]);
+    act(() => client.emit(terminal));
+
+    await waitFor(() => expect(result.current.snapshot?.phase).toBe('approved'));
+  });
+
+  it('unsubscribes on unmount', async () => {
+    const client = new FakeRunClient(approvedFixture([]));
+    const unsubscribe = vi.fn();
+    const originalSubscribe = client.subscribe.bind(client);
+    client.subscribe = (
+      runId: string,
+      after: number,
+      onEnvelope: (value: StoredEvent | RunSnapshot) => void,
+      onClose: () => void,
+    ) => {
+      const dispose = originalSubscribe(runId, after, onEnvelope, onClose);
+      return () => {
+        unsubscribe();
+        dispose();
+      };
+    };
+    const { result, unmount } = renderHook(() => usePersistentRun('run-a', client));
+    await waitFor(() => expect(result.current.snapshot).not.toBeNull());
+
+    unmount();
+
+    expect(unsubscribe).toHaveBeenCalled();
+  });
+});
