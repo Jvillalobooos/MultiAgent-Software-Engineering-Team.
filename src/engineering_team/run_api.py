@@ -189,6 +189,13 @@ class RunManager:
             # from anything the model merely claims to have changed.
             changed_paths = list(report.get("actual_changed_paths", []))
             self.store.finish(run_id, report, phase, changed_paths=changed_paths)
+            workspace = Path(running.workspace_path)
+            if phase is RunPhase.APPROVED and changed_paths and all(
+                (workspace / path).is_file() for path in changed_paths
+            ):
+                result = ApplyService(self.store).apply(
+                    run_id, confirmed_project=Path(running.project_path)
+                )
         except Exception as exc:  # noqa: BLE001 - every background run must terminate durably.
             self._fail(run_id, exc)
 

@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import time
+import tomllib
 from pathlib import Path
 
 from engineering_team.contracts.enums import AgentRole, ToolStatus
@@ -12,6 +13,35 @@ class QualityMCP:
         self.root = Path(root).resolve()
         self.timeout_seconds = timeout_seconds
         self._last: dict[str, ToolResult] = {}
+        self._dependencies_prepared = False
+
+    def _prepare_project_dependencies(self, role: AgentRole) -> ToolResult | None:
+        """Install declared runtime dependencies once in the test interpreter."""
+        if self._dependencies_prepared:
+            return None
+        self._dependencies_prepared = True
+        pyproject = self.root / "pyproject.toml"
+        if not pyproject.is_file():
+            return None
+        try:
+            metadata = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+        except (OSError, tomllib.TOMLDecodeError):
+            return None
+        dependencies = metadata.get("project", {}).get("dependencies", [])
+        if not dependencies:
+            return None
+        result = self._run(
+            role,
+            "install_dependencies",
+            [
+                sys.executable, "-m", "pip", "install", "--disable-pip-version-check",
+                "--no-input", ".",
+            ],
+            {AgentRole.TESTING},
+        )
+        if result.status is ToolStatus.SUCCESS:
+            return None
+        return result.model_copy(update={"tool_name": "run_tests"})
 
     def _static(
         self, role: AgentRole, tool: str, allowed: set[AgentRole], output: str
@@ -87,6 +117,14 @@ class QualityMCP:
         )
 
     def run_tests(self, role: AgentRole, paths: list[str] | None = None) -> ToolResult:
+        if role is not AgentRole.TESTING:
+            return self._run(
+                role, "run_tests", [sys.executable, "-m", "pytest", *(paths or [])],
+                {AgentRole.TESTING},
+            )
+        prepared = self._prepare_project_dependencies(role)
+        if prepared is not None:
+            return prepared
         return self._run(
             role, "run_tests", [sys.executable, "-m", "pytest", *(paths or [])], {AgentRole.TESTING}
         )

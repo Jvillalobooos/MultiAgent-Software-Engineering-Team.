@@ -1,3 +1,5 @@
+import subprocess
+import sys
 from pathlib import Path
 
 from engineering_team.contracts.enums import AgentRole, ToolStatus
@@ -54,3 +56,28 @@ def test_quality_getter_preserves_last_real_result(tmp_path: Path) -> None:
     assert executed.status is ToolStatus.SUCCESS
     assert retrieved.status is ToolStatus.SUCCESS
     assert "passed" in retrieved.output_summary.lower()
+
+
+def test_quality_installs_declared_project_dependencies_once_before_pytest(
+    tmp_path: Path, monkeypatch
+) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname = 'demo'\nversion = '0.1.0'\ndependencies = ['example-dependency']\n",
+        encoding="utf-8",
+    )
+    calls: list[list[str]] = []
+
+    def run(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    monkeypatch.setattr("engineering_team.mcp.quality.subprocess.run", run)
+    quality = QualityMCP(tmp_path)
+
+    assert quality.run_tests(AgentRole.TESTING).status is ToolStatus.SUCCESS
+    assert quality.run_tests(AgentRole.TESTING).status is ToolStatus.SUCCESS
+    assert calls == [
+        [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "."],
+        [sys.executable, "-m", "pytest"],
+        [sys.executable, "-m", "pytest"],
+    ]

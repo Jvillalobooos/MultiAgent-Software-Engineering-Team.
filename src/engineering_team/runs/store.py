@@ -117,6 +117,29 @@ class RunStore:
             self._condition.notify_all()
             return snapshot.model_copy(deep=True)
 
+    def update_report(self, run_id: str, **updates: object) -> RunSnapshot:
+        """Persist post-workflow facts such as an automatic source apply."""
+        with self._condition:
+            snapshot = self._candidate(run_id)
+            snapshot.report = {**(snapshot.report or {}), **updates}
+            snapshot.updated_at = datetime.now(UTC)
+            self._commit(snapshot)
+            self._condition.notify_all()
+            return snapshot.model_copy(deep=True)
+
+    def complete_apply(self, run_id: str, result: ApplyResult) -> RunSnapshot:
+        """Atomically expose a successful source write and its audit record."""
+        with self._condition:
+            snapshot = self._candidate(run_id)
+            self._validate_transition(snapshot, RunPhase.APPLIED)
+            snapshot.apply_result = result.model_copy(deep=True)
+            snapshot.phase = RunPhase.APPLIED
+            snapshot.report = {**(snapshot.report or {}), "source_applied": True}
+            snapshot.updated_at = datetime.now(UTC)
+            self._commit(snapshot)
+            self._condition.notify_all()
+            return snapshot.model_copy(deep=True)
+
     def events_after(self, run_id: str, sequence: int) -> list[StoredEvent]:
         """Return all durable events with a sequence strictly above ``sequence``."""
         with self._lock:

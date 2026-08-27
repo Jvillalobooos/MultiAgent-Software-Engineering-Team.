@@ -111,6 +111,7 @@ const SIGN: Record<DiffLine['type'], string> = { add: '+', del: '-', ctx: ' ', m
 export function DiffViewer({ files, applied }: DiffViewerProps) {
   const [activePath, setActivePath] = useState(files[0]?.path ?? '');
   const file = files.find((f) => f.path === activePath) ?? files[0];
+  const lines = Array.isArray(file?.lines) ? file.lines : [];
 
   return (
     <section className="glass flex min-h-0 flex-col rounded-2xl shadow-panel" aria-label="Code diff">
@@ -131,7 +132,7 @@ export function DiffViewer({ files, applied }: DiffViewerProps) {
         className="thin-scroll flex gap-1 overflow-x-auto border-b border-hull-400/35 px-3 py-2">
         
         {files.map((f) => {
-          const active = f.path === file.path;
+          const active = f.path === file?.path;
           const Icon = f.language === 'markdown' ? FileTextIcon : FileCode2Icon;
           return (
             <button
@@ -164,7 +165,7 @@ export function DiffViewer({ files, applied }: DiffViewerProps) {
       <div className="thin-scroll min-h-0 flex-1 overflow-auto py-2">
         <table className="w-full border-collapse font-mono text-[11.5px] leading-[1.65]">
           <tbody>
-            {file.lines.map((line, i) =>
+            {lines.map((line, i) =>
             <tr key={i} className={LINE_STYLE[line.type]}>
                 <td className="w-10 select-none pl-3 pr-1 text-right align-top text-mist/35 tabular-nums">
                   {line.oldNo ?? ''}
@@ -188,10 +189,17 @@ export function DiffViewer({ files, applied }: DiffViewerProps) {
                 line.type === 'meta' ? 'text-plasma' : 'text-slate-300'}`
                 }>
                 
-                  {line.type === 'meta' ? line.text : highlight(line.text, file.language)}
+                  {line.type === 'meta' ? line.text : highlight(line.text, file?.language ?? 'text')}
                 </td>
               </tr>
             )}
+            {lines.length === 0 &&
+            <tr>
+                <td colSpan={4} className="px-4 py-5 text-center text-mist/60">
+                  Diff contents unavailable for this run.
+                </td>
+              </tr>
+            }
           </tbody>
         </table>
       </div>

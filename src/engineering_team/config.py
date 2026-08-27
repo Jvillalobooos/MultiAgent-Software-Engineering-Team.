@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     max_cloud_escalations_per_run: int = Field(default=3, ge=0)
     ollama_base_url: str = "http://localhost:11434"
     llm_timeout_seconds: float = Field(default=600, gt=0)
+    ollama_timeout_seconds: float = Field(default=600, gt=0)
     gemini_api_key: str | None = None
     groq_api_key: str | None = None
     langfuse_public_key: str | None = None

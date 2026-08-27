@@ -260,6 +260,41 @@ class TimingOutLocalRuntime(FailingLocalRuntime):
         raise RuntimeError(info.error)
 
 
+class QualityFailureDuringTestingRuntime:
+    """Only the Testing model fails to return its schema-valid artifact."""
+
+    def __init__(self):
+        self.attempts = []
+
+    def invoke_artifact(self, role, envelope, candidate, *, fallback_reason=None):
+        if role is AgentRole.TESTING:
+            info = ModelExecutionInfo(
+                agent=role, provider="ollama", requested_model="local", actual_model=None,
+                model_profile="LOCAL", degraded=True, latency_ms=1,
+                structured_output_success=False,
+                error="LLM_QUALITY_ERROR: invalid structured response",
+            )
+            self.attempts.append(info)
+            raise RuntimeError(info.error)
+        return candidate, ModelExecutionInfo(
+            agent=role, provider="ollama", requested_model="local", actual_model="local",
+            model_profile="LOCAL", latency_ms=1, structured_output_success=True,
+        )
+
+
+class RecordingRuntime:
+    def __init__(self):
+        self.roles = []
+        self.attempts = []
+
+    def invoke_artifact(self, role, envelope, candidate):
+        self.roles.append(role)
+        return candidate, ModelExecutionInfo(
+            agent=role, provider="ollama", requested_model="local", actual_model="local",
+            model_profile="LOCAL", latency_ms=1, structured_output_success=True,
+        )
+
+
 class SuccessfulCloudRuntime:
     def invoke_artifact(self, role, envelope, candidate, *, fallback_reason):
         return candidate, ModelExecutionInfo(
@@ -300,6 +335,55 @@ def test_agent_timeout_is_preserved_in_workflow_and_langfuse():
     assert result["errors"][0].code is ErrorCode.AGENT_TIMEOUT
     assert result["model_usage"][0].error.startswith("AGENT_TIMEOUT")
     assert any(event["name"] == "AGENT_TIMEOUT" for event in trace.events)
+
+
+def test_testing_remediation_uses_real_test_failure_without_model_quality_errors():
+    quality = FailThenPassQuality()
+    result = build_engineering_graph(
+        quality_mcp=quality,
+        model_runtime=QualityFailureDuringTestingRuntime(),
+    ).invoke({"run_id": "testing-quality", "requirement": "safe bounded change"})
+
+    assert result["final_status"] == "APPROVED"
+    assert result["iteration"] == 1
+    assert result["route_history"][-4:] == ["Developer", "Testing", "Reviewer", "FinalReport"]
+    assert not any(item.code is ErrorCode.LLM_QUALITY_ERROR for item in result["errors"])
+
+
+def test_testing_does_not_fallback_to_a_model_after_cloud_failure():
+    quality = FailThenPassQuality()
+    local = QualityFailureDuringTestingRuntime()
+    result = build_engineering_graph(
+        quality_mcp=quality,
+        model_runtime=FailingLocalRuntime(),
+        cloud_runtime=local,
+    ).invoke({"run_id": "cloud-testing-fallback", "requirement": "safe bounded change"})
+
+    assert result["final_status"] == "APPROVED"
+    assert local.attempts == []
+
+
+def test_reviewer_uses_deterministic_evidence_without_an_llm_call():
+    runtime = RecordingRuntime()
+    result = build_engineering_graph(model_runtime=runtime).invoke(
+        {"run_id": "fast-review", "requirement": "safe bounded change"}
+    )
+
+    assert result["final_status"] == "APPROVED"
+    assert AgentRole.REVIEWER not in runtime.roles
+
+
+def test_testing_uses_quality_evidence_without_an_llm_call():
+    quality = FailThenPassQuality()
+    runtime = RecordingRuntime()
+
+    result = build_engineering_graph(
+        quality_mcp=quality, model_runtime=runtime
+    ).invoke({"run_id": "fast-testing", "requirement": "safe bounded change"})
+
+    assert result["final_status"] == "APPROVED"
+    assert result["test_results"][0].status is ToolStatus.FAIL
+    assert AgentRole.TESTING not in runtime.roles
 
 
 def test_failed_cloud_attempt_preserves_budget_model_attempt_and_completed_evidence():

@@ -12,8 +12,7 @@ from engineering_team.models.context import ContextEnvelope
 from .base import AgentBase
 
 _DIMENSIONS = (
-    "requirements_completeness", "architecture_correctness", "security_compliance",
-    "testing_completeness", "implementation_consistency", "rag_grounding",
+    "requirements", "architecture", "security", "testing", "implementation", "rag_grounding",
 )
 
 
@@ -41,7 +40,7 @@ class ReviewerAgent(AgentBase[ReviewerDecision]):
         if security is not None and security.status is SecurityStatus.FAIL:
             return ReviewerDecision(
                 status=ReviewerStatus.REJECTED, score=40,
-                subscores={item: (0 if item == "security_compliance" else 70) for item in _DIMENSIONS},
+                subscores={item: (0 if item == "security" else 70) for item in _DIMENSIONS},
                 problems=[finding.description for finding in security.findings],
                 reason="security findings require code remediation",
                 remediation_category=RemediationCategory.SECURITY,
@@ -51,7 +50,7 @@ class ReviewerAgent(AgentBase[ReviewerDecision]):
         if latest_test is not None and latest_test.status is not ToolStatus.SUCCESS:
             return ReviewerDecision(
                 status=ReviewerStatus.REJECTED, score=45,
-                subscores={item: (0 if item == "testing_completeness" else 75) for item in _DIMENSIONS},
+                subscores={item: (0 if item == "testing" else 75) for item in _DIMENSIONS},
                 problems=list(latest_test.failures), reason="failed tests require implementation remediation",
                 remediation_category=RemediationCategory.TESTING,
                 return_to=RouteTarget.DEVELOPER, confidence=1,

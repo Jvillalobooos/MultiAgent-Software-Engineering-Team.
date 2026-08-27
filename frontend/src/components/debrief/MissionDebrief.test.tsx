@@ -71,4 +71,15 @@ describe('MissionDebrief', () => {
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+
+  it('renders an incomplete backend diff without crashing the workspace', () => {
+    const report = baseReport();
+    report.changed_files = [{
+      path: 'calculadora/operaciones.py', language: 'python', additions: 0, deletions: 0,
+    } as unknown as FinalReport['changed_files'][number]];
+
+    render(<MissionDebrief report={report} runId="run-1" projectPath="C:\\projects\\demo" />);
+
+    expect(screen.getByText(/diff contents unavailable/i)).toBeInTheDocument();
+  });
 });

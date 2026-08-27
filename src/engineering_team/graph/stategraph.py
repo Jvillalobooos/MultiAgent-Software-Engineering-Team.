@@ -300,7 +300,11 @@ def build_engineering_graph(
             model_usage = list(current.model_usage)
             envelope = build_context(role, current, role.value)
             candidate = agents[role].execute(envelope)
-            if model_runtime is not None:
+            if role in {AgentRole.TESTING, AgentRole.REVIEWER}:
+                # Testing and Reviewer are deterministic gates over real MCP evidence.
+                # Calling a model here adds latency without improving the result.
+                output = candidate
+            elif model_runtime is not None:
                 attempt_start = len(model_runtime.attempts)
                 try:
                     output, model_info = model_runtime.invoke_artifact(role, envelope, candidate)
@@ -323,7 +327,14 @@ def build_engineering_graph(
                             code.value, level="ERROR", status_message=message,
                             metadata={"agent": role.value},
                         )
-                    if cloud_runtime is not None:
+                    # Testing and review have deterministic candidates derived from
+                    # real MCP evidence. A model formatting failure must not hide a
+                    # genuine failed test from the remediation route.
+                    if code is ErrorCode.LLM_QUALITY_ERROR and role in {
+                        AgentRole.TESTING, AgentRole.REVIEWER,
+                    }:
+                        output = candidate
+                    elif cloud_runtime is not None:
                         cloud_attempt_start = len(getattr(cloud_runtime, "attempts", []))
                         try:
                             output, cloud_info = cloud_runtime.invoke_artifact(
@@ -337,31 +348,38 @@ def build_engineering_graph(
                             model_usage.extend(
                                 getattr(cloud_runtime, "attempts", [])[cloud_attempt_start:]
                             )
-                            errors.append(WorkflowError(
-                                code=ErrorCode.CLOUD_FALLBACK_UNAVAILABLE,
-                                source_stage=role.value, retryable=False,
-                                detail=str(cloud_exc),
-                            ))
-                            if trace is not None:
-                                trace.record(
-                                    "cloud fallback error", level="ERROR",
-                                    status_message=str(cloud_exc),
-                                    metadata={"agent": role.value},
-                                )
-                            fallback_patch: dict[str, Any] = {
-                                "route_history": [*current.route_history, role.value],
-                                "errors": errors, "model_usage": model_usage,
-                                "rag_evidence": rag_evidence, "tool_results": tool_results,
-                                "human_review_required": True,
-                                "trace_id": trace.trace_id if trace is not None else current.trace_id,
-                            }
-                            if hasattr(cloud_runtime, "budget"):
-                                fallback_patch["cloud_escalations_by_agent"] = {
-                                    item.value: count
-                                    for item, count in cloud_runtime.budget.by_agent.items()
+                            if role in {AgentRole.TESTING, AgentRole.REVIEWER}:
+                                # The deterministic artifacts for these gates are
+                                # built from actual tool evidence. Do not discard
+                                # a completed test result merely because both LLM
+                                # providers failed to serialize it.
+                                output = candidate
+                            else:
+                                errors.append(WorkflowError(
+                                    code=ErrorCode.CLOUD_FALLBACK_UNAVAILABLE,
+                                    source_stage=role.value, retryable=False,
+                                    detail=str(cloud_exc),
+                                ))
+                                if trace is not None:
+                                    trace.record(
+                                        "cloud fallback error", level="ERROR",
+                                        status_message=str(cloud_exc),
+                                        metadata={"agent": role.value},
+                                    )
+                                fallback_patch: dict[str, Any] = {
+                                    "route_history": [*current.route_history, role.value],
+                                    "errors": errors, "model_usage": model_usage,
+                                    "rag_evidence": rag_evidence, "tool_results": tool_results,
+                                    "human_review_required": True,
+                                    "trace_id": trace.trace_id if trace is not None else current.trace_id,
                                 }
-                                fallback_patch["cloud_escalations_run"] = cloud_runtime.budget.run_count
-                            return fallback_patch
+                                if hasattr(cloud_runtime, "budget"):
+                                    fallback_patch["cloud_escalations_by_agent"] = {
+                                        item.value: count
+                                        for item, count in cloud_runtime.budget.by_agent.items()
+                                    }
+                                    fallback_patch["cloud_escalations_run"] = cloud_runtime.budget.run_count
+                                return fallback_patch
                     else:
                         if trace is not None:
                             trace.record(

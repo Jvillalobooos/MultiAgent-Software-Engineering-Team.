@@ -166,8 +166,7 @@ class ApplyService:
             backup_path=str(backup_dir),
             message="applied successfully",
         )
-        self.store.record_apply_result(run_id, result)
-        self.store.transition(run_id, RunPhase.APPLIED)
+        self.store.complete_apply(run_id, result)
         return result
 
     def restore(self, run_id: str) -> ApplyResult:

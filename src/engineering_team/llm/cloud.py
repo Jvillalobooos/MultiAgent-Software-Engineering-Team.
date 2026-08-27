@@ -18,12 +18,12 @@ from .registry import ModelSelection
 from .runtime import _preserves_governed_facts
 
 _CLOUD_MAP = {
-    AgentRole.PRODUCT: ("google", "gemini-3.7-flash"),
-    AgentRole.ARCHITECTURE: ("google", "gemini-3.7-flash"),
-    AgentRole.DEVELOPER: ("groq", "openai/gpt-oss-120b"),
+    AgentRole.PRODUCT: ("google", "gemini-3.6-flash"),
+    AgentRole.ARCHITECTURE: ("google", "gemini-3.6-flash"),
+    AgentRole.DEVELOPER: ("google", "gemini-3.6-flash"),
     AgentRole.SECURITY: ("groq", "openai/gpt-oss-120b"),
     AgentRole.TESTING: ("groq", "openai/gpt-oss-20b"),
-    AgentRole.REVIEWER: ("google", "gemini-3.7-flash"),
+    AgentRole.REVIEWER: ("google", "gemini-3.6-flash"),
 }
 
 
@@ -83,10 +83,27 @@ class CloudRouter:
         provider, model = _CLOUD_MAP[role]
         return ModelSelection(role, "CLOUD_FALLBACK", provider, model)
 
-    def enabled_for(self, role: AgentRole) -> bool:
+    def selections_for(self, role: AgentRole) -> tuple[ModelSelection, ModelSelection]:
+        primary = self.for_role(role)
+        if role is AgentRole.DEVELOPER:
+            return (
+                primary,
+                ModelSelection(role, "CLOUD_FALLBACK", "groq", "openai/gpt-oss-120b"),
+            )
+        alternate_model = (
+            "gemini-3.1-flash-lite"
+            if primary.provider == "google"
+            else ("openai/gpt-oss-120b" if primary.model.endswith("20b") else "openai/gpt-oss-20b")
+        )
+        return (
+            primary,
+            ModelSelection(role, "CLOUD_FALLBACK", primary.provider, alternate_model),
+        )
+
+    def enabled_for(self, selection: ModelSelection) -> bool:
         key = (
             self._settings.gemini_api_key
-            if _CLOUD_MAP[role][0] == "google"
+            if selection.provider == "google"
             else self._settings.groq_api_key
         )
         return self._settings.cloud_enabled and bool(key)
@@ -172,9 +189,10 @@ class CloudModelRuntime:
         candidate: BaseModel,
         *,
         fallback_reason: str = "CLOUD_FIRST",
+        _secondary_attempt: bool = False,
     ) -> tuple[BaseModel, ModelExecutionInfo]:
-        selection = self.router.for_role(role)
-        if not self.router.enabled_for(role) or not self.budget.consume(role):
+        selection = self.router.selections_for(role)[1 if _secondary_attempt else 0]
+        if not self.router.enabled_for(selection) or not self.budget.consume(role):
             raise RuntimeError("CLOUD_FALLBACK_UNAVAILABLE: disabled, missing credential, or budget")
         candidate_dict = candidate.model_dump(mode="json")
         output_schema = governed_output_schema(type(candidate))
@@ -252,6 +270,11 @@ class CloudModelRuntime:
                     metadata=info.model_dump(mode="json"), level="ERROR",
                     status_message=error,
                 )
+            if not _secondary_attempt:
+                return self.invoke_artifact(
+                    role, envelope, candidate, fallback_reason=fallback_reason,
+                    _secondary_attempt=True,
+                )
             raise RuntimeError(error) from exc
         except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError, ValidationError) as exc:
             error = f"CLOUD_FALLBACK_UNAVAILABLE: {type(exc).__name__}"
@@ -269,6 +292,11 @@ class CloudModelRuntime:
                     as_type="generation",
                     metadata=info.model_dump(mode="json"), level="ERROR",
                     status_message=error,
+                )
+            if not _secondary_attempt:
+                return self.invoke_artifact(
+                    role, envelope, candidate, fallback_reason=fallback_reason,
+                    _secondary_attempt=True,
                 )
             raise RuntimeError(error) from exc
         finally:

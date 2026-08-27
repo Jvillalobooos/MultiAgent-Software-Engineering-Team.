@@ -91,6 +91,15 @@ def test_developer_contract_rejects_unjustified_empty_proposal() -> None:
         )
 
 
+def test_requested_targets_adds_a_constant_test_when_requirement_requires_one() -> None:
+    targets = DeveloperAgent.requested_targets(
+        "Agrega en calculadora/__init__.py una constante pública llamada VERSION "
+        "con el valor entero 2. Agrega una prueba en tests/ que verifique calculadora.VERSION."
+    )
+
+    assert targets == ["calculadora/__init__.py", "tests/test_version.py"]
+
+
 def test_developer_selects_inspected_transaction_module_not_first_listed_paths() -> None:
     specification = ProductSpecification(
         objective="Return the latest five transactions for the authorized owner",

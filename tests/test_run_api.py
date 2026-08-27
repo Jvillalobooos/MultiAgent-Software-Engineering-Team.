@@ -287,6 +287,32 @@ def test_completed_run_persists_changed_paths_from_successful_writes(tmp_path: P
     assert body["changed_paths"] == ["app/service.py"]
 
 
+def test_approved_workspace_change_is_applied_to_selected_source(tmp_path: Path) -> None:
+    source = _source(tmp_path)
+    (source / "test_app.py").write_text(
+        "from app import value\n\ndef test_value():\n    assert value == 2\n", encoding="utf-8"
+    )
+
+    def executor(snapshot: RunSnapshot, _emit: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
+        (Path(snapshot.workspace_path) / "app.py").write_text("value = 2\n", encoding="utf-8")
+        state = _completed_state(snapshot.run_id)
+        state["implementation"]["action_mode"] = "APPLIED"
+        state["tool_results"].append({
+            "tool_name": "update_file", "status": "SUCCESS", "duration_ms": 1,
+            "allowed_role": "Developer", "output_summary": "app.py", "error": None,
+        })
+        return state
+
+    client = _client(_manager(tmp_path, executor))
+    run_id = client.post(
+        "/api/runs", json={"projectPath": str(source), "message": "write value"}
+    ).json()["run_id"]
+
+    snapshot = _wait_for_phase(client, run_id, "applied")
+    assert (source / "app.py").read_text(encoding="utf-8") == "value = 2\n"
+    assert snapshot["report"]["source_applied"] is True
+
+
 def test_changed_paths_ignore_model_claimed_diff_paths_never_actually_written(
     tmp_path: Path,
 ) -> None:

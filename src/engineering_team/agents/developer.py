@@ -38,6 +38,16 @@ class DeveloperAgent(AgentBase[ImplementationResult]):
             extension = cleaned.rsplit(".", 1)[-1].lower()
             if extension in cls._TARGET_EXTENSIONS and cls._safe_path(cleaned):
                 targets.append(cleaned)
+        # A directory instruction such as ``tests/`` names no writable file.
+        # For a requested public constant, derive a stable, bounded test path so
+        # the Developer must satisfy both the implementation and verification.
+        constant = re.search(
+            r"(?:constante|constant)\s+(?:pública|public)?\s*(?:llamada|called)\s+([A-Z][A-Z0-9_]*)",
+            requirement,
+            flags=re.IGNORECASE,
+        )
+        if constant and re.search(r"\btests?/", requirement, flags=re.IGNORECASE):
+            targets.append(f"tests/test_{constant.group(1).lower()}.py")
         return list(dict.fromkeys(targets))
 
     @classmethod

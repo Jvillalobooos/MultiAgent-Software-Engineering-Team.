@@ -22,17 +22,35 @@ from engineering_team.models.context import build_context
 @pytest.mark.parametrize(
     ("role", "provider", "model"),
     [
-        (AgentRole.PRODUCT, "google", "gemini-3.7-flash"),
-        (AgentRole.ARCHITECTURE, "google", "gemini-3.7-flash"),
-        (AgentRole.DEVELOPER, "groq", "openai/gpt-oss-120b"),
+        (AgentRole.PRODUCT, "google", "gemini-3.6-flash"),
+        (AgentRole.ARCHITECTURE, "google", "gemini-3.6-flash"),
+        (AgentRole.DEVELOPER, "google", "gemini-3.6-flash"),
         (AgentRole.SECURITY, "groq", "openai/gpt-oss-120b"),
         (AgentRole.TESTING, "groq", "openai/gpt-oss-20b"),
-        (AgentRole.REVIEWER, "google", "gemini-3.7-flash"),
+        (AgentRole.REVIEWER, "google", "gemini-3.6-flash"),
     ],
 )
 def test_cloud_mapping_is_fixed(role: AgentRole, provider: str, model: str) -> None:
     selection = CloudRouter(Settings(_env_file=None)).for_role(role)
     assert (selection.provider, selection.model) == (provider, model)
+
+
+def test_cloud_router_exposes_a_second_cloud_model_before_local_fallback() -> None:
+    selections = CloudRouter(Settings(_env_file=None)).selections_for(AgentRole.PRODUCT)
+
+    assert [(item.provider, item.model) for item in selections] == [
+        ("google", "gemini-3.6-flash"),
+        ("google", "gemini-3.1-flash-lite"),
+    ]
+
+
+def test_developer_uses_groq_as_the_second_cloud_provider_before_local():
+    selections = CloudRouter(Settings(_env_file=None)).selections_for(AgentRole.DEVELOPER)
+
+    assert [(item.provider, item.model) for item in selections] == [
+        ("google", "gemini-3.6-flash"),
+        ("groq", "openai/gpt-oss-120b"),
+    ]
 
 
 def test_tool_and_rag_errors_never_trigger_cloud() -> None:
@@ -102,7 +120,7 @@ def test_cloud_runtime_validates_provider_response_and_marks_fallback() -> None:
 
 def test_groq_cloud_runtime_uses_fixed_model_and_validates_response() -> None:
     state = EngineeringState(run_id="cloud", requirement="safe code change")
-    envelope = build_context(AgentRole.DEVELOPER, state, "Developer")
+    envelope = build_context(AgentRole.SECURITY, state, "Security")
     candidate = ProductAgent().execute(
         build_context(AgentRole.PRODUCT, state, "Product")
     )
@@ -123,7 +141,7 @@ def test_groq_cloud_runtime_uses_fixed_model_and_validates_response() -> None:
         settings, client=httpx.Client(transport=httpx.MockTransport(handler))
     )
     artifact, info = runtime.invoke_artifact(
-        AgentRole.DEVELOPER,
+        AgentRole.SECURITY,
         envelope,
         candidate,
         fallback_reason=ErrorCode.LLM_QUALITY_ERROR.value,

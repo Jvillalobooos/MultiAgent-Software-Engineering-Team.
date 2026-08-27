@@ -42,3 +42,6 @@ def test_reviewer_rejects_when_required_rag_grounding_failed() -> None:
 
     assert decision.status is ReviewerStatus.REJECTED
     assert decision.subscores["rag_grounding"] == 0
+    assert set(decision.subscores) == {
+        "requirements", "architecture", "security", "testing", "implementation", "rag_grounding",
+    }

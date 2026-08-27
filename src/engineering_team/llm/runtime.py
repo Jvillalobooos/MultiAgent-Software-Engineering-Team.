@@ -69,7 +69,7 @@ class LocalModelRuntime:
         while True:
             started = time.perf_counter()
             owns_client = self.client is None
-            client = self.client or httpx.Client(timeout=self.settings.llm_timeout_seconds)
+            client = self.client or httpx.Client(timeout=self.settings.ollama_timeout_seconds)
             payload: dict[str, Any] = {}
             try:
                 response = client.post(
