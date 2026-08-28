@@ -16,4 +16,5 @@ workspace/*.log
 rag/chroma/
 langfuse-local/
 evaluation/reports/traces/
+evaluation/reports/ui-audit-*
 .worktrees/
