@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Banca Demo</title>
+<style>
+  :root { color-scheme: dark; --bg:#0b1120; --panel:#111a2e; --line:#243352; --ink:#dce6f7; --muted:#8fa3c4; --accent:#3fb6ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.6 system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 20px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.sub { color: var(--muted); margin: 0 0 24px; font-size: 13px; }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:16px; }
+  h2 { font-size: 14px; margin: 0 0 12px; }
+  label { display:block; font-size:13px; margin-bottom:4px; }
+  input { width:100%; padding:8px 10px; margin-bottom:10px; background:#080d18; border:1px solid var(--line); border-radius:8px; color:var(--ink); font:inherit; }
+  button { padding:8px 16px; border:1px solid var(--accent); border-radius:8px; background:rgba(63,182,255,.15); color:var(--ink); font:inherit; cursor:pointer; }
+  button:hover { background:rgba(63,182,255,.25); }
+  pre { background:#080d18; border:1px solid var(--line); border-radius:8px; padding:12px; overflow:auto; font-size:12.5px; margin:0; }
+  .fila { display:flex; gap:8px; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Banca Demo</h1>
+  <p class="sub">Cliente mínimo para ejercitar la API. Usuario de prueba: <code>ana@banca.demo</code> / <code>Ana#2026</code></p>
+
+  <section>
+    <h2>Sesión</h2>
+    <label for="email">Email</label>
+    <input id="email" value="ana@banca.demo" autocomplete="username" />
+    <label for="password">Contraseña</label>
+    <input id="password" type="password" value="Ana#2026" autocomplete="current-password" />
+    <div class="fila">
+      <button id="btn-login">Iniciar sesión</button>
+      <button id="btn-logout">Cerrar sesión</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Consultas</h2>
+    <div class="fila">
+      <button id="btn-perfil">Ver perfil</button>
+      <button id="btn-cuentas">Ver cuentas</button>
+      <button id="btn-tx">Ver transacciones (cuenta 1)</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Respuesta</h2>
+    <pre id="salida">Sin datos todavía.</pre>
+  </section>
+</main>
+
+<script>
+  let token = "";
+  const salida = document.getElementById("salida");
+  const mostrar = (dato) => { salida.textContent = JSON.stringify(dato, null, 2); };
+
+  async function pedir(ruta, opciones = {}) {
+    const cabeceras = { "Content-Type": "application/json", ...(opciones.headers || {}) };
+    if (token) cabeceras.Authorization = `Bearer ${token}`;
+    const respuesta = await fetch(ruta, { ...opciones, headers: cabeceras });
+    const cuerpo = await respuesta.json().catch(() => ({ detail: respuesta.statusText }));
+    mostrar({ estado: respuesta.status, cuerpo });
+    return cuerpo;
+  }
+
+  document.getElementById("btn-login").onclick = async () => {
+    const cuerpo = await pedir("/api/login", {
+      method: "POST",
+      body: JSON.stringify({
+        email: document.getElementById("email").value,
+        password: document.getElementById("password").value,
+      }),
+    });
+    if (cuerpo && cuerpo.token) token = cuerpo.token;
+  };
+  document.getElementById("btn-logout").onclick = async () => {
+    await pedir("/api/logout", { method: "POST" });
+    token = "";
+  };
+  document.getElementById("btn-perfil").onclick = () => pedir("/api/perfil");
+  document.getElementById("btn-cuentas").onclick = () => pedir("/api/cuentas");
+  document.getElementById("btn-tx").onclick = () => pedir("/api/cuentas/1/transacciones?limite=10");
+</script>
+</body>
+</html>

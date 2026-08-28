@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "banca-demo"
+version = "0.1.0"
+description = "API bancaria mínima usada para demostrar el equipo de agentes."
+requires-python = ">=3.11"
+dependencies = ["fastapi", "uvicorn", "httpx"]
+
+[tool.setuptools.packages.find]
+include = ["banca*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
