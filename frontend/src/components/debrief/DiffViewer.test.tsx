@@ -40,4 +40,11 @@ describe('DiffViewer write provenance', () => {
     render(<DiffViewer files={[]} workspaceChanged sourceApplied={false} phase="applying" />);
     expect(screen.getByRole('region', { name: 'Code diff' })).toHaveTextContent('Applying to project…');
   });
+
+  it('does not describe an unchanged target as an interrupted applied run', () => {
+    render(<DiffViewer files={[{ path: 'unchanged.py', language: 'python', additions: 0, deletions: 0, lines: [] }]}
+      workspaceChanged sourceApplied phase="applied" />);
+    expect(screen.getByRole('region', { name: 'Code diff' })).not.toHaveTextContent('ended before');
+    expect(screen.getByText('No text hunks were recorded for this target.')).toBeInTheDocument();
+  });
 });

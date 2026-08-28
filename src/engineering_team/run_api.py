@@ -369,6 +369,7 @@ def create_runs_router(
             return
 
         cursor = after
+        last_live_state: tuple[RunPhase, str | None] | None = None
         try:
             while True:
                 events = run_manager.store.events_after(run_id, cursor)
@@ -391,6 +392,13 @@ def create_runs_router(
                     })
                     await websocket.close(code=1000)
                     return
+                live_state = (snapshot.phase, snapshot.trace_id)
+                if live_state != last_live_state:
+                    await websocket.send_json({
+                        "kind": "snapshot",
+                        "snapshot": _public_snapshot(snapshot),
+                    })
+                    last_live_state = live_state
                 await asyncio.to_thread(run_manager.store.wait_after, run_id, cursor, 0.1)
         except WebSocketDisconnect:
             return

@@ -15,11 +15,35 @@ from engineering_team.contracts.models import (
     ArchitectureProposal,
     ImplementationResult,
     ReviewerDecision,
+    ProductSpecification,
 )
 from engineering_team.contracts.state import EngineeringState
 from engineering_team.llm.runtime import LocalModelRuntime, _preserves_governed_facts
 from engineering_team.models.context import build_context
 from engineering_team.observability.langfuse import LangfuseTracer
+
+
+def test_product_can_replace_generic_placeholder_but_not_real_acceptance_facts():
+    candidate = ProductSpecification(objective="recover account", actors=["User"],
+        business_rules=[], constraints=[], acceptance_criteria=["Requirement is fulfilled"],
+        nfrs=[], ambiguities=[], assumptions=[], source_requirement="recover account")
+    detailed = candidate.model_copy(update={"acceptance_criteria": ["Recovery token expires after 15 minutes"]})
+    assert _preserves_governed_facts(candidate.model_dump(mode="json"), detailed)
+    governed = candidate.model_copy(update={"acceptance_criteria": ["Recovery token expires after 15 minutes"]})
+    weakened = governed.model_copy(update={"acceptance_criteria": ["Token exists"]})
+    assert not _preserves_governed_facts(governed.model_dump(mode="json"), weakened)
+    rewritten = detailed.model_copy(update={"source_requirement": "different request"})
+    assert not _preserves_governed_facts(candidate.model_dump(mode="json"), rewritten)
+
+
+def test_applied_python_must_parse_without_silently_unescaping_source():
+    candidate = ImplementationResult(action_mode=ActionMode.APPLIED, changed_files=["app.py"],
+        diff="pending", evidence=["read:app.py"], validation_result="pending", security_surface_changed=False)
+    for content in ["value = 1\nprint(value)\n", 'PATTERN = r"\\n"']:
+        actual = candidate.model_copy(update={"file_contents": {"app.py": content}})
+        assert _preserves_governed_facts(candidate.model_dump(mode="json"), actual)
+    broken = candidate.model_copy(update={"file_contents": {"app.py": "value = 1\\nprint(value)\\n"}})
+    assert not _preserves_governed_facts(candidate.model_dump(mode="json"), broken)
 
 
 def test_runtime_routes_model_and_validates_actual_structured_response() -> None:

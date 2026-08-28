@@ -18,3 +18,5 @@ langfuse-local/
 evaluation/reports/traces/
 evaluation/reports/ui-audit-*
 .worktrees/
+.DS_Store
+.impeccable/

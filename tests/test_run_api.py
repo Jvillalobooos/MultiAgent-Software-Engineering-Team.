@@ -858,6 +858,37 @@ def test_event_get_and_websocket_reconnect_replay_only_missing_events(tmp_path: 
     assert client.get("/api/runs/run-a").status_code == 200
 
 
+def test_websocket_publishes_active_phase_transitions_without_agent_events(tmp_path: Path, monkeypatch: Any) -> None:
+    store = RunStore(tmp_path / "records")
+    manager = RunManager(settings=_settings(tmp_path), store=store,
+                         executor=lambda *_: _completed_state("run-live"))
+    store.create(RunSnapshot(
+        run_id="run-live", project_path=str(tmp_path / "source"),
+        workspace_path=str(tmp_path / "copy"), message="work", phase=RunPhase.QUEUED,
+        source_hashes={"private": "must not leave backend"},
+    ))
+    waits = 0
+
+    def advance(*_args):
+        nonlocal waits
+        waits += 1
+        if waits == 1:
+            store.transition("run-live", RunPhase.PREPARING)
+            store.transition("run-live", RunPhase.RUNNING)
+        else:
+            store.finish("run-live", {"review": {"status": "APPROVED"}}, RunPhase.APPROVED)
+
+    monkeypatch.setattr(store, "wait_after", advance)
+    with _client(manager).websocket_connect("/ws/runs/run-live") as websocket:
+        first = websocket.receive_json()
+        assert first["snapshot"]["phase"] == "queued"
+        running = websocket.receive_json()
+        terminal = websocket.receive_json()
+    assert running["snapshot"]["phase"] == "running"
+    assert terminal["snapshot"]["phase"] == "approved"
+    assert "source_hashes" not in running["snapshot"]
+
+
 def test_websocket_replays_event_appended_during_terminal_transition(
     tmp_path: Path, monkeypatch: Any,
 ) -> None:
@@ -1016,7 +1047,9 @@ def test_post_to_real_langgraph_to_websocket_delivers_real_final_report(tmp_path
         while True:
             payload = websocket.receive_json()
             payloads.append(payload)
-            if payload["kind"] == "snapshot":
+            if payload["kind"] == "snapshot" and payload["snapshot"]["phase"] not in {
+                "queued", "preparing", "running", "applying",
+            }:
                 break
 
     assert visited == ["Product", "Architecture", "Developer", "Security", "Testing", "Reviewer"]

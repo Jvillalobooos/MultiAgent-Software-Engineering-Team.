@@ -231,7 +231,7 @@ export function DiffViewer({ files, workspaceChanged, sourceApplied, applyResult
                     <span className="font-mono text-mist">{file?.path}</span>.
                   </p>
                   <p className="mt-1 text-[11px] text-mist">
-                    The run named this file as a target but ended before any hunks were written.
+                    No text hunks were recorded for this target.
                   </p>
                 </td>
               </tr>

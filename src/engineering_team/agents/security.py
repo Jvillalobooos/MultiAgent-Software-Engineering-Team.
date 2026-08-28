@@ -20,10 +20,16 @@ class SecurityAgent(AgentBase[SecurityReview]):
 
     def execute(self, envelope: ContextEnvelope) -> SecurityReview:
         specification = envelope.state_projection.get("specification")
-        requirement = getattr(specification, "source_requirement", "").lower()
+        requirement = " ".join(getattr(specification, "source_requirement", "").lower().split())
         sources = list(dict.fromkeys(item.source for item in envelope.rag_evidence))
+        # A fresh scan can verify remediation of an earlier failure. Keep all
+        # attempts in the envelope/audit, but gate on the latest result for the
+        # same tool and scope; success for another scope cannot clear a failure.
+        latest_tools = {
+            (item.tool_name, item.input_summary): item for item in envelope.tool_results
+        }
         failed_tools = [
-            item for item in envelope.tool_results
+            item for item in latest_tools.values()
             if item.status not in {ToolStatus.SUCCESS}
         ]
         if failed_tools:
@@ -39,7 +45,10 @@ class SecurityAgent(AgentBase[SecurityReview]):
                 findings=[finding], recommendations=[finding.recommendation], sources=sources,
                 checklist=_checklist("owasp"),
             )
-        if "non-expiring" in requirement or "never expires" in requirement:
+        if any(phrase in requirement for phrase in (
+            "non-expiring", "never expires", "nunca expire", "nunca expira",
+            "sin expiración", "sin expiracion",
+        )):
             finding = SecurityFinding(
                 category="sensitive information",
                 severity=SecuritySeverity.HIGH,
@@ -56,7 +65,11 @@ class SecurityAgent(AgentBase[SecurityReview]):
                 sources=finding.sources,
                 checklist=_checklist("sensitive_information"),
             )
-        if "any user" in requirement or "arbitrary" in requirement:
+        if ("any user" in requirement or "arbitrary" in requirement or
+            ("cualquier usuario" in requirement and any(phrase in requirement for phrase in (
+                "sin requerir sesión", "sin requerir sesion", "sin autorización",
+                "sin autorizacion", "únicamente el id", "unicamente el id",
+            )))):
             finding = SecurityFinding(
                 category="authorization/IDOR",
                 severity=SecuritySeverity.HIGH,

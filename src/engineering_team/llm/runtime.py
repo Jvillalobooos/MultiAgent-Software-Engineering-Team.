@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import ast
 import time
 from typing import Any
 
@@ -218,7 +219,15 @@ def _preserves_governed_facts(candidate: dict[str, Any], parsed: BaseModel) -> b
         file_contents = actual.get("file_contents", {})
         if set(file_contents) != set(candidate.get("changed_files", [])):
             return False
-        return all(str(content).strip() for content in file_contents.values())
+        if not all(str(content).strip() for content in file_contents.values()):
+            return False
+        for path, content in file_contents.items():
+            if path.endswith(".py"):
+                try:
+                    ast.parse(content, filename=path)
+                except (SyntaxError, ValueError):
+                    return False
+        return True
     guarded_lists: dict[str, tuple[str, ...]] = {
         "ProductSpecification": (
             "business_rules", "constraints", "acceptance_criteria", "nfrs",
@@ -239,9 +248,15 @@ def _preserves_governed_facts(candidate: dict[str, Any], parsed: BaseModel) -> b
     if any(actual.get(key) != candidate.get(key) for key in guarded_values.get(model_name, ())):
         return False
     if any(
-        not _contains_all(actual.get(key, []), candidate.get(key, []))
+        not _contains_all(actual.get(key, []), (
+            [] if model_name == "ProductSpecification" and key == "acceptance_criteria"
+            and candidate.get(key) == ["Requirement is fulfilled"]
+            else candidate.get(key, [])
+        ))
         for key in guarded_lists.get(model_name, ())
     ):
+        return False
+    if model_name == "ProductSpecification" and not actual.get("acceptance_criteria"):
         return False
     exact_evidence_lists: dict[str, tuple[str, ...]] = {
         "ArchitectureProposal": ("evidence_references",),
