@@ -63,7 +63,7 @@ function highlight(text: string, language: ChangedFile['language']): React.React
         if (!part) return null;
         if (part.startsWith('#')) {
           return (
-            <span key={i} className="text-mist/50">
+            <span key={i} className="text-mist/80">
               {part}
             </span>);
 
@@ -134,15 +134,18 @@ export function DiffViewer({ files, workspaceChanged, sourceApplied, applyResult
   return (
     <section className="glass flex min-h-0 flex-col rounded-2xl shadow-panel" aria-label="Code diff">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hull-400/35 px-4 py-3">
-        <h2 className="text-sm font-semibold tracking-tight text-slate-100">Code changes</h2>
+        <h3 className="text-sm font-semibold tracking-tight text-slate-100">Code changes</h3>
         <span
+          title={
+            sourceApplied ? 'These changes are in your project on disk.' :
+            'These changes exist only in this run\u2019s isolated copy. Your project is unchanged.'}
           className={`rounded border px-2 py-1 text-xs ${provenanceClass}`}>
           {provenance}
         </span>
       </div>
 
       {files.length === 0 ?
-      <p className="px-4 py-8 text-center font-mono text-[11px] text-mist/60">
+      <p className="px-4 py-8 text-center font-mono text-[11px] text-mist/80">
           This run proposed no file changes.
         </p> :
       <>
@@ -165,10 +168,10 @@ export function DiffViewer({ files, workspaceChanged, sourceApplied, applyResult
               className={`relative flex shrink-0 items-center gap-2 rounded-md px-3 py-2 font-mono text-[11px] transition-colors duration-200 ease-command ${
               active ?
               'bg-electric/10 text-slate-100' :
-              'text-mist/70 hover:bg-hull-600/50 hover:text-slate-200'}`
+              'text-mist hover:bg-hull-600/50 hover:text-slate-200'}`
               }>
               
-              <Icon className={`h-3.5 w-3.5 ${active ? 'text-electric' : 'text-mist/50'}`} />
+              <Icon className={`h-3.5 w-3.5 ${active ? 'text-electric' : 'text-mist/80'}`} />
               {f.path}
               <span className="text-neon/90" aria-label={`${f.additions} added`}>+{f.additions}</span>
               <span className="text-alert/90" aria-label={`${f.deletions} removed`}>-{f.deletions}</span>
@@ -190,7 +193,7 @@ export function DiffViewer({ files, workspaceChanged, sourceApplied, applyResult
         aria-labelledby={file ? `${tabId}-tab-${file.path}` : undefined}
         tabIndex={0}
         className="thin-scroll min-h-0 flex-1 overflow-auto py-2 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-electric">
-        <table className="w-full border-collapse font-mono text-[11.5px] leading-[1.65]">
+        <table className="w-full border-collapse font-mono text-[11px] leading-[1.65]">
           <tbody>
             {lines.map((line, i) =>
             <tr key={i} className={LINE_STYLE[line.type]}>
@@ -206,7 +209,7 @@ export function DiffViewer({ files, workspaceChanged, sourceApplied, applyResult
                 'text-neon' :
                 line.type === 'del' ?
                 'text-alert' :
-                'text-mist/45'}`
+                'text-mist/80'}`
                 }>
                 
                   {SIGN[line.type]}
@@ -223,11 +226,11 @@ export function DiffViewer({ files, workspaceChanged, sourceApplied, applyResult
             {lines.length === 0 &&
             <tr>
                 <td colSpan={4} className="px-4 py-6 text-center">
-                  <p className="text-[12.5px] text-slate-300">
+                  <p className="text-[12px] text-slate-300">
                     No changes were recorded for{' '}
                     <span className="font-mono text-mist">{file?.path}</span>.
                   </p>
-                  <p className="mt-1 text-[11.5px] text-mist/70">
+                  <p className="mt-1 text-[11px] text-mist">
                     The run named this file as a target but ended before any hunks were written.
                   </p>
                 </td>

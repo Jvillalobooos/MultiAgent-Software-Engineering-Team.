@@ -48,7 +48,7 @@ function EventCard({ event }: {event: RunEvent;}) {
             {event.name}
           </span>
         </div>
-        <span className="shrink-0 font-mono text-[9.5px] tabular-nums text-mist/45">
+        <span className="shrink-0 font-mono text-[10px] tabular-nums text-mist/80">
           {formatClock(event.at)}
         </span>
       </div>
@@ -58,39 +58,39 @@ function EventCard({ event }: {event: RunEvent;}) {
       </p>
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <span className="rounded border border-hull-400/55 px-1.5 py-[1px] font-mono text-[9px] uppercase tracking-[0.1em] text-mist/60">
+        <span className="rounded border border-hull-400/55 px-1.5 py-[1px] font-mono text-[10px] uppercase tracking-[0.1em] text-mist/80">
           {AGENT_LABELS[event.agent]} · it {event.iteration}
         </span>
         {event.type === 'rag' &&
-        <span className="rounded border border-plasma/40 bg-plasma/10 px-1.5 py-[1px] font-mono text-[9px] text-plasma">
+        <span className="rounded border border-plasma/40 bg-plasma/10 px-1.5 py-[1px] font-mono text-[10px] text-plasma">
             score {Number(event.metadata.relevance).toFixed(2)}
           </span>
         }
         {toolStatus &&
         <span
-          className={`rounded border px-1.5 py-[1px] font-mono text-[9px] uppercase tracking-[0.1em] ${TOOL_STATUS_CLASS[toolStatus]}`}>
+          className={`rounded border px-1.5 py-[1px] font-mono text-[10px] uppercase tracking-[0.1em] ${TOOL_STATUS_CLASS[toolStatus]}`}>
           
             {toolStatus}
           </span>
         }
         {event.usage_details &&
-        <span className="rounded border border-neon/35 bg-neon/[0.07] px-1.5 py-[1px] font-mono text-[9px] text-neon/90">
+        <span className="rounded border border-neon/35 bg-neon/[0.07] px-1.5 py-[1px] font-mono text-[10px] text-neon/90">
             {event.usage_details.latency_ms}ms ·{' '}
             {event.usage_details.input_tokens + event.usage_details.output_tokens} tok
           </span>
         }
         {event.type === 'error' &&
-        <span className="rounded border border-alert/40 bg-alert/10 px-1.5 py-[1px] font-mono text-[9px] text-alert">
+        <span className="rounded border border-alert/40 bg-alert/10 px-1.5 py-[1px] font-mono text-[10px] text-alert">
             {String(event.metadata.code)}
           </span>
         }
         {event.model &&
-        <span className="rounded border border-plasma/35 bg-plasma/[0.07] px-1.5 py-[1px] font-mono text-[9px] text-plasma/90">
+        <span className="rounded border border-plasma/35 bg-plasma/[0.07] px-1.5 py-[1px] font-mono text-[10px] text-plasma/90">
             {event.model}
           </span>
         }
         {event.usage_details &&
-        <span className="rounded border border-hull-400/55 px-1.5 py-[1px] font-mono text-[9px] text-mist/60">
+        <span className="rounded border border-hull-400/55 px-1.5 py-[1px] font-mono text-[10px] text-mist/80">
             {event.usage_details.input_tokens} in / {event.usage_details.output_tokens} out
           </span>
         }
@@ -98,16 +98,16 @@ function EventCard({ event }: {event: RunEvent;}) {
 
       {(event.input || event.output) &&
       <details className="mt-2">
-          <summary className="cursor-pointer rounded font-mono text-[9px] uppercase tracking-[0.12em] text-mist/50 transition-colors hover:text-electric focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric">
+          <summary className="cursor-pointer rounded font-mono text-[10px] uppercase tracking-[0.12em] text-mist/80 transition-colors hover:text-electric focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric">
             payload
           </summary>
           {event.input &&
-        <pre className="thin-scroll mt-1.5 max-h-28 overflow-auto whitespace-pre-wrap break-words rounded border border-hull-400/30 bg-hull-900/60 p-2 font-mono text-[9.5px] leading-snug text-mist/70">
+        <pre className="thin-scroll mt-1.5 max-h-28 overflow-auto whitespace-pre-wrap break-words rounded border border-hull-400/30 bg-hull-900/60 p-2 font-mono text-[10px] leading-snug text-mist">
               {clampText(event.input, 1200)}
             </pre>
         }
           {event.output &&
-        <pre className="thin-scroll mt-1.5 max-h-28 overflow-auto whitespace-pre-wrap break-words rounded border border-hull-400/30 bg-hull-900/60 p-2 font-mono text-[9.5px] leading-snug text-slate-300/80">
+        <pre className="thin-scroll mt-1.5 max-h-28 overflow-auto whitespace-pre-wrap break-words rounded border border-hull-400/30 bg-hull-900/60 p-2 font-mono text-[10px] leading-snug text-slate-300/80">
               {clampText(event.output, 1200)}
             </pre>
         }
@@ -124,18 +124,22 @@ export function ActionTicker({ events }: ActionTickerProps) {
       className="glass flex max-h-[420px] min-h-[240px] flex-col rounded-2xl border-y-0 border-r-0">
       
       <div className="flex items-center justify-between border-b border-hull-400/35 px-4 py-3">
-        <h2 className="flex items-center gap-2 text-[12px] font-semibold tracking-tight text-slate-100">
+        <h3 className="flex items-center gap-2 text-[12px] font-semibold tracking-tight text-slate-100">
           <RadioTowerIcon className="h-3.5 w-3.5 text-electric" />
           Action ticker
-        </h2>
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-mist/55">
+        </h3>
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-mist/80">
           {events.length} events
         </span>
       </div>
 
-      <div className="thin-scroll min-h-0 flex-1 overflow-y-auto px-3 py-3">
+      <div
+        tabIndex={0}
+        role="log"
+        aria-label="Run events, newest first"
+        className="thin-scroll min-h-0 flex-1 overflow-y-auto px-3 py-3 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-electric">
         {events.length === 0 ?
-        <p className="mt-6 text-center font-mono text-[11px] text-mist/45">awaiting telemetry…</p> :
+        <p className="mt-6 text-center font-mono text-[11px] text-mist/80">awaiting telemetry…</p> :
 
         <ul className="flex flex-col gap-2">
             <AnimatePresence initial={false}>
@@ -147,7 +151,7 @@ export function ActionTicker({ events }: ActionTickerProps) {
         }
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-hull-400/35 px-4 py-2.5 font-mono text-[9px] uppercase tracking-[0.12em] text-mist/50">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-hull-400/35 px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.12em] text-mist/80">
         <span className="flex items-center gap-1.5">
           <span className="h-1.5 w-1.5 rounded-full bg-plasma" /> rag
         </span>

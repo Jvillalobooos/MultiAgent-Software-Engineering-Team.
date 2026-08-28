@@ -3,16 +3,18 @@ import { render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentGraph } from './AgentGraph';
 
+const noop = () => undefined;
+
 /** jsdom has no matchMedia; each test installs the answer it needs. */
 function mockReducedMotion(reduce: boolean) {
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: reduce,
     media: query,
-    addEventListener: () => {},
-    removeEventListener: () => {},
+    addEventListener: noop,
+    removeEventListener: noop,
     // framer-motion still probes the legacy MediaQueryList API.
-    addListener: () => {},
-    removeListener: () => {},
+    addListener: noop,
+    removeListener: noop,
   }));
 }
 

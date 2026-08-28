@@ -30,8 +30,21 @@ export const PHASE_LABEL: Record<RunPhase, string> = {
   apply_failed: 'Apply failed',
 };
 
+/** What each phase means and what it asks of the operator, in plain language. */
+const PHASE_GUIDANCE: Record<RunPhase, string> = {
+  queued: 'Waiting for a worker. Nothing has run yet and your project is untouched.',
+  preparing: 'Copying your project to an isolated workspace. Your files are not being read by the agents yet.',
+  running: 'The six agents are working on the copy. Your project stays untouched until you approve.',
+  review_required: 'The reviewer did not approve. Read the scorecard below for what failed, then reuse this instruction with more detail and run it again.',
+  approved: 'The reviewer approved the change. Nothing has been written yet — press Apply to write it to your project.',
+  failed: 'The run stopped before producing a result. The errors tab lists what broke. Your project is unchanged.',
+  applying: 'Writing the approved files to your project and running your tests against them.',
+  applied: 'The change is now in your project and the tests were run against it. A backup was kept.',
+  apply_failed: 'The write was attempted and did not verify. Check the apply result below; Restore returns your project to its previous state.',
+};
+
 const PHASE_BADGE_CLASS: Record<RunPhase, string> = {
-  queued: 'border-hull-400/55 text-mist/70',
+  queued: 'border-hull-400/55 text-mist',
   preparing: 'border-electric/45 bg-electric/10 text-electric',
   running: 'border-electric/45 bg-electric/10 text-electric',
   review_required: 'border-amber/45 bg-amber/10 text-amber',
@@ -49,7 +62,7 @@ type Banner = { kind: 'error' | 'success'; text: string };
 function Metric({ label, value, accent }: { label: string; value: string; accent?: string }) {
   return (
     <div className="min-w-0">
-      <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-mist/45">{label}</div>
+      <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-mist/80">{label}</div>
       <div className={`mt-0.5 truncate font-mono text-[12px] tabular-nums ${accent ?? 'text-slate-100'}`}>
         {value}
       </div>
@@ -71,7 +84,7 @@ export function RunCard({ runId, client }: RunCardProps) {
     return (
       <article aria-label={`Run ${runId}`} className="glass flex items-center gap-3 rounded-2xl p-5 shadow-panel">
         <LoaderCircleIcon className="h-4 w-4 animate-spin text-electric" />
-        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-mist/60">Loading run…</span>
+        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-mist/80">Loading run…</span>
       </article>);
 
   }
@@ -157,10 +170,10 @@ export function RunCard({ runId, client }: RunCardProps) {
 
             <HashIcon aria-hidden="true" className="h-3 w-3" />
             trace {shortTrace(traceLabel)}
-            {snapshot.trace_id ? null : <span className="text-mist/45">· pending</span>}
+            {snapshot.trace_id ? null : <span className="text-mist/80">· pending</span>}
           </p>
-          <h3 className="mt-1 break-words text-sm font-semibold leading-snug tracking-tight text-slate-100">{message}</h3>
-          <p className="mt-0.5 truncate font-mono text-[11px] text-mist/60">{project_path}</p>
+          <h2 className="mt-1 break-words text-sm font-semibold leading-snug tracking-tight text-slate-100">{message}</h2>
+          <p className="mt-0.5 truncate font-mono text-[11px] text-mist/80">{project_path}</p>
           <p aria-label="Run write permission" className="mt-2 text-xs text-mist">
             {snapshot.authorize_writes === true ? 'Writes authorized · --authorize-writes'
               : snapshot.authorize_writes === false ? 'Automatic writes not authorized · --dry-run'
@@ -173,6 +186,10 @@ export function RunCard({ runId, client }: RunCardProps) {
 
           {PHASE_LABEL[phase]}
         </span>
+
+        <p className="w-full text-[12px] leading-relaxed text-mist">
+          {PHASE_GUIDANCE[phase]}
+        </p>
       </header>
 
       <section
@@ -189,7 +206,7 @@ export function RunCard({ runId, client }: RunCardProps) {
         <Metric
           label="errors"
           value={String(errorCount)}
-          accent={errorCount > 0 ? 'text-alert' : 'text-mist/70'} />
+          accent={errorCount > 0 ? 'text-alert' : 'text-mist'} />
 
       </section>
 
@@ -223,7 +240,7 @@ export function RunCard({ runId, client }: RunCardProps) {
 
       {!showGraph && runEvents.length > 0 &&
       <details className="rounded-xl border border-hull-400/35 bg-hull-800/40 px-3 py-2">
-          <summary className="cursor-pointer rounded py-1 font-mono text-[11px] uppercase tracking-[0.12em] text-mist/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-electric">
+          <summary className="cursor-pointer rounded py-1 font-mono text-[11px] uppercase tracking-[0.12em] text-mist focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-electric">
             Execution timeline · {runEvents.length} events
           </summary>
           <div className="mt-2">
@@ -240,26 +257,26 @@ export function RunCard({ runId, client }: RunCardProps) {
       <section
         aria-label="Apply result"
         className="flex flex-col gap-2 rounded-xl border border-hull-400/35 bg-hull-800/40 p-3">
-          <h4 className="font-mono text-[11px] uppercase tracking-[0.14em] text-mist/70">
+          <h3 className="font-mono text-[11px] uppercase tracking-[0.14em] text-mist">
             Apply result: {apply_result.status}
-          </h4>
-          <p className="font-mono text-[11.5px] leading-snug text-slate-200">{apply_result.message}</p>
+          </h3>
+          <p className="font-mono text-[11px] leading-snug text-slate-200">{apply_result.message}</p>
           {apply_result.written_paths.length > 0 &&
-          <p className="font-mono text-[11px] text-mist/70">
+          <p className="font-mono text-[11px] text-mist">
               Written: {apply_result.written_paths.join(', ')}
             </p>
           }
           {apply_result.test_exit_code !== null &&
-          <p className="font-mono text-[11px] text-mist/70">
+          <p className="font-mono text-[11px] text-mist">
               Test exit code: {apply_result.test_exit_code}
             </p>
           }
           {apply_result.test_output &&
-          <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded-md border border-hull-400/30 bg-hull-900/50 p-2 font-mono text-[10.5px] text-mist/70">
+          <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded-md border border-hull-400/30 bg-hull-900/50 p-2 font-mono text-[10px] text-mist">
               {apply_result.test_output.slice(-2000)}
             </pre>
           }
-          <p className="font-mono text-[11px] text-mist/70">
+          <p className="font-mono text-[11px] text-mist">
             Backup: {apply_result.backup_path ? 'available' : 'none'}
           </p>
         </section>
@@ -279,7 +296,7 @@ export function RunCard({ runId, client }: RunCardProps) {
                 </button> :
 
           <div role="group" aria-label="Confirm apply" className="glass-soft flex flex-col gap-3 rounded-lg p-4">
-                  <p className="font-mono text-[11.5px] leading-snug text-slate-200">
+                  <p className="font-mono text-[11px] leading-snug text-slate-200">
                     Apply {changed_paths.length} change{changed_paths.length === 1 ? '' : 's'} to{' '}
                     <span className="text-electric">{project_path}</span>? Affected:{' '}
                     {changed_paths.join(', ')}

@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { ChevronRightIcon, HistoryIcon, LayersIcon } from 'lucide-react';
+import { forwardRef, useMemo, useState } from 'react';
+import { ChevronRightIcon, HistoryIcon, LayersIcon, RotateCcwIcon, SearchIcon, XIcon } from 'lucide-react';
 import { RunPhase, RunSummary } from '../../types/mission';
 import { formatRelative, formatTimestamp, projectName, shortTrace } from '../../utils/format';
 import { PHASE_LABEL } from './RunCard';
@@ -8,6 +8,8 @@ interface RunHistoryProps {
   summaries: RunSummary[];
   activeRunId: string | null;
   onOpenRun: (runId: string) => void;
+  /** Load a past instruction back into the composer without launching it. */
+  onReuse: (summary: RunSummary) => void;
 }
 
 /** One logical execution plus every retry of it, newest attempt first. */
@@ -31,7 +33,7 @@ const PHASE_DOT: Record<RunPhase, string> = {
 };
 
 const PHASE_TEXT: Record<RunPhase, string> = {
-  queued: 'text-mist/70',
+  queued: 'text-mist',
   preparing: 'text-electric',
   running: 'text-electric',
   review_required: 'text-amber',
@@ -82,10 +84,11 @@ function PhaseChip({ phase }: { phase: RunPhase }) {
   );
 }
 
-function GroupRow({ group, activeRunId, onOpenRun }: {
+function GroupRow({ group, activeRunId, onOpenRun, onReuse }: {
   group: RunGroup;
   activeRunId: string | null;
   onOpenRun: (runId: string) => void;
+  onReuse: (summary: RunSummary) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const latest = group.attempts[0];
@@ -99,15 +102,16 @@ function GroupRow({ group, activeRunId, onOpenRun }: {
           type="button"
           onClick={() => onOpenRun(latest.run_id)}
           aria-current={isActive ? 'true' : undefined}
+          aria-label={`Open run: ${group.message}`}
           className="flex min-w-0 flex-1 flex-col gap-1.5 px-3 py-2.5 text-left transition-colors hover:bg-hull-600/40 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-electric">
           <div className="flex items-center gap-2">
             <PhaseChip phase={latest.phase} />
-            <span className="ml-auto shrink-0 font-mono text-[10px] text-mist/50" title={formatTimestamp(latest.created_at)}>
+            <span className="ml-auto shrink-0 font-mono text-[10px] text-mist/80" title={formatTimestamp(latest.created_at)}>
               {formatRelative(latest.created_at)}
             </span>
           </div>
           <p className="line-clamp-2 text-[13px] leading-snug text-slate-100">{group.message}</p>
-          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[10px] text-mist/55">
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 font-mono text-[10px] text-mist/80">
             <span className="truncate" title={group.projectPath}>{projectName(group.projectPath)}</span>
             {latest.trace_id && (
               <span className="text-plasma/75" title={`Trace ${latest.trace_id}`}>
@@ -115,6 +119,15 @@ function GroupRow({ group, activeRunId, onOpenRun }: {
               </span>
             )}
           </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onReuse(latest)}
+          aria-label={`Reuse this instruction: ${group.message.slice(0, 60)}`}
+          title="Load this instruction into the composer"
+          className="flex shrink-0 items-center border-l border-hull-400/30 px-2.5 text-mist transition-colors hover:bg-hull-600/40 hover:text-electric focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-electric">
+          <RotateCcwIcon aria-hidden="true" className="h-3.5 w-3.5" />
         </button>
 
         {retries > 0 && (
@@ -140,13 +153,13 @@ function GroupRow({ group, activeRunId, onOpenRun }: {
               <button
                 type="button"
                 onClick={() => onOpenRun(attempt.run_id)}
-                className={`flex w-full items-center gap-2.5 px-3 py-2 text-left font-mono text-[10.5px] transition-colors hover:bg-hull-600/40 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-electric ${
+                className={`flex w-full items-center gap-2.5 px-3 py-2 text-left font-mono text-[10px] transition-colors hover:bg-hull-600/40 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-electric ${
                   attempt.run_id === activeRunId ? 'bg-electric/10' : ''}`}>
-                <span className="w-[76px] shrink-0 uppercase tracking-[0.1em] text-mist/45">
+                <span className="w-[76px] shrink-0 uppercase tracking-[0.1em] text-mist/80">
                   {index === 0 ? 'latest' : `attempt ${group.attempts.length - index}`}
                 </span>
                 <PhaseChip phase={attempt.phase} />
-                <span className="ml-auto shrink-0 text-mist/45" title={formatTimestamp(attempt.created_at)}>
+                <span className="ml-auto shrink-0 text-mist/80" title={formatTimestamp(attempt.created_at)}>
                   {formatRelative(attempt.created_at)}
                 </span>
               </button>
@@ -161,22 +174,65 @@ function GroupRow({ group, activeRunId, onOpenRun }: {
 /** History is a *navigator*, not a feed: it renders one row per execution and never
  *  mounts a run's live subscription, so restarting the backend can no longer stack
  *  every past run on the screen at once. */
-export function RunHistory({ summaries, activeRunId, onOpenRun }: RunHistoryProps) {
-  const groups = useMemo(() => groupRuns(summaries), [summaries]);
+export const RunHistory = forwardRef<HTMLInputElement, RunHistoryProps>(function RunHistory(
+  { summaries, activeRunId, onOpenRun, onReuse }, filterRef,
+) {
+  const [query, setQuery] = useState('');
+  const allGroups = useMemo(() => groupRuns(summaries), [summaries]);
+  const groups = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return allGroups;
+    return allGroups.filter((group) =>
+      group.message.toLowerCase().includes(needle) ||
+      group.projectPath.toLowerCase().includes(needle));
+  }, [allGroups, query]);
 
   return (
     <section aria-label="Run history" className="glass flex min-h-0 flex-col rounded-2xl shadow-panel">
       <div className="flex items-center gap-2 border-b border-hull-400/35 px-4 py-3">
         <HistoryIcon aria-hidden="true" className="h-3.5 w-3.5 text-electric" />
         <h2 className="text-[12px] font-semibold tracking-tight text-slate-100">Run history</h2>
-        <span className="ml-auto font-mono text-[10px] uppercase tracking-[0.14em] text-mist/55">
-          {groups.length} execution{groups.length === 1 ? '' : 's'}
+        <span className="ml-auto font-mono text-[10px] uppercase tracking-[0.14em] text-mist/80">
+          {query ?
+            `${groups.length} of ${allGroups.length}` :
+            `${groups.length} execution${groups.length === 1 ? '' : 's'}`}
         </span>
       </div>
 
+      {allGroups.length > 0 && (
+        <div className="relative border-b border-hull-400/25 px-3 py-2">
+          <SearchIcon
+            aria-hidden="true"
+            className="pointer-events-none absolute left-5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-mist" />
+          <input
+            ref={filterRef}
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            aria-label="Filter runs by instruction or project"
+            placeholder="Filter runs…"
+            className="h-9 w-full rounded-md border border-hull-400/55 bg-hull-800/60 pl-8 pr-16 font-mono text-[11px] text-slate-100 outline-none placeholder:text-mist focus:border-electric focus:ring-1 focus:ring-electric" />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery('')}
+              aria-label="Clear filter"
+              className="absolute right-5 top-1/2 -translate-y-1/2 rounded p-1 text-mist transition-colors hover:text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-electric">
+              <XIcon aria-hidden="true" className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <kbd className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 rounded border border-hull-400/55 px-1.5 py-0.5 font-mono text-[10px] text-mist">
+              /
+            </kbd>
+          )}
+        </div>
+      )}
+
       {groups.length === 0 ? (
-        <p className="px-4 py-8 text-center font-mono text-[11px] text-mist/45">
-          No runs yet. Your executions will be listed here.
+        <p className="px-4 py-8 text-center font-mono text-[11px] text-mist/80">
+          {query ?
+            <>No run matches <span className="text-slate-200">{query}</span>.</> :
+            'No runs yet. Your executions will be listed here.'}
         </p>
       ) : (
         <ul className="thin-scroll flex max-h-[420px] flex-col gap-1.5 overflow-y-auto p-3">
@@ -185,10 +241,11 @@ export function RunHistory({ summaries, activeRunId, onOpenRun }: RunHistoryProp
               key={group.key}
               group={group}
               activeRunId={activeRunId}
-              onOpenRun={onOpenRun} />
+              onOpenRun={onOpenRun}
+              onReuse={onReuse} />
           ))}
         </ul>
       )}
     </section>
   );
-}
+});

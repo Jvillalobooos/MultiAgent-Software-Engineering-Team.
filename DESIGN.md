@@ -44,6 +44,12 @@ typography:
     fontWeight: 400
     lineHeight: 1.3
     letterSpacing: "0.14em"
+  micro:
+    fontFamily: "JetBrains Mono, ui-monospace, SFMono-Regular, monospace"
+    fontSize: "10px"
+    fontWeight: 400
+    lineHeight: 1.3
+    letterSpacing: "0.12em"
 rounded:
   sm: "6px"
   md: "8px"
@@ -162,8 +168,8 @@ meaningful — which is precisely why saturation is rationed.
   is the glass panel body, 600 is the hover state for interactive rows.
 - **Hull 400** (`#243352`): The border and divider color, used at low opacity almost
   everywhere. The most-used token in the system.
-- **Mist** (`#8fa3c4`): Secondary text, labels, units, line numbers. Never below 70%
-  opacity for anything a person must read.
+- **Mist** (`#8fa3c4`): Secondary and tertiary text — labels, units, line numbers. Exactly
+  two steps exist: solid (7.4:1) and 80% (5.1:1).
 - **Ink** (`#dce6f7`): Body text on hull surfaces.
 
 ### Named Rules
@@ -175,6 +181,10 @@ never "pretty accent". A reader who learns the five colors once can read any scr
 **The Signal Ration Rule.** Saturated color covers a small minority of any screen. The
 hull ramp and mist carry structure; color carries state. If a screen looks colorful,
 state has been diluted into decoration.
+
+**The Mist Floor Rule.** Mist is legible at 80% opacity and above; every step below that
+measures under 4.5:1 on all three hull surfaces. Prohibited: `text-mist` at 45–70%, which
+once produced five failing steps that no reader could tell apart anyway.
 
 **The Never-Color-Alone Rule.** Color always travels with a word or a symbol. Phase
 badges carry their label, diff lines carry `+`/`-`, agent nodes carry `active`/`done`,
@@ -200,6 +210,8 @@ log, it is monospaced. Inter appears only where a human is being addressed in se
   error recovery text. Capped at 62–75ch.
 - **Label** (Mono, 11px, tracking 0.14em, uppercase): The workhorse. Phase badges, metric
   captions, provider chips, route hops, column headers, timestamps.
+- **Micro** (Mono, 10px, tracking 0.12em, uppercase): The floor. Legends, units, ordinals,
+  relative times. Nothing renders below this.
 
 ### Named Rules
 
@@ -208,8 +220,12 @@ model names, trace IDs, scores and code are always monospace with `tabular-nums`
 they sit in a column. Prohibited: a run identifier or latency value set in Inter.
 
 **The Tracking Floor Rule.** Uppercase mono labels carry 0.10em–0.18em tracking; at
-9–11px, uppercase without tracking is unreadable. Sentence-case text never gets
+10–11px, uppercase without tracking is unreadable. Sentence-case text never gets
 positive tracking.
+
+**The Seven Steps Rule.** The ramp is 34 / 16 / 14 / 13 / 12 / 11 / 10 and nothing else.
+Every step is a perceptible move. Prohibited: half-pixel steps and 9px, which produced
+four indistinguishable sizes inside a 1.5px band and read as drift, not hierarchy.
 
 ## 4. Elevation
 

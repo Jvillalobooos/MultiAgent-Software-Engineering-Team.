@@ -83,7 +83,7 @@ export function ProjectHeader({ client, selectedProject, onProjectSelected }: Pr
     <header className="glass sticky top-0 z-10 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-b-2xl px-5 py-4 shadow-panel">
       <div className="flex items-center gap-2.5">
         <BrandMark className="h-6 w-6" />
-        <span className="text-sm font-semibold tracking-tight text-slate-50">Multiagent Chat</span>
+        <h1 className="text-sm font-semibold tracking-tight text-slate-50">Multiagent Chat</h1>
       </div>
 
       <div className="min-w-0 flex-1 font-mono text-xs text-mist">
@@ -104,7 +104,7 @@ export function ProjectHeader({ client, selectedProject, onProjectSelected }: Pr
         'border-neon/45 bg-neon/10 text-neon' :
         health === 'offline' ?
         'border-alert/45 bg-alert/10 text-alert' :
-        'border-hull-400/55 text-mist/55'}`
+        'border-hull-400/55 text-mist/80'}`
         }>
 
         {health === 'checking' ? 'checking…' : health}

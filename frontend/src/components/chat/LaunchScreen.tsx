@@ -48,11 +48,11 @@ export function LaunchScreen({ hasProject }: LaunchScreenProps) {
             <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-electric/80" />
             <div className="min-w-0">
               <p className="truncate text-[12px] font-medium text-slate-100">{label}</p>
-              <p className="truncate font-mono text-[9.5px] uppercase tracking-[0.1em] text-mist/55">
+              <p className="truncate font-mono text-[10px] uppercase tracking-[0.1em] text-mist/80">
                 {role}
               </p>
             </div>
-            <span className="ml-auto font-mono text-[9.5px] text-mist/30">{index + 1}</span>
+            <span className="ml-auto font-mono text-[10px] text-mist/80">{index + 1}</span>
           </li>
         )}
       </ol>

@@ -7,16 +7,26 @@ export interface RunSubmission {
   authorizeWrites: boolean;
 }
 
+/** A past instruction loaded back into the composer. `token` changes on every reuse so
+ *  loading the same instruction twice still refills the fields. */
+export interface ComposerPrefill {
+  message: string;
+  testSpec: string;
+  token: number;
+}
+
 interface ChatComposerProps {
   disabled: boolean;
   projectPath: string | null;
+  prefill?: ComposerPrefill | null;
   onSubmit: (submission: RunSubmission) => Promise<void>;
 }
 
 /** Each submission is independent. Write permission is explicit and never carried
  *  over to another project or submission. */
-export function ChatComposer({ disabled, projectPath, onSubmit }: ChatComposerProps) {
+export function ChatComposer({ disabled, projectPath, prefill, onSubmit }: ChatComposerProps) {
   const id = useId();
+  const taskField = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState('');
   const [testSpec, setTestSpec] = useState('');
   const [authorizeWrites, setAuthorizeWrites] = useState(false);
@@ -28,6 +38,16 @@ export function ChatComposer({ disabled, projectPath, onSubmit }: ChatComposerPr
     setAuthorizeWrites(false);
     setError(null);
   }, [projectPath]);
+
+  useEffect(() => {
+    if (!prefill) return;
+    setValue(prefill.message);
+    setTestSpec(prefill.testSpec);
+    setError(null);
+    // Write permission is never inherited from a previous run.
+    setAuthorizeWrites(false);
+    taskField.current?.focus();
+  }, [prefill]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -73,6 +93,7 @@ export function ChatComposer({ disabled, projectPath, onSubmit }: ChatComposerPr
               Task <span className="font-mono text-xs font-normal text-mist">--spec</span>
             </label>
             <textarea
+              ref={taskField}
               id={`${id}-task`}
               aria-label="Task"
               value={value}

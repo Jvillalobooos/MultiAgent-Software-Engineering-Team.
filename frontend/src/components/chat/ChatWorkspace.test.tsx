@@ -13,7 +13,7 @@ describe('ChatWorkspace', () => {
     const client = new FakeRunClient(snapshot);
     client.listRuns = vi.fn().mockResolvedValue([snapshot]);
     render(<ChatWorkspace client={client} />);
-    await userEvent.click(await screen.findByRole('button', { name: /change it/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /open run: change it/i }));
     expect(await screen.findByLabelText('Run write permission')).toHaveTextContent('Writes authorized');
     await userEvent.click(screen.getByText('Test specification', { selector: 'summary' }));
     expect(screen.getByText(snapshot.test_spec)).toBeVisible();
@@ -29,7 +29,7 @@ describe('ChatWorkspace', () => {
     const client = new FakeRunClient(snapshot);
     client.listRuns = vi.fn().mockResolvedValue([snapshot]);
     render(<ChatWorkspace client={client} />);
-    await userEvent.click(await screen.findByRole('button', { name: /change it/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /open run: change it/i }));
     expect(await screen.findByRole('region', { name: 'Code diff' })).toHaveTextContent('Verification failed · project changes retained');
   });
 
@@ -75,8 +75,8 @@ describe('ChatWorkspace', () => {
     // Both runs are still reachable as separate history entries.
     await userEvent.click(screen.getByRole('button', { name: /back to history/i }));
     expect(screen.getByRole('region', { name: 'Run history' })).toHaveTextContent('2 executions');
-    expect(screen.getByRole('button', { name: /first change/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /second change/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /open run: first change/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /open run: second change/i })).toBeInTheDocument();
   });
 
   it('opens on the launch screen and lists stored runs as history instead of mounting them', async () => {
@@ -91,11 +91,76 @@ describe('ChatWorkspace', () => {
     // Restarting the backend must not replay stored runs into the viewport.
     expect(screen.queryByRole('article')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: /an earlier change/i }));
+    await userEvent.click(screen.getByRole('button', { name: /open run: an earlier change/i }));
     expect(await screen.findByRole('article')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /back to history/i }));
     expect(screen.queryByRole('article')).not.toBeInTheDocument();
+  });
+
+  it('filters history by instruction and by project, and says so when nothing matches', async () => {
+    const base = approvedFixture();
+    const client = new FakeRunClient();
+    client.listRuns = vi.fn().mockResolvedValue([
+      { ...base, run_id: 'r1', message: 'fix the median', project_path: 'C:\\projects\\calculator' },
+      { ...base, run_id: 'r2', message: 'add a parser', project_path: 'C:\\projects\\invoices' },
+    ]);
+    render(<ChatWorkspace client={client} />);
+
+    const filter = await screen.findByRole('searchbox', { name: /filter runs/i });
+    await userEvent.type(filter, 'median');
+    expect(screen.getByRole('button', { name: /open run: fix the median/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /open run: add a parser/i })).not.toBeInTheDocument();
+
+    // The project path is searchable too, not just the instruction.
+    await userEvent.clear(filter);
+    await userEvent.type(filter, 'invoices');
+    expect(screen.getByRole('button', { name: /open run: add a parser/i })).toBeInTheDocument();
+
+    await userEvent.clear(filter);
+    await userEvent.type(filter, 'nothing matches this');
+    expect(screen.getByText(/no run matches/i)).toBeInTheDocument();
+  });
+
+  it('reuses a past instruction by refilling the composer without launching a run', async () => {
+    const base = approvedFixture();
+    const client = new FakeRunClient();
+    client.listRuns = vi.fn().mockResolvedValue([
+      { ...base, run_id: 'r1', message: 'fix the median', test_spec: 'cover even-length lists' },
+    ]);
+    render(<ChatWorkspace client={client} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /reuse this instruction/i }));
+
+    expect(screen.getByRole('textbox', { name: 'Task' })).toHaveValue('fix the median');
+    expect(screen.getByRole('textbox', { name: 'Test specification' })).toHaveValue('cover even-length lists');
+    // Reuse prepares a run; it must never spend provider quota on its own.
+    expect(client.requests).toEqual([]);
+    // Write permission is never inherited from the run being reused.
+    expect(screen.getByRole('radio', { name: /dry run/i })).toBeChecked();
+  });
+
+  it('leaves an open run on Escape and returns to history', async () => {
+    const client = new FakeRunClient();
+    render(<ChatWorkspace client={client} />);
+    await userEvent.click(screen.getByRole('button', { name: /select folder/i }));
+    await userEvent.type(screen.getByRole('textbox', { name: /task/i }), 'change it');
+    await userEvent.click(screen.getByRole('button', { name: /execute/i }));
+    await waitFor(() => expect(screen.getByRole('article')).toBeInTheDocument());
+
+    await userEvent.keyboard('{Escape}');
+
+    expect(screen.queryByRole('article')).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Run history' })).toBeInTheDocument();
+  });
+
+  it('explains what the current phase obliges the operator to do', async () => {
+    const client = new FakeRunClient({ ...approvedFixture(), phase: 'review_required' });
+    client.listRuns = vi.fn().mockResolvedValue([{ ...approvedFixture(), phase: 'review_required' }]);
+    render(<ChatWorkspace client={client} />);
+    await userEvent.click(await screen.findByRole('button', { name: /open run: change it/i }));
+
+    expect(await screen.findByText(/the reviewer did not approve/i)).toBeInTheDocument();
   });
 
   it('collapses retries of the same instruction on the same project into one history entry', async () => {

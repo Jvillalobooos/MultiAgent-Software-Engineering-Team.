@@ -12,8 +12,8 @@ const ease = [0.23, 1, 0.32, 1] as const;
 export function DecisionTimeline({ steps }: DecisionTimelineProps) {
   return (
     <section className="glass rounded-2xl p-5 shadow-panel" aria-label="Decision timeline">
-      <h2 className="text-sm font-semibold tracking-tight text-slate-100">Decision timeline</h2>
-      <p className="mt-1 font-mono text-[10.5px] uppercase tracking-[0.14em] text-mist/55">
+      <h3 className="text-sm font-semibold tracking-tight text-slate-100">Decision timeline</h3>
+      <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-mist/80">
         route history · {steps.length} iterations
       </p>
 
@@ -46,13 +46,13 @@ export function DecisionTimeline({ steps }: DecisionTimelineProps) {
 
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                  <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-mist/60">
+                  <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-mist/80">
                     iteration {step.iteration}
                   </span>
                   <span className={`font-mono text-[11px] tracking-[0.12em] ${accent}`}>
                     {step.decision}
                   </span>
-                  <span className="font-mono text-[10.5px] tabular-nums text-mist/45">
+                  <span className="font-mono text-[10px] tabular-nums text-mist/80">
                     {step.at}
                   </span>
                   <span className="ml-auto font-mono text-[11px] tabular-nums text-slate-200">
@@ -60,7 +60,7 @@ export function DecisionTimeline({ steps }: DecisionTimelineProps) {
                   </span>
                 </div>
 
-                <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-300">{step.reason}</p>
+                <p className="mt-1.5 text-[12px] leading-relaxed text-slate-300">{step.reason}</p>
 
                 {!approved &&
                 <div className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-hull-400/55 bg-hull-700/60 px-2 py-1 font-mono text-[10px] text-mist/80">

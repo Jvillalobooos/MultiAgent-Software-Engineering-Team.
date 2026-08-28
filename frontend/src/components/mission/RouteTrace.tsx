@@ -20,7 +20,7 @@ export function RouteTrace({ route }: RouteTraceProps) {
       aria-label="Route taken"
       className="thin-scroll flex items-center gap-1.5 overflow-x-auto rounded-xl border border-hull-400/35 bg-hull-800/40 px-3 py-2.5">
 
-      <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.18em] text-mist/45">
+      <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.18em] text-mist/80">
         route
       </span>
 
@@ -44,7 +44,7 @@ export function RouteTrace({ route }: RouteTraceProps) {
             )}
 
             {opensIteration &&
-            <span className="shrink-0 rounded border border-amber/40 bg-amber/10 px-1.5 py-[1px] font-mono text-[8.5px] uppercase tracking-[0.12em] text-amber">
+            <span className="shrink-0 rounded border border-amber/40 bg-amber/10 px-1.5 py-[1px] font-mono text-[10px] uppercase tracking-[0.12em] text-amber">
                 iter {hop.iteration}
               </span>
             }

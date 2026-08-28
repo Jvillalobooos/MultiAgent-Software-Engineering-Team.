@@ -42,13 +42,13 @@ function Gauge({ label, score, delay }: {label: string;score: number;delay: numb
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3, delay: delay + 0.1, ease }}
-            className="font-mono text-[15px] font-medium tabular-nums text-slate-100">
+            className="font-mono text-[14px] font-medium tabular-nums text-slate-100">
             
             {score}
           </motion.span>
         </div>
       </div>
-      <span className="text-center text-[10.5px] leading-tight text-mist/80">{label}</span>
+      <span className="text-center text-[10px] leading-tight text-mist/80">{label}</span>
     </div>);
 
 }
@@ -61,7 +61,12 @@ export function Scorecard({ review }: ScorecardProps) {
   return (
     <section className="glass rounded-2xl p-5 shadow-panel" aria-label="Reviewer scorecard">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold tracking-tight text-slate-100">Reviewer scorecard</h2>
+        <div>
+          <h3 className="text-sm font-semibold tracking-tight text-slate-100">Reviewer scorecard</h3>
+          <p className="mt-0.5 text-[11px] text-mist">
+            Six weighted subscores out of 100. Below the gate, the run loops back instead of approving.
+          </p>
+        </div>
         <span
           className={`rounded border px-2 py-0.5 font-mono text-[10px] tracking-[0.14em] ${theme.border} ${theme.bg} ${theme.text}`}>
           
@@ -92,7 +97,7 @@ export function Scorecard({ review }: ScorecardProps) {
             <span className="font-mono text-[34px] font-medium leading-none tabular-nums text-slate-50">
               {review.score}
             </span>
-            <span className="mt-1 font-mono text-[9.5px] uppercase tracking-[0.18em] text-mist/60">
+            <span className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-mist/80">
               total / 100
             </span>
           </div>
@@ -110,7 +115,7 @@ export function Scorecard({ review }: ScorecardProps) {
         </div>
       </div>
 
-      <p className="mt-5 border-t border-hull-400/35 pt-4 text-[12.5px] leading-relaxed text-mist">
+      <p className="mt-5 border-t border-hull-400/35 pt-4 text-[12px] leading-relaxed text-mist">
         {review.reason}
       </p>
 
@@ -118,7 +123,7 @@ export function Scorecard({ review }: ScorecardProps) {
       <ul className="mt-3 space-y-1.5">
           {review.problems.map((problem) =>
         <li key={problem} className="flex gap-2 font-mono text-[11px] leading-snug text-amber/85">
-              <span className="text-amber/60">▸</span>
+              <span aria-hidden="true" className="text-amber/80">▸</span>
               {problem}
             </li>
         )}

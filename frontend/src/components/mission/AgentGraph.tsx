@@ -56,7 +56,7 @@ function ProviderBadge({
 }: {provider: Provider | null;fallback?: string;operator?: boolean;}) {
   if (!provider) {
     return (
-      <span className="rounded border border-hull-400/60 px-1.5 py-[2px] font-mono text-[8.5px] uppercase tracking-[0.12em] text-mist/60">
+      <span className="rounded border border-hull-400/60 px-1.5 py-[2px] font-mono text-[10px] uppercase tracking-[0.12em] text-mist/80">
         {operator ? 'operator' : 'pending'}
       </span>);
 
@@ -68,7 +68,7 @@ function ProviderBadge({
       layout
       title={fallback ? `Fallback: ${fallback}` : undefined}
       transition={{ duration: 0.25, ease }}
-      className={`flex items-center gap-1 rounded border px-1.5 py-[2px] font-mono text-[8.5px] uppercase tracking-[0.12em] transition-colors duration-300 ease-command ${
+      className={`flex items-center gap-1 rounded border px-1.5 py-[2px] font-mono text-[10px] uppercase tracking-[0.12em] transition-colors duration-300 ease-command ${
       isCloud ?
       fallback ?
       'border-amber/55 bg-amber/12 text-amber' :
@@ -136,7 +136,7 @@ export function AgentGraph({
                     strokeDasharray={edge.dashed ? '7 7' : undefined}
                     strokeLinecap="round"
                     filter={isActive ? 'url(#edge-glow)' : undefined}
-                    style={{ transition: 'stroke-opacity 300ms cubic-bezier(0.23,1,0.32,1), stroke-width 300ms cubic-bezier(0.23,1,0.32,1)' }} />
+                    style={{ transition: 'stroke-opacity 300ms cubic-bezier(0.23,1,0.32,1)' }} />
                   
                 </g>);
 
@@ -210,19 +210,19 @@ export function AgentGraph({
                     <div className="flex items-center gap-2">
                       <Icon
                         className={`h-4 w-4 transition-colors duration-300 ease-command ${
-                        isActive ? 'text-electric' : isDone ? 'text-neon/75' : 'text-mist/55'}`
+                        isActive ? 'text-electric' : isDone ? 'text-neon/75' : 'text-mist/80'}`
                         }
                         strokeWidth={2} />
                       
                       <div className="leading-tight">
                         <div
-                          className={`text-[12.5px] font-semibold tracking-tight transition-colors duration-300 ease-command ${
+                          className={`text-[12px] font-semibold tracking-tight transition-colors duration-300 ease-command ${
                           isActive ? 'text-slate-50' : isDone ? 'text-slate-200' : 'text-slate-300/70'}`
                           }>
                           
                           {node.label}
                         </div>
-                        <div className="font-mono text-[9px] uppercase tracking-[0.12em] text-mist/50">
+                        <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-mist/80">
                           {node.role}
                         </div>
                       </div>
@@ -234,11 +234,11 @@ export function AgentGraph({
                       fallback={fallbacks[node.id]}
                       operator={node.id === 'human_review'} />
                     {isActive ?
-                    <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-electric/80">
+                    <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-electric/80">
                         active
                       </span> :
                     isDone ?
-                    <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-neon/70">
+                    <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-neon/70">
                         done
                       </span> :
                     null
@@ -267,7 +267,7 @@ export function AgentGraph({
 
           })}
 
-          <div className="pointer-events-none absolute bottom-1 left-2 flex flex-wrap items-center gap-4 font-mono text-[9.5px] uppercase tracking-[0.14em] text-mist/50">
+          <div className="pointer-events-none absolute bottom-1 left-2 flex flex-wrap items-center gap-4 font-mono text-[10px] uppercase tracking-[0.14em] text-mist/80">
             <span className="flex items-center gap-1.5">
               <span className="h-[2px] w-5 rounded-full bg-electric" /> forward
             </span>

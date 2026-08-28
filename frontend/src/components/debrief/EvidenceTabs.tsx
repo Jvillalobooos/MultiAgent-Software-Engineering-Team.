@@ -64,12 +64,12 @@ export function EvidenceTabs({ rag, tools, errors }: EvidenceTabsProps) {
               aria-selected={active}
               onClick={() => setTab(key)}
               className={`relative flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-[12px] transition-colors duration-200 ease-command ${
-              active ? 'bg-electric/10 text-slate-100' : 'text-mist/70 hover:bg-hull-600/50 hover:text-slate-200'}`
+              active ? 'bg-electric/10 text-slate-100' : 'text-mist hover:bg-hull-600/50 hover:text-slate-200'}`
               }>
               
-              <Icon className={`h-3.5 w-3.5 ${active ? 'text-electric' : 'text-mist/50'}`} />
+              <Icon className={`h-3.5 w-3.5 ${active ? 'text-electric' : 'text-mist/80'}`} />
               {label}
-              <span className="font-mono text-[10px] text-mist/55">{count}</span>
+              <span className="font-mono text-[10px] text-mist/80">{count}</span>
               {active &&
               <motion.span
                 layoutId="evidence-tab"
@@ -82,20 +82,24 @@ export function EvidenceTabs({ rag, tools, errors }: EvidenceTabsProps) {
         })}
       </div>
 
-      <div className="thin-scroll max-h-[300px] overflow-y-auto p-3">
+      <div
+        tabIndex={0}
+        role="tabpanel"
+        aria-label={tabs.find((entry) => entry.key === tab)?.label}
+        className="thin-scroll max-h-[300px] overflow-y-auto p-3 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-electric">
         {tab === 'rag' &&
         <ul className="flex flex-col gap-2">
             {rag.map((doc) =>
           <li key={`${doc.source}-${doc.section}`} className="glass-soft rounded-lg p-3">
                 <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                  <span className="font-mono text-[11.5px] text-plasma">{doc.source}</span>
-                  <span className="font-mono text-[11px] text-mist/70">{doc.section}</span>
+                  <span className="font-mono text-[11px] text-plasma">{doc.source}</span>
+                  <span className="font-mono text-[11px] text-mist">{doc.section}</span>
                   <span className="ml-auto rounded border border-plasma/40 bg-plasma/10 px-1.5 py-[1px] font-mono text-[10px] tabular-nums text-plasma">
                     {doc.score.toFixed(2)}
                   </span>
                 </div>
                 <p className="mt-1.5 line-clamp-3 text-[12px] leading-relaxed text-slate-300" title={doc.snippet}>{doc.snippet}</p>
-                <span className="mt-1.5 inline-block font-mono text-[9.5px] uppercase tracking-[0.12em] text-mist/50">
+                <span className="mt-1.5 inline-block font-mono text-[10px] uppercase tracking-[0.12em] text-mist/80">
                   cited by {AGENT_LABELS[doc.agent]}
                 </span>
               </li>
@@ -106,7 +110,7 @@ export function EvidenceTabs({ rag, tools, errors }: EvidenceTabsProps) {
         {tab === 'tools' &&
         <table className="w-full border-collapse text-left">
             <thead>
-              <tr className="font-mono text-[9.5px] uppercase tracking-[0.14em] text-mist/50">
+              <tr className="font-mono text-[10px] uppercase tracking-[0.14em] text-mist/80">
                 <th className="px-3 py-2 font-medium">tool</th>
                 <th className="px-3 py-2 font-medium">status</th>
                 <th className="px-3 py-2 font-medium">duration</th>
@@ -117,10 +121,10 @@ export function EvidenceTabs({ rag, tools, errors }: EvidenceTabsProps) {
             <tbody>
               {tools.map((t, i) =>
             <tr key={`${t.name}-${i}`} className="border-t border-hull-400/30">
-                  <td className="px-3 py-2.5 font-mono text-[11.5px] text-electric">{t.name}</td>
+                  <td className="px-3 py-2.5 font-mono text-[11px] text-electric">{t.name}</td>
                   <td className="px-3 py-2.5">
                     <span
-                  className={`rounded border px-1.5 py-[1px] font-mono text-[9.5px] uppercase tracking-[0.1em] ${TOOL_STATUS_CLASS[t.status]}`}>
+                  className={`rounded border px-1.5 py-[1px] font-mono text-[10px] uppercase tracking-[0.1em] ${TOOL_STATUS_CLASS[t.status]}`}>
                   
                       {t.status}
                     </span>
@@ -128,7 +132,7 @@ export function EvidenceTabs({ rag, tools, errors }: EvidenceTabsProps) {
                   <td className="px-3 py-2.5 font-mono text-[11px] tabular-nums text-slate-300">
                     {t.duration_ms}ms
                   </td>
-                  <td className="px-3 py-2.5 text-[12px] text-mist/85">{AGENT_LABELS[t.agent]}</td>
+                  <td className="px-3 py-2.5 text-[12px] text-mist">{AGENT_LABELS[t.agent]}</td>
                   <td className="max-w-0 px-3 py-2.5 align-top text-[12px] text-slate-300">
                     <ToolDetail detail={t.detail} />
                   </td>
@@ -141,10 +145,10 @@ export function EvidenceTabs({ rag, tools, errors }: EvidenceTabsProps) {
         {tab === 'errors' &&
         <ul className="flex flex-col gap-2">
             {errors.map((err, i) =>
-          <li key={`${err.code}-${i}`} className="glass-soft rounded-lg border-l-2 border-l-alert/60 p-3">
+          <li key={`${err.code}-${i}`} className="rounded-lg border border-alert/30 bg-alert/[0.07] p-3">
                 <div className="flex flex-wrap items-center gap-x-2.5">
-                  <span className="font-mono text-[11.5px] text-alert">{err.code}</span>
-                  <span className="font-mono text-[9.5px] uppercase tracking-[0.12em] text-mist/55">
+                  <span className="font-mono text-[11px] text-alert">{err.code}</span>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-mist/80">
                     {AGENT_LABELS[err.agent]} · iteration {err.iteration}
                   </span>
                 </div>

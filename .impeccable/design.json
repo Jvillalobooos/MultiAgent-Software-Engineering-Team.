@@ -8,87 +8,325 @@
         "role": "primary",
         "displayName": "Telemetry Blue",
         "canonical": "#3fb6ff",
-        "tonalRamp": ["#04121d", "#062338", "#083654", "#0a4a74", "#0e6198", "#187fc0", "#2a9ce2", "#3fb6ff", "#8ed4ff"]
+        "tonalRamp": [
+          "#04121d",
+          "#062338",
+          "#083654",
+          "#0a4a74",
+          "#0e6198",
+          "#187fc0",
+          "#2a9ce2",
+          "#3fb6ff",
+          "#8ed4ff"
+        ]
       },
       "verdict-green": {
         "role": "secondary",
         "displayName": "Verdict Green",
         "canonical": "#49e08a",
-        "tonalRamp": ["#031a0f", "#052d1b", "#084229", "#0c5938", "#127149", "#1d8b5c", "#2eb173", "#49e08a", "#93efbc"]
+        "tonalRamp": [
+          "#031a0f",
+          "#052d1b",
+          "#084229",
+          "#0c5938",
+          "#127149",
+          "#1d8b5c",
+          "#2eb173",
+          "#49e08a",
+          "#93efbc"
+        ]
       },
       "gate-amber": {
         "role": "secondary",
         "displayName": "Gate Amber",
         "canonical": "#ffb545",
-        "tonalRamp": ["#1d1201", "#312003", "#472f06", "#5f400a", "#79530f", "#9c6c15", "#c98e21", "#ffb545", "#ffd497"]
+        "tonalRamp": [
+          "#1d1201",
+          "#312003",
+          "#472f06",
+          "#5f400a",
+          "#79530f",
+          "#9c6c15",
+          "#c98e21",
+          "#ffb545",
+          "#ffd497"
+        ]
       },
       "retrieval-violet": {
         "role": "tertiary",
         "displayName": "Retrieval Violet",
         "canonical": "#a98bff",
-        "tonalRamp": ["#100a26", "#1b1240", "#271b5c", "#34247a", "#432f9b", "#553dbf", "#7c5fe0", "#a98bff", "#cfbcff"]
+        "tonalRamp": [
+          "#100a26",
+          "#1b1240",
+          "#271b5c",
+          "#34247a",
+          "#432f9b",
+          "#553dbf",
+          "#7c5fe0",
+          "#a98bff",
+          "#cfbcff"
+        ]
       },
       "fault-red": {
         "role": "tertiary",
         "displayName": "Fault Red",
         "canonical": "#ff5c6e",
-        "tonalRamp": ["#210409", "#390810", "#520d18", "#6d1421", "#8b1c2b", "#b02838", "#d93e4f", "#ff5c6e", "#ffa3ad"]
+        "tonalRamp": [
+          "#210409",
+          "#390810",
+          "#520d18",
+          "#6d1421",
+          "#8b1c2b",
+          "#b02838",
+          "#d93e4f",
+          "#ff5c6e",
+          "#ffa3ad"
+        ]
       },
       "void": {
         "role": "neutral",
         "displayName": "Void",
         "canonical": "#04060c",
-        "tonalRamp": ["#04060c", "#05080f", "#080d18", "#0b1120", "#101a2d", "#18243c", "#243352", "#3a4d72", "#5a7aaa"]
+        "tonalRamp": [
+          "#04060c",
+          "#05080f",
+          "#080d18",
+          "#0b1120",
+          "#101a2d",
+          "#18243c",
+          "#243352",
+          "#3a4d72",
+          "#5a7aaa"
+        ]
       },
-      "hull-900": { "role": "neutral", "displayName": "Hull 900", "canonical": "#05080f", "tonalRamp": ["#04060c", "#05080f", "#080d18", "#0b1120", "#101a2d", "#18243c", "#243352", "#3a4d72", "#5a7aaa"] },
-      "hull-800": { "role": "neutral", "displayName": "Hull 800", "canonical": "#080d18", "tonalRamp": ["#04060c", "#05080f", "#080d18", "#0b1120", "#101a2d", "#18243c", "#243352", "#3a4d72", "#5a7aaa"] },
-      "hull-700": { "role": "neutral", "displayName": "Hull 700", "canonical": "#0b1120", "tonalRamp": ["#04060c", "#05080f", "#080d18", "#0b1120", "#101a2d", "#18243c", "#243352", "#3a4d72", "#5a7aaa"] },
-      "hull-600": { "role": "neutral", "displayName": "Hull 600", "canonical": "#101a2d", "tonalRamp": ["#04060c", "#05080f", "#080d18", "#0b1120", "#101a2d", "#18243c", "#243352", "#3a4d72", "#5a7aaa"] },
-      "hull-400": { "role": "neutral", "displayName": "Hull 400", "canonical": "#243352", "tonalRamp": ["#04060c", "#05080f", "#080d18", "#0b1120", "#101a2d", "#18243c", "#243352", "#3a4d72", "#5a7aaa"] },
+      "hull-900": {
+        "role": "neutral",
+        "displayName": "Hull 900",
+        "canonical": "#05080f",
+        "tonalRamp": [
+          "#04060c",
+          "#05080f",
+          "#080d18",
+          "#0b1120",
+          "#101a2d",
+          "#18243c",
+          "#243352",
+          "#3a4d72",
+          "#5a7aaa"
+        ]
+      },
+      "hull-800": {
+        "role": "neutral",
+        "displayName": "Hull 800",
+        "canonical": "#080d18",
+        "tonalRamp": [
+          "#04060c",
+          "#05080f",
+          "#080d18",
+          "#0b1120",
+          "#101a2d",
+          "#18243c",
+          "#243352",
+          "#3a4d72",
+          "#5a7aaa"
+        ]
+      },
+      "hull-700": {
+        "role": "neutral",
+        "displayName": "Hull 700",
+        "canonical": "#0b1120",
+        "tonalRamp": [
+          "#04060c",
+          "#05080f",
+          "#080d18",
+          "#0b1120",
+          "#101a2d",
+          "#18243c",
+          "#243352",
+          "#3a4d72",
+          "#5a7aaa"
+        ]
+      },
+      "hull-600": {
+        "role": "neutral",
+        "displayName": "Hull 600",
+        "canonical": "#101a2d",
+        "tonalRamp": [
+          "#04060c",
+          "#05080f",
+          "#080d18",
+          "#0b1120",
+          "#101a2d",
+          "#18243c",
+          "#243352",
+          "#3a4d72",
+          "#5a7aaa"
+        ]
+      },
+      "hull-400": {
+        "role": "neutral",
+        "displayName": "Hull 400",
+        "canonical": "#243352",
+        "tonalRamp": [
+          "#04060c",
+          "#05080f",
+          "#080d18",
+          "#0b1120",
+          "#101a2d",
+          "#18243c",
+          "#243352",
+          "#3a4d72",
+          "#5a7aaa"
+        ]
+      },
       "mist": {
         "role": "neutral",
         "displayName": "Mist",
         "canonical": "#8fa3c4",
-        "tonalRamp": ["#0d1219", "#182130", "#243149", "#324263", "#43567e", "#5a6f99", "#7489b2", "#8fa3c4", "#c2cee1"]
+        "tonalRamp": [
+          "#0d1219",
+          "#182130",
+          "#243149",
+          "#324263",
+          "#43567e",
+          "#5a6f99",
+          "#7489b2",
+          "#8fa3c4",
+          "#c2cee1"
+        ]
       },
       "ink": {
         "role": "neutral",
         "displayName": "Ink",
         "canonical": "#dce6f7",
-        "tonalRamp": ["#12161e", "#1e2530", "#2d3645", "#404c60", "#57657e", "#7385a0", "#96a8c4", "#dce6f7", "#f2f6fd"]
+        "tonalRamp": [
+          "#12161e",
+          "#1e2530",
+          "#2d3645",
+          "#404c60",
+          "#57657e",
+          "#7385a0",
+          "#96a8c4",
+          "#dce6f7",
+          "#f2f6fd"
+        ]
       }
     },
     "typographyMeta": {
-      "display": { "displayName": "Display", "purpose": "The reviewer's total score, and nothing else. The largest element in the system is a measurement." },
-      "headline": { "displayName": "Headline", "purpose": "Panel titles: Code changes, Run history, Mission Debrief." },
-      "title": { "displayName": "Title", "purpose": "Run instructions, agent node names, primary row text." },
-      "body": { "displayName": "Body", "purpose": "Explanatory prose, empty-state guidance, error recovery. Capped at 62-75ch." },
-      "label": { "displayName": "Label", "purpose": "Phase badges, metric captions, provider chips, route hops, column headers, timestamps." }
+      "display": {
+        "displayName": "Display",
+        "purpose": "The reviewer's total score, and nothing else. The largest element in the system is a measurement."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Panel titles: Code changes, Run history, Mission Debrief."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Run instructions, agent node names, primary row text."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Explanatory prose, empty-state guidance, error recovery. Capped at 62-75ch."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Phase badges, metric captions, provider chips, route hops, column headers, timestamps."
+      },
+      "micro": {
+        "displayName": "Micro",
+        "purpose": "Legends, units, ordinals, relative times. The floor; nothing renders below 10px."
+      }
     },
     "shadows": [
-      { "name": "panel", "value": "0 18px 50px -24px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.05)", "purpose": "Ambient grounding for every glass container. The only permanent shadow." },
-      { "name": "glow-electric", "value": "0 0 0 1px rgba(63,182,255,0.45), 0 0 24px -4px rgba(63,182,255,0.55)", "purpose": "The currently-executing agent node. One at a time, ever." },
-      { "name": "glow-neon", "value": "0 0 0 1px rgba(73,224,138,0.45), 0 0 24px -4px rgba(73,224,138,0.5)", "purpose": "Approved or applied confirmation." },
-      { "name": "glow-amber", "value": "0 0 0 1px rgba(255,181,69,0.45), 0 0 24px -4px rgba(255,181,69,0.5)", "purpose": "Human review required." },
-      { "name": "glow-alert", "value": "0 0 0 1px rgba(255,92,110,0.5), 0 0 26px -4px rgba(255,92,110,0.55)", "purpose": "Failure states." }
+      {
+        "name": "panel",
+        "value": "0 18px 50px -24px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.05)",
+        "purpose": "Ambient grounding for every glass container. The only permanent shadow."
+      },
+      {
+        "name": "glow-electric",
+        "value": "0 0 0 1px rgba(63,182,255,0.45), 0 0 24px -4px rgba(63,182,255,0.55)",
+        "purpose": "The currently-executing agent node. One at a time, ever."
+      },
+      {
+        "name": "glow-neon",
+        "value": "0 0 0 1px rgba(73,224,138,0.45), 0 0 24px -4px rgba(73,224,138,0.5)",
+        "purpose": "Approved or applied confirmation."
+      },
+      {
+        "name": "glow-amber",
+        "value": "0 0 0 1px rgba(255,181,69,0.45), 0 0 24px -4px rgba(255,181,69,0.5)",
+        "purpose": "Human review required."
+      },
+      {
+        "name": "glow-alert",
+        "value": "0 0 0 1px rgba(255,92,110,0.5), 0 0 26px -4px rgba(255,92,110,0.55)",
+        "purpose": "Failure states."
+      }
     ],
     "motion": [
-      { "name": "ease-command", "value": "cubic-bezier(0.23, 1, 0.32, 1)", "purpose": "The single easing curve for every state transition in the product." },
-      { "name": "duration-state", "value": "200ms", "purpose": "Color and border transitions on hover, focus and selection." },
-      { "name": "duration-reveal", "value": "300ms", "purpose": "Node state changes and panel content transitions." },
-      { "name": "particle-cycle", "value": "1200ms forward / 1600ms rejection", "purpose": "One traversal of a graph edge by a telemetry particle; loops indefinitely while the hop is current." },
-      { "name": "particle-stagger", "value": "0 / 0.34 / 0.67 of cycle", "purpose": "Entry offsets that keep the three-particle stream continuous rather than clumped." }
+      {
+        "name": "ease-command",
+        "value": "cubic-bezier(0.23, 1, 0.32, 1)",
+        "purpose": "The single easing curve for every state transition in the product."
+      },
+      {
+        "name": "duration-state",
+        "value": "200ms",
+        "purpose": "Color and border transitions on hover, focus and selection."
+      },
+      {
+        "name": "duration-reveal",
+        "value": "300ms",
+        "purpose": "Node state changes and panel content transitions."
+      },
+      {
+        "name": "particle-cycle",
+        "value": "1200ms forward / 1600ms rejection",
+        "purpose": "One traversal of a graph edge by a telemetry particle; loops indefinitely while the hop is current."
+      },
+      {
+        "name": "particle-stagger",
+        "value": "0 / 0.34 / 0.67 of cycle",
+        "purpose": "Entry offsets that keep the three-particle stream continuous rather than clumped."
+      }
     ],
     "surfaces": [
-      { "name": "circuit-grid", "value": "background-color:#04060c; background-image: linear-gradient(rgba(63,182,255,0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(63,182,255,0.055) 1px, transparent 1px), linear-gradient(rgba(63,182,255,0.028) 1px, transparent 1px), linear-gradient(90deg, rgba(63,182,255,0.028) 1px, transparent 1px), radial-gradient(circle at 18% 12%, rgba(63,182,255,0.1), transparent 45%), radial-gradient(circle at 82% 82%, rgba(169,139,255,0.08), transparent 50%); background-size: 128px 128px, 128px 128px, 32px 32px, 32px 32px, 100% 100%, 100% 100%;", "purpose": "The page ground behind every screen." },
-      { "name": "glass", "value": "background-color: rgba(11,17,32,0.66); backdrop-filter: blur(14px); border: 1px solid rgba(90,122,170,0.22);", "purpose": "The panel material. Structure, not decoration." },
-      { "name": "glass-soft", "value": "background-color: rgba(11,17,32,0.42); backdrop-filter: blur(10px); border: 1px solid rgba(90,122,170,0.16);", "purpose": "Nested content inside a glass panel." }
+      {
+        "name": "circuit-grid",
+        "value": "background-color:#04060c; background-image: linear-gradient(rgba(63,182,255,0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(63,182,255,0.055) 1px, transparent 1px), linear-gradient(rgba(63,182,255,0.028) 1px, transparent 1px), linear-gradient(90deg, rgba(63,182,255,0.028) 1px, transparent 1px), radial-gradient(circle at 18% 12%, rgba(63,182,255,0.1), transparent 45%), radial-gradient(circle at 82% 82%, rgba(169,139,255,0.08), transparent 50%); background-size: 128px 128px, 128px 128px, 32px 32px, 32px 32px, 100% 100%, 100% 100%;",
+        "purpose": "The page ground behind every screen."
+      },
+      {
+        "name": "glass",
+        "value": "background-color: rgba(11,17,32,0.66); backdrop-filter: blur(14px); border: 1px solid rgba(90,122,170,0.22);",
+        "purpose": "The panel material. Structure, not decoration."
+      },
+      {
+        "name": "glass-soft",
+        "value": "background-color: rgba(11,17,32,0.42); backdrop-filter: blur(10px); border: 1px solid rgba(90,122,170,0.16);",
+        "purpose": "Nested content inside a glass panel."
+      }
     ],
     "breakpoints": [
-      { "name": "md", "value": "768px" },
-      { "name": "lg", "value": "1024px" },
-      { "name": "xl", "value": "1280px" },
-      { "name": "content-max", "value": "1200px" }
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      },
+      {
+        "name": "content-max",
+        "value": "1200px"
+      }
     ]
   },
   "components": [
@@ -113,7 +351,7 @@
       "kind": "input",
       "refersTo": "input-field",
       "description": "Composer task and test-specification fields. Label is always visible and pairs with the equivalent CLI flag.",
-      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Task <em>--spec</em></span><textarea class=\"ds-field-input\" rows=\"2\" placeholder=\"Describe the change you want…\"></textarea></label>",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Task <em>--spec</em></span><textarea class=\"ds-field-input\" rows=\"2\" placeholder=\"Describe the change you want\u2026\"></textarea></label>",
       "css": ".ds-field { display: block; } .ds-field-label { display: block; margin-bottom: 4px; color: #f1f5f9; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 13px; font-weight: 500; } .ds-field-label em { margin-left: 8px; color: #8fa3c4; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; font-style: normal; font-weight: 400; } .ds-field-input { width: 100%; min-height: 56px; padding: 6px 12px; border: 1px solid #243352; border-radius: 8px; background: #080d18; color: #f1f5f9; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 14px; line-height: 1.6; resize: vertical; outline: none; } .ds-field-input::placeholder { color: #8fa3c4; } .ds-field-input:focus { border-color: #3fb6ff; box-shadow: 0 0 0 1px #3fb6ff; }"
     },
     {
@@ -136,15 +374,15 @@
       "name": "Agent Node",
       "kind": "custom",
       "refersTo": null,
-      "description": "The graph's signature element. Three states — idle, active, done — each derived from recorded run events, never simulated.",
-      "html": "<div class=\"ds-nodes\"><div class=\"ds-node ds-node-done\"><div class=\"ds-node-top\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"8\" height=\"4\" x=\"8\" y=\"2\" rx=\"1\"/><path d=\"M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2\"/></svg><div><p class=\"ds-node-name\">Product</p><p class=\"ds-node-role\">SPEC INTAKE</p></div></div><div class=\"ds-node-foot\"><span class=\"ds-chip-cloud\">CLOUD</span><span class=\"ds-node-state ds-state-done\">done</span></div></div><div class=\"ds-node ds-node-active\"><div class=\"ds-node-top\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m18 16 4-4-4-4\"/><path d=\"m6 8-4 4 4 4\"/><path d=\"m14.5 4-5 16\"/></svg><div><p class=\"ds-node-name\">Developer</p><p class=\"ds-node-role\">CODE SYNTHESIS</p></div></div><div class=\"ds-node-foot\"><span class=\"ds-chip-local\">OLLAMA · LOCAL</span><span class=\"ds-node-state ds-state-active\">active</span></div></div></div>",
+      "description": "The graph's signature element. Three states \u2014 idle, active, done \u2014 each derived from recorded run events, never simulated.",
+      "html": "<div class=\"ds-nodes\"><div class=\"ds-node ds-node-done\"><div class=\"ds-node-top\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect width=\"8\" height=\"4\" x=\"8\" y=\"2\" rx=\"1\"/><path d=\"M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2\"/></svg><div><p class=\"ds-node-name\">Product</p><p class=\"ds-node-role\">SPEC INTAKE</p></div></div><div class=\"ds-node-foot\"><span class=\"ds-chip-cloud\">CLOUD</span><span class=\"ds-node-state ds-state-done\">done</span></div></div><div class=\"ds-node ds-node-active\"><div class=\"ds-node-top\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m18 16 4-4-4-4\"/><path d=\"m6 8-4 4 4 4\"/><path d=\"m14.5 4-5 16\"/></svg><div><p class=\"ds-node-name\">Developer</p><p class=\"ds-node-role\">CODE SYNTHESIS</p></div></div><div class=\"ds-node-foot\"><span class=\"ds-chip-local\">OLLAMA \u00b7 LOCAL</span><span class=\"ds-node-state ds-state-active\">active</span></div></div></div>",
       "css": ".ds-nodes { display: flex; gap: 16px; flex-wrap: wrap; } .ds-node { width: 176px; padding: 10px 12px; border: 1px solid; border-radius: 12px; display: flex; flex-direction: column; justify-content: space-between; gap: 10px; transition: all 300ms cubic-bezier(0.23,1,0.32,1); } .ds-node-done { border-color: rgba(73,224,138,0.3); background: rgba(8,13,24,0.7); } .ds-node-active { border-color: rgba(63,182,255,0.7); background: rgba(63,182,255,0.09); box-shadow: 0 0 0 1px rgba(63,182,255,0.45), 0 0 24px -4px rgba(63,182,255,0.55); } .ds-node-top { display: flex; align-items: center; gap: 8px; } .ds-node-top svg { width: 16px; height: 16px; flex-shrink: 0; } .ds-node-done .ds-node-top svg { color: rgba(73,224,138,0.75); } .ds-node-active .ds-node-top svg { color: #3fb6ff; } .ds-node-name { margin: 0; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 12.5px; font-weight: 600; letter-spacing: -0.01em; color: #f8fafc; } .ds-node-role { margin: 0; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: rgba(143,163,196,0.5); } .ds-node-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .ds-chip-cloud, .ds-chip-local { padding: 2px 6px; border: 1px solid; border-radius: 4px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.12em; } .ds-chip-cloud { border-color: rgba(169,139,255,0.5); background: rgba(169,139,255,0.12); color: #a98bff; } .ds-chip-local { border-color: rgba(73,224,138,0.45); background: rgba(73,224,138,0.1); color: #49e08a; } .ds-node-state { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 0.14em; } .ds-state-active { color: rgba(63,182,255,0.8); } .ds-state-done { color: rgba(73,224,138,0.7); }"
     },
     {
       "name": "Diff Line",
       "kind": "custom",
       "refersTo": null,
-      "description": "Added, removed and context lines. Background tint plus a sign column — never a colored side stripe.",
+      "description": "Added, removed and context lines. Background tint plus a sign column \u2014 never a colored side stripe.",
       "html": "<table class=\"ds-diff\"><tbody><tr class=\"ds-diff-meta\"><td class=\"ds-diff-no\"></td><td class=\"ds-diff-no\"></td><td class=\"ds-diff-sign\">@</td><td class=\"ds-diff-code\">@@ proposed @@</td></tr><tr class=\"ds-diff-add\"><td class=\"ds-diff-no\"></td><td class=\"ds-diff-no\">8</td><td class=\"ds-diff-sign ds-sign-add\">+</td><td class=\"ds-diff-code\">def potencia(base, exponente):</td></tr><tr class=\"ds-diff-del\"><td class=\"ds-diff-no\">7</td><td class=\"ds-diff-no\"></td><td class=\"ds-diff-sign ds-sign-del\">-</td><td class=\"ds-diff-code\">pass</td></tr></tbody></table>",
       "css": ".ds-diff { width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; line-height: 1.65; } .ds-diff-add { background: rgba(73,224,138,0.09); } .ds-diff-del { background: rgba(255,92,110,0.09); } .ds-diff-meta { background: rgba(16,26,45,0.45); color: #a98bff; } .ds-diff-no { width: 48px; padding: 0 4px 0 12px; text-align: right; vertical-align: top; color: rgba(143,163,196,0.8); font-variant-numeric: tabular-nums; user-select: none; } .ds-diff-sign { width: 16px; padding: 0 4px 0 8px; border-left: 1px solid rgba(36,51,82,0.3); vertical-align: top; color: rgba(143,163,196,0.45); user-select: none; } .ds-sign-add { color: #49e08a; } .ds-sign-del { color: #ff5c6e; } .ds-diff-code { padding-right: 16px; vertical-align: top; white-space: pre-wrap; word-break: break-word; color: #cbd5e1; }"
     },
@@ -159,7 +397,7 @@
   ],
   "narrative": {
     "northStar": "The Flight Deck",
-    "overview": "Instrumentation you trust because it reads live. The operator is watching six agents work on a real repository and deciding whether the result reaches their source tree. Every panel is an instrument: it is connected to something the run actually recorded, it is ordered by how much it matters to that decision, and it stops moving when the underlying work stops. The dark hull is not a mood choice — it is the ground that lets a small number of saturated status colors read instantly as signal.\n\nDensity is welcome; competition for attention is not. Screens carry a great deal of information at once — a graph, a live event ticker, a diff, a scorecard, model usage — and stay legible because only one thing is primary per surface and because nearly all supporting data is set in monospace at label scale. The largest type in the entire system is a tabular monospaced number (the reviewer's score). That is deliberate: the loudest element is a measurement, not a headline.\n\nThis system explicitly rejects the generic SaaS dashboard — identical card grids, oversized hero metrics with gradients, decorative iconography standing in for information. It equally rejects the CI log viewer: raw output with flat hierarchy is what this interface exists to replace. Above all it rejects performing activity it is not doing; motion here is evidence, and a graph that looks alive while receiving no data is a defect this codebase has already had to fix.",
+    "overview": "Instrumentation you trust because it reads live. The operator is watching six agents work on a real repository and deciding whether the result reaches their source tree. Every panel is an instrument: it is connected to something the run actually recorded, it is ordered by how much it matters to that decision, and it stops moving when the underlying work stops. The dark hull is not a mood choice \u2014 it is the ground that lets a small number of saturated status colors read instantly as signal.\n\nDensity is welcome; competition for attention is not. Screens carry a great deal of information at once \u2014 a graph, a live event ticker, a diff, a scorecard, model usage \u2014 and stay legible because only one thing is primary per surface and because nearly all supporting data is set in monospace at label scale. The largest type in the entire system is a tabular monospaced number (the reviewer's score). That is deliberate: the loudest element is a measurement, not a headline.\n\nThis system explicitly rejects the generic SaaS dashboard \u2014 identical card grids, oversized hero metrics with gradients, decorative iconography standing in for information. It equally rejects the CI log viewer: raw output with flat hierarchy is what this interface exists to replace. Above all it rejects performing activity it is not doing; motion here is evidence, and a graph that looks alive while receiving no data is a defect this codebase has already had to fix.",
     "keyCharacteristics": [
       "Dark hull ground (#04060c-#0b1120) with a fine circuit-grid texture",
       "Translucent glass panels as the single container material",
@@ -168,16 +406,54 @@
       "Tonal depth by default; glow reserved exclusively for live state"
     ],
     "rules": [
-      { "name": "The One Meaning Rule", "body": "Each status color has exactly one semantic job across the entire product. Green is never 'primary action', amber is never 'highlight', violet is never 'pretty accent'. A reader who learns the five colors once can read any screen.", "section": "colors" },
-      { "name": "The Signal Ration Rule", "body": "Saturated color covers a small minority of any screen. The hull ramp and mist carry structure; color carries state. If a screen looks colorful, state has been diluted into decoration.", "section": "colors" },
-      { "name": "The Never-Color-Alone Rule", "body": "Color always travels with a word or a symbol. Phase badges carry their label, diff lines carry +/-, agent nodes carry active/done, tool results carry SUCCESS/FAIL. Prohibited: encoding any status in hue alone.", "section": "colors" },
-      { "name": "The Measured-Is-Mono Rule", "body": "Identifiers, counts, durations, token totals, paths, model names, trace IDs, scores and code are always monospace with tabular-nums where they sit in a column. Prohibited: a run identifier or latency value set in Inter.", "section": "typography" },
-      { "name": "The Tracking Floor Rule", "body": "Uppercase mono labels carry 0.10em-0.18em tracking; at 9-11px, uppercase without tracking is unreadable. Sentence-case text never gets positive tracking.", "section": "typography" },
-      { "name": "The Glow-Is-State Rule", "body": "A glow is a claim that something is happening. It is forbidden as emphasis, as hover, or as decoration. If the state ends, the glow ends.", "section": "elevation" },
-      { "name": "The Glass-Is-Structure Rule", "body": "glass (rgba(11,17,32,0.66), blur(14px), 1px rgba(90,122,170,0.22) border) is the panel material and glass-soft (rgba(11,17,32,0.42), blur(10px)) is the nested-content material. Blur is how a container separates from the circuit grid behind it — never a decorative frosting applied to arbitrary elements.", "section": "elevation" }
+      {
+        "name": "The One Meaning Rule",
+        "body": "Each status color has exactly one semantic job across the entire product. Green is never 'primary action', amber is never 'highlight', violet is never 'pretty accent'. A reader who learns the five colors once can read any screen.",
+        "section": "colors"
+      },
+      {
+        "name": "The Signal Ration Rule",
+        "body": "Saturated color covers a small minority of any screen. The hull ramp and mist carry structure; color carries state. If a screen looks colorful, state has been diluted into decoration.",
+        "section": "colors"
+      },
+      {
+        "name": "The Never-Color-Alone Rule",
+        "body": "Color always travels with a word or a symbol. Phase badges carry their label, diff lines carry +/-, agent nodes carry active/done, tool results carry SUCCESS/FAIL. Prohibited: encoding any status in hue alone.",
+        "section": "colors"
+      },
+      {
+        "name": "The Measured-Is-Mono Rule",
+        "body": "Identifiers, counts, durations, token totals, paths, model names, trace IDs, scores and code are always monospace with tabular-nums where they sit in a column. Prohibited: a run identifier or latency value set in Inter.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tracking Floor Rule",
+        "body": "Uppercase mono labels carry 0.10em-0.18em tracking; at 9-11px, uppercase without tracking is unreadable. Sentence-case text never gets positive tracking.",
+        "section": "typography"
+      },
+      {
+        "name": "The Glow-Is-State Rule",
+        "body": "A glow is a claim that something is happening. It is forbidden as emphasis, as hover, or as decoration. If the state ends, the glow ends.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Glass-Is-Structure Rule",
+        "body": "glass (rgba(11,17,32,0.66), blur(14px), 1px rgba(90,122,170,0.22) border) is the panel material and glass-soft (rgba(11,17,32,0.42), blur(10px)) is the nested-content material. Blur is how a container separates from the circuit grid behind it \u2014 never a decorative frosting applied to arbitrary elements.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Mist Floor Rule",
+        "body": "Mist is legible at 80% opacity and above; every step below that measures under 4.5:1 on all three hull surfaces. Prohibited: text-mist at 45-70%.",
+        "section": "colors"
+      },
+      {
+        "name": "The Seven Steps Rule",
+        "body": "The ramp is 34 / 16 / 14 / 13 / 12 / 11 / 10 and nothing else. Every step is a perceptible move.",
+        "section": "typography"
+      }
     ],
     "dos": [
-      "Do derive every animated or stateful visual from recorded run events. If the data is absent, render the absence honestly — a trace not yet assigned reads pending, a file with no hunks explains why.",
+      "Do derive every animated or stateful visual from recorded run events. If the data is absent, render the absence honestly \u2014 a trace not yet assigned reads pending, a file with no hunks explains why.",
       "Do pair every status color with a word or symbol.",
       "Do keep body and data text at or above 4.5:1 against its surface. Line numbers, units and captions are data, not decoration; mist below 70% opacity fails this.",
       "Do withhold SMIL animation in JavaScript when prefers-reduced-motion is set. The global CSS rule in index.css neutralizes CSS transitions but cannot touch <animateMotion>.",
@@ -188,7 +464,7 @@
     "donts": [
       "Don't build a generic SaaS dashboard: no identical card grids, no oversized hero metric with a gradient, no decorative iconography standing in for information.",
       "Don't fall back to a CI log viewer: raw output with flat hierarchy is the thing this interface replaces.",
-      "Don't ship a system that performs activity it is not doing — animated state not driven by recorded events, progress that advances on a timer, or a graph that looks alive while receiving no data.",
+      "Don't ship a system that performs activity it is not doing \u2014 animated state not driven by recorded events, progress that advances on a timer, or a graph that looks alive while receiving no data.",
       "Don't use border-left or border-right greater than 1px as a colored accent stripe. Diff lines, list rows and callouts use background tint plus a sign or label.",
       "Don't apply background-clip: text with a gradient. Emphasis comes from weight, size and color, never from gradient text.",
       "Don't use blur decoratively. Glass is the container material; it is not a finish to apply to arbitrary elements.",

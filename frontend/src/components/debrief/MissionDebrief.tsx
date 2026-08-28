@@ -45,8 +45,8 @@ export function MissionDebrief({ report, runId, traceId, projectPath, applyResul
               <HexagonIcon className={`h-4 w-4 ${theme.text}`} strokeWidth={2.2} />
             </div>
             <div>
-              <h4 className="text-sm font-semibold tracking-tight text-slate-50">Mission Debrief</h4>
-              <p className="font-mono text-[11px] text-mist/70" title={traceId ?? runId}>
+              <h3 className="text-sm font-semibold tracking-tight text-slate-50">Mission Debrief</h3>
+              <p className="font-mono text-[11px] text-mist" title={traceId ?? runId}>
                 trace {shortTrace(traceId ?? runId)} · {projectPath}
               </p>
             </div>
@@ -60,7 +60,7 @@ export function MissionDebrief({ report, runId, traceId, projectPath, applyResul
             ['files changed', String(report.changed_files.length)]].
             map(([label, value]) =>
             <div key={label}>
-                <div className="text-[9.5px] uppercase tracking-[0.16em] text-mist/50">{label}</div>
+                <div className="text-[10px] uppercase tracking-[0.16em] text-mist/80">{label}</div>
                 <div className="mt-0.5 text-sm tabular-nums text-slate-100">{value}</div>
               </div>
             )}
@@ -91,7 +91,7 @@ export function MissionDebrief({ report, runId, traceId, projectPath, applyResul
             <Scorecard review={report.review} />
             <DecisionTimeline steps={report.route_history} />
             <section className="glass rounded-2xl p-5 shadow-panel" aria-label="Model usage">
-              <h2 className="text-sm font-semibold tracking-tight text-slate-100">Model usage</h2>
+              <h3 className="text-sm font-semibold tracking-tight text-slate-100">Model usage</h3>
               <ul className="mt-4 flex flex-col gap-2.5">
                 {report.model_usage.map((usage) =>
                 <li
@@ -99,12 +99,12 @@ export function MissionDebrief({ report, runId, traceId, projectPath, applyResul
                   className="flex flex-col gap-1.5 border-b border-hull-400/25 pb-2.5 last:border-0 last:pb-0">
 
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <span className="w-[92px] text-[12.5px] text-slate-200">
+                      <span className="w-[92px] text-[12px] text-slate-200">
                         {AGENT_LABELS[usage.agent]}
                       </span>
-                      <span className="font-mono text-[11px] text-mist/75">{usage.model}</span>
+                      <span className="font-mono text-[11px] text-mist">{usage.model}</span>
                       <span
-                      className={`rounded border px-1.5 py-[1px] font-mono text-[9px] uppercase tracking-[0.12em] ${
+                      className={`rounded border px-1.5 py-[1px] font-mono text-[10px] uppercase tracking-[0.12em] ${
                       usage.provider === 'cloud' ?
                       'border-plasma/45 bg-plasma/10 text-plasma' :
                       'border-neon/40 bg-neon/10 text-neon'}`
@@ -120,7 +120,7 @@ export function MissionDebrief({ report, runId, traceId, projectPath, applyResul
                     {usage.error_category &&
                   <p
                     role="alert"
-                    className="rounded border border-amber/45 bg-amber/10 px-2 py-1 font-mono text-[10.5px] text-amber">
+                    className="rounded border border-amber/45 bg-amber/10 px-2 py-1 font-mono text-[10px] text-amber">
 
                         Provider warning: {usage.error_category}
                         {usage.http_status !== undefined ? ` (HTTP ${usage.http_status})` : ''}
@@ -128,7 +128,7 @@ export function MissionDebrief({ report, runId, traceId, projectPath, applyResul
                       </p>
                   }
                     {usage.fallback_succeeded &&
-                  <p className="rounded border border-neon/40 bg-neon/10 px-2 py-1 font-mono text-[10.5px] text-neon">
+                  <p className="rounded border border-neon/40 bg-neon/10 px-2 py-1 font-mono text-[10px] text-neon">
                         A later fallback attempt for this agent succeeded.
                       </p>
                   }

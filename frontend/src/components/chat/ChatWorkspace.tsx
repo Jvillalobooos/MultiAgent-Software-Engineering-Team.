@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeftIcon } from 'lucide-react';
 import { RunClient } from '../../api/runClient';
 import { ProjectRef, RunSummary } from '../../types/mission';
 import { ProjectHeader } from './ProjectHeader';
-import { ChatComposer, RunSubmission } from './ChatComposer';
+import { ChatComposer, ComposerPrefill, RunSubmission } from './ChatComposer';
 import { RunCard } from './RunCard';
 import { RunHistory } from './RunHistory';
 import { LaunchScreen } from './LaunchScreen';
@@ -27,6 +27,8 @@ export function ChatWorkspace({ client }: ChatWorkspaceProps) {
   const [selectedProject, setSelectedProject] = useState<ProjectRef | null>(null);
   const [summaries, setSummaries] = useState<RunSummary[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [prefill, setPrefill] = useState<ComposerPrefill | null>(null);
+  const filterRef = useRef<HTMLInputElement>(null);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -59,10 +61,38 @@ export function ChatWorkspace({ client }: ChatWorkspaceProps) {
     setActiveRunId(runId);
   };
 
-  const handleBackToHistory = () => {
+  const handleBackToHistory = useCallback(() => {
     setActiveRunId(null);
     void loadHistory();
-  };
+  }, [loadHistory]);
+
+  /** Reusing a past instruction refills the composer; it never launches a run, because
+   *  launching spends provider quota against a real project. */
+  const handleReuse = useCallback((summary: RunSummary) => {
+    setPrefill({ message: summary.message, testSpec: summary.test_spec ?? '', token: Date.now() });
+    setActiveRunId(null);
+  }, []);
+
+  // Escape leaves an open run; "/" jumps to the history filter. Both stay out of the
+  // way while the user is typing into a field.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing = target instanceof HTMLElement &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      if (event.key === 'Escape' && !typing && activeRunId !== null) {
+        event.preventDefault();
+        handleBackToHistory();
+        return;
+      }
+      if (event.key === '/' && !typing && activeRunId === null) {
+        event.preventDefault();
+        filterRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activeRunId, handleBackToHistory]);
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -72,7 +102,12 @@ export function ChatWorkspace({ client }: ChatWorkspaceProps) {
         {activeRunId === null ?
         <div className="flex flex-col gap-5">
             <LaunchScreen hasProject={selectedProject !== null} />
-            <RunHistory summaries={summaries} activeRunId={activeRunId} onOpenRun={setActiveRunId} />
+            <RunHistory
+              ref={filterRef}
+              summaries={summaries}
+              activeRunId={activeRunId}
+              onOpenRun={setActiveRunId}
+              onReuse={handleReuse} />
           </div> :
 
         <div className="flex flex-col gap-4">
@@ -83,13 +118,18 @@ export function ChatWorkspace({ client }: ChatWorkspaceProps) {
 
               <ArrowLeftIcon aria-hidden="true" className="h-3.5 w-3.5" />
               Back to history
+              <kbd className="ml-1 rounded border border-hull-400/55 px-1.5 py-0.5 text-[10px] normal-case tracking-normal">esc</kbd>
             </button>
             <RunCard key={activeRunId} runId={activeRunId} client={client} />
           </div>
         }
       </div>
 
-      <ChatComposer disabled={!selectedProject} projectPath={selectedProject?.path ?? null} onSubmit={handleSubmit} />
+      <ChatComposer
+        disabled={!selectedProject}
+        projectPath={selectedProject?.path ?? null}
+        prefill={prefill}
+        onSubmit={handleSubmit} />
     </div>);
 
 }

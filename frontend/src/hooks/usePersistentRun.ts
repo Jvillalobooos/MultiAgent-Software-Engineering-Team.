@@ -31,7 +31,7 @@ export function usePersistentRun(runId: string, client: RunClient): PersistentRu
   const disposedRef = useRef(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const refreshRef = useRef<() => Promise<void>>(async () => {});
+  const refreshRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   useEffect(() => {
     disposedRef.current = false;

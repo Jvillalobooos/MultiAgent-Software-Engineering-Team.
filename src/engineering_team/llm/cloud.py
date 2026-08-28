@@ -20,7 +20,7 @@ from .runtime import _preserves_governed_facts
 _CLOUD_MAP = {
     AgentRole.PRODUCT: ("google", "gemini-3.6-flash"),
     AgentRole.ARCHITECTURE: ("google", "gemini-3.6-flash"),
-    AgentRole.DEVELOPER: ("google", "gemini-3.6-flash"),
+    AgentRole.DEVELOPER: ("google", "gemini-3.1-pro-preview"),
     AgentRole.SECURITY: ("groq", "openai/gpt-oss-120b"),
     AgentRole.TESTING: ("groq", "openai/gpt-oss-20b"),
     AgentRole.REVIEWER: ("google", "gemini-3.6-flash"),
@@ -75,11 +75,6 @@ class CloudBudget:
         return True
 
 
-# Cross-provider tail for Google-backed roles: a total Gemini outage must degrade to
-# another provider rather than end the run.
-_GOOGLE_CROSS_PROVIDER_TAIL = ("groq", "openai/gpt-oss-120b")
-
-
 class CloudRouter:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -88,33 +83,54 @@ class CloudRouter:
         provider, model = _CLOUD_MAP[role]
         return ModelSelection(role, "CLOUD_FALLBACK", provider, model)
 
-    def gemini_models(self) -> tuple[str, ...]:
-        """The configured Gemini chain, order-preserving and de-duplicated."""
-        configured = (name.strip() for name in self._settings.gemini_models.split(","))
+    def gemini_models(self, role: AgentRole | None = None) -> tuple[str, ...]:
+        """The configured Gemini pool for a role, order-preserving and de-duplicated."""
+        raw = (
+            self._settings.gemini_developer_models
+            if role is AgentRole.DEVELOPER
+            else self._settings.gemini_models
+        )
+        configured = (name.strip() for name in raw.split(","))
         return tuple(dict.fromkeys(name for name in configured if name))
 
     def selection_chain(self, role: AgentRole) -> tuple[ModelSelection, ...]:
         """Every cloud model to try for a role, in order, before giving up.
 
-        Gemini is the least reliable provider in practice, so a Google-backed role
-        walks the whole configured Gemini chain and then crosses to another provider
-        instead of failing after a single alternate.
+        Google-backed roles do not walk their whole Gemini pool before changing
+        provider. Gemini quota is per project, so a 429 on one Gemini model predicts a
+        429 on the next; walking four of them in a row spends four attempts inside the
+        same failing quota domain. The cross-provider escape therefore sits at position
+        2, and the remaining Gemini options follow it for the case where the first
+        failure was model-specific rather than account-wide.
         """
         primary = self.for_role(role)
         if primary.provider != "google":
+            # Exact match, not a suffix test: "openai/gpt-oss-120b" also ends with
+            # "20b", which made Security's alternate resolve back to its own primary
+            # and burn a chain slot retrying the model that just failed.
             alternate = (
-                "openai/gpt-oss-120b" if primary.model.endswith("20b") else "openai/gpt-oss-20b"
+                "openai/gpt-oss-120b"
+                if primary.model == "openai/gpt-oss-20b"
+                else "openai/gpt-oss-20b"
             )
             return (
                 primary,
                 ModelSelection(role, "CLOUD_FALLBACK", primary.provider, alternate),
             )
-        # The role's mapped model always leads, even when it is absent from the chain.
-        ordered = (primary.model, *(m for m in self.gemini_models() if m != primary.model))
-        return (
-            *(ModelSelection(role, "CLOUD_FALLBACK", "google", model) for model in ordered),
-            ModelSelection(role, "CLOUD_FALLBACK", *_GOOGLE_CROSS_PROVIDER_TAIL),
+        pool = self.gemini_models(role) or (primary.model,)
+        google = [
+            ModelSelection(role, "CLOUD_FALLBACK", "google", model) for model in pool
+        ]
+        if role.value.lower() in self._escape_excluded_roles():
+            return tuple(google)
+        escape = ModelSelection(
+            role, "CLOUD_FALLBACK", "groq", self._settings.cloud_escape_model
         )
+        return (google[0], escape, *google[1:])
+
+    def _escape_excluded_roles(self) -> frozenset[str]:
+        raw = self._settings.cloud_escape_excluded_roles
+        return frozenset(name.strip().lower() for name in raw.split(",") if name.strip())
 
     def selections_for(self, role: AgentRole) -> tuple[ModelSelection, ...]:
         """Backwards-compatible alias for the full chain."""
