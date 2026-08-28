@@ -32,6 +32,11 @@ const baseSnapshot = (phase: RunPhase, report: RunSnapshot['report'] = null): Ru
 });
 
 describe('run contract guards', () => {
+  it('rejects malformed optional execution permissions rather than treating them as truthy', () => {
+    expect(isRunSnapshot({ ...baseSnapshot('running'), authorize_writes: 'false' })).toBe(false);
+    expect(isRunSnapshot({ ...baseSnapshot('running'), test_spec: 42 })).toBe(false);
+    expect(isRunSnapshot({ ...baseSnapshot('running'), authorize_writes: false, test_spec: null })).toBe(true);
+  });
   it('accepts a valid snapshot for every RunPhase', () => {
     for (const phase of ALL_PHASES) {
       const report = phase === 'approved' ? approvedFixture().report : null;
@@ -131,6 +136,49 @@ function stubFetchOnce(status: number, body: unknown) {
     json: () => Promise.resolve(body),
   }));
 }
+
+describe('HttpRunClient project selection and execution modes', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('sends a typed path for server validation without rewriting platform separators', async () => {
+    const project = { path: 'C:\\Proyectos\\Cálculo', name: 'Cálculo' };
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'selected', project }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(await new HttpRunClient().selectProject(project.path)).toEqual({ status: 'selected', project });
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects/select', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ path: project.path }),
+    }));
+  });
+
+  it('explicitly disables writes when execution options are omitted', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ run_id: 'dry-run' }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(await new HttpRunClient().createRun('/tmp/demo', 'Fix median')).toBe('dry-run');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      projectPath: '/tmp/demo', message: 'Fix median', authorizeWrites: false,
+    });
+  });
+
+  it('sends an independent test specification and explicit write authorization', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ run_id: 'write-run' }) });
+    vi.stubGlobal('fetch', fetchMock);
+    await new HttpRunClient().createRun('/tmp/demo', 'Fix median', {
+      testSpec: 'Test mediana([7,8,9,10]) == 8.5', authorizeWrites: true,
+    });
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
+      projectPath: '/tmp/demo', message: 'Fix median',
+      testSpec: 'Test mediana([7,8,9,10]) == 8.5', authorizeWrites: true,
+    });
+  });
+
+  it('rejects a malformed manual-selection response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'selected', project: null }) }));
+    await expect(new HttpRunClient().selectProject('/tmp/demo')).rejects.toMatchObject({ code: 'INVALID_RESPONSE' });
+  });
+});
 
 describe('HttpRunClient error envelopes', () => {
   afterEach(() => {

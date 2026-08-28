@@ -1,4 +1,4 @@
-import { RunClient } from '../api/runClient';
+import { RunClient, RunOptions } from '../api/runClient';
 import {
   ApplyResult,
   ProjectPickResponse,
@@ -45,7 +45,7 @@ export const approvedFixture = (events: StoredEvent[] = []): RunSnapshot => ({
 /** A complete, in-memory RunClient for tests. Reused by usePersistentRun tests (Task 6)
  *  and by the chat UI tests built on top of it (Task 7). */
 export class FakeRunClient implements RunClient {
-  requests: Array<{ projectPath: string; message: string }> = [];
+  requests: Array<{ projectPath: string; message: string; testSpec?: string; authorizeWrites: boolean }> = [];
   subscribeCalls = 0;
   getRunCalls = 0;
   private listener?: (value: StoredEvent | RunSnapshot) => void;
@@ -57,8 +57,12 @@ export class FakeRunClient implements RunClient {
     return { status: 'selected', project: { path: 'C:\\projects\\calculator', name: 'calculator' } };
   }
 
-  async createRun(projectPath: string, message: string): Promise<string> {
-    this.requests.push({ projectPath, message });
+  async selectProject(path: string): Promise<ProjectPickResponse> {
+    return { status: 'selected', project: { path, name: path.split(/[\\/]/).filter(Boolean).at(-1) ?? path } };
+  }
+
+  async createRun(projectPath: string, message: string, options: RunOptions = {}): Promise<string> {
+    this.requests.push({ projectPath, message, ...(options.testSpec ? { testSpec: options.testSpec } : {}), authorizeWrites: options.authorizeWrites === true });
     return `run-${this.requests.length}`;
   }
 
@@ -97,7 +101,7 @@ export class FakeRunClient implements RunClient {
     };
     // Mirror the real backend: a successful apply persists the new phase and
     // apply_result, which a post-apply refresh() must be able to observe.
-    this.snapshot = { ...this.snapshot, phase: 'applied', apply_result: result };
+    this.snapshot = { ...this.snapshot, phase: 'applied', apply_result: result, report: this.snapshot.report && { ...this.snapshot.report, source_applied: true } };
     return result;
   }
 

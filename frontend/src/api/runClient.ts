@@ -23,6 +23,10 @@ const PICK_STATUSES = new Set(['selected', 'cancelled']);
 const object = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const hasValidRunOptions = (value: Record<string, unknown>): boolean =>
+  (value.test_spec === undefined || value.test_spec === null || typeof value.test_spec === 'string') &&
+  (value.authorize_writes === undefined || typeof value.authorize_writes === 'boolean');
+
 /* ---------- Transport guards ---------- */
 
 export function isFinalReport(value: unknown): value is FinalReport {
@@ -82,7 +86,7 @@ export function isApplyResult(value: unknown): value is ApplyResult {
 }
 
 export function isRunSummary(value: unknown): value is RunSummary {
-  if (!object(value)) return false;
+  if (!object(value) || !hasValidRunOptions(value)) return false;
   return typeof value.run_id === 'string' &&
     typeof value.project_path === 'string' &&
     typeof value.message === 'string' &&
@@ -92,7 +96,7 @@ export function isRunSummary(value: unknown): value is RunSummary {
 }
 
 export function isRunSnapshot(value: unknown): value is RunSnapshot {
-  if (!object(value)) return false;
+  if (!object(value) || !hasValidRunOptions(value)) return false;
   const structurallyValid = typeof value.run_id === 'string' &&
     typeof value.project_path === 'string' &&
     typeof value.workspace_path === 'string' &&
@@ -157,9 +161,15 @@ async function toRunApiError(response: Response): Promise<RunApiError> {
 
 /* ---------- RunClient ---------- */
 
+export interface RunOptions {
+  testSpec?: string;
+  authorizeWrites?: boolean;
+}
+
 export interface RunClient {
   pickProject(signal?: AbortSignal): Promise<ProjectPickResponse>;
-  createRun(projectPath: string, message: string, signal?: AbortSignal): Promise<string>;
+  selectProject(path: string, signal?: AbortSignal): Promise<ProjectPickResponse>;
+  createRun(projectPath: string, message: string, options?: RunOptions, signal?: AbortSignal): Promise<string>;
   listRuns(signal?: AbortSignal): Promise<RunSummary[]>;
   getRun(runId: string, signal?: AbortSignal): Promise<RunSnapshot>;
   eventsAfter(runId: string, after: number, signal?: AbortSignal): Promise<StoredEvent[]>;
@@ -184,11 +194,32 @@ export class HttpRunClient implements RunClient {
     return payload;
   }
 
-  async createRun(projectPath: string, message: string, signal?: AbortSignal): Promise<string> {
+  async selectProject(path: string, signal?: AbortSignal): Promise<ProjectPickResponse> {
+    const response = await fetch('/api/projects/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+      signal,
+    });
+    if (!response.ok) throw await toRunApiError(response);
+    const payload: unknown = await response.json();
+    if (!isProjectPickResponse(payload) || payload.status !== 'selected') {
+      throw new RunApiError('INVALID_RESPONSE', 'Backend returned a malformed project selection response', false, payload);
+    }
+    return payload;
+  }
+
+  async createRun(projectPath: string, message: string, options: RunOptions = {}, signal?: AbortSignal): Promise<string> {
+    const testSpec = options.testSpec?.trim();
     const response = await fetch('/api/runs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectPath, message }),
+      body: JSON.stringify({
+        projectPath,
+        message,
+        ...(testSpec ? { testSpec } : {}),
+        authorizeWrites: options.authorizeWrites === true,
+      }),
       signal,
     });
     if (!response.ok) throw await toRunApiError(response);

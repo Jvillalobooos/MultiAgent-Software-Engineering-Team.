@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { RunClient } from '../../api/runClient';
 import { ProjectRef } from '../../types/mission';
 import { ProjectHeader } from './ProjectHeader';
-import { ChatComposer } from './ChatComposer';
+import { ChatComposer, RunSubmission } from './ChatComposer';
 import { RunCard } from './RunCard';
 
 interface ChatWorkspaceProps {
@@ -29,9 +29,9 @@ export function ChatWorkspace({ client }: ChatWorkspaceProps) {
     return () => { cancelled = true; };
   }, [client]);
 
-  const handleSubmit = async (message: string) => {
+  const handleSubmit = async ({ message, testSpec, authorizeWrites }: RunSubmission) => {
     if (!selectedProject) return;
-    const runId = await client.createRun(selectedProject.path, message);
+    const runId = await client.createRun(selectedProject.path, message, { testSpec, authorizeWrites });
     setRunIds((current) => [...current, runId]);
   };
 
@@ -45,11 +45,11 @@ export function ChatWorkspace({ client }: ChatWorkspaceProps) {
             Select a project folder, then describe a change to start your first run.
           </p> :
 
-        runIds.map((runId) => <RunCard key={runId} runId={runId} client={client} />)
+        runIds.map((runId, index) => <RunCard key={runId} runId={runId} client={client} index={index + 1} />)
         }
       </div>
 
-      <ChatComposer disabled={!selectedProject} onSubmit={handleSubmit} />
+      <ChatComposer disabled={!selectedProject} projectPath={selectedProject?.path ?? null} onSubmit={handleSubmit} />
     </div>);
 
 }

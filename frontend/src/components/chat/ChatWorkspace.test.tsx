@@ -6,6 +6,51 @@ import { FakeRunClient, approvedFixture } from '../../test/FakeRunClient';
 import { ApplyResult, RunSnapshot } from '../../types/mission';
 
 describe('ChatWorkspace', () => {
+  it('displays the persisted test specification and write permission on the run', async () => {
+    const snapshot = approvedFixture();
+    snapshot.test_spec = 'Check median([7, 8, 9, 10]) equals 8.5';
+    snapshot.authorize_writes = true;
+    const client = new FakeRunClient(snapshot);
+    client.listRuns = vi.fn().mockResolvedValue([snapshot]);
+    render(<ChatWorkspace client={client} />);
+    expect(await screen.findByLabelText('Run write permission')).toHaveTextContent('Writes authorized');
+    await userEvent.click(screen.getByText('Test specification', { selector: 'summary' }));
+    expect(screen.getByText(snapshot.test_spec)).toBeVisible();
+  });
+
+  it('shows retained project changes after failed source verification', async () => {
+    const snapshot = approvedFixture();
+    snapshot.phase = 'apply_failed';
+    snapshot.apply_result = {
+      status: 'apply_failed', written_paths: ['app.py'], test_exit_code: 1,
+      backup_path: 'backup', test_output: '1 failed', message: 'Verification failed',
+    };
+    const client = new FakeRunClient(snapshot);
+    client.listRuns = vi.fn().mockResolvedValue([snapshot]);
+    render(<ChatWorkspace client={client} />);
+    expect(await screen.findByRole('region', { name: 'Code diff' })).toHaveTextContent('Verification failed · project changes retained');
+  });
+
+  it('launches from a manually selected project with separate test expectations and explicit permission', async () => {
+    const client = new FakeRunClient();
+    client.selectProject = vi.fn().mockResolvedValue({
+      status: 'selected', project: { path: '/private/tmp/calculadora demo', name: 'calculadora demo' },
+    });
+    render(<ChatWorkspace client={client} />);
+    await userEvent.click(screen.getByRole('button', { name: /enter path/i }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Project folder path' }), '/tmp/calculadora demo');
+    await userEvent.click(screen.getByRole('button', { name: /use folder/i }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Task' }), 'Fix median');
+    await userEvent.type(screen.getByRole('textbox', { name: 'Test specification' }), 'Cover even-length lists');
+    await userEvent.click(screen.getByRole('radio', { name: /authorize writes/i }));
+    await userEvent.click(screen.getByRole('button', { name: /execute with writes/i }));
+
+    expect(client.requests).toEqual([{
+      projectPath: '/private/tmp/calculadora demo', message: 'Fix median',
+      testSpec: 'Cover even-length lists', authorizeWrites: true,
+    }]);
+  });
+
   it('creates independent runs with only the current message', async () => {
     const client = new FakeRunClient();
     render(<ChatWorkspace client={client} />);
@@ -18,8 +63,8 @@ describe('ChatWorkspace', () => {
 
     await waitFor(() =>
       expect(client.requests).toEqual([
-        { projectPath: 'C:\\projects\\calculator', message: 'first change' },
-        { projectPath: 'C:\\projects\\calculator', message: 'second change' },
+        { projectPath: 'C:\\projects\\calculator', message: 'first change', authorizeWrites: false },
+        { projectPath: 'C:\\projects\\calculator', message: 'second change', authorizeWrites: false },
       ])
     );
     expect(screen.getAllByRole('article')).toHaveLength(2);

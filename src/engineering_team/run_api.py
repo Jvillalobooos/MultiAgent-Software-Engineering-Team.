@@ -41,6 +41,8 @@ _SNAPSHOT_FIELDS = (
     "project_path",
     "workspace_path",
     "message",
+    "test_spec",
+    "authorize_writes",
     "phase",
     "events",
     "report",
@@ -63,6 +65,8 @@ class LaunchRequest(BaseModel):
 
     project_path: str = Field(alias="projectPath", min_length=1)
     message: str = Field(min_length=1)
+    test_specification: str | None = Field(default=None, alias="testSpec")
+    authorize_writes: bool = Field(default=False, alias="authorizeWrites")
 
 
 class ApplyRequest(BaseModel):
@@ -150,6 +154,8 @@ class RunManager:
             project_path=str(source),
             workspace_path=str(workspace),
             message=request.message.strip(),
+            test_spec=request.test_specification,
+            authorize_writes=request.authorize_writes,
             phase=RunPhase.QUEUED,
             source_hashes={},
         )
@@ -190,10 +196,10 @@ class RunManager:
             changed_paths = list(report.get("actual_changed_paths", []))
             self.store.finish(run_id, report, phase, changed_paths=changed_paths)
             workspace = Path(running.workspace_path)
-            if phase is RunPhase.APPROVED and changed_paths and all(
+            if running.authorize_writes and phase is RunPhase.APPROVED and changed_paths and all(
                 (workspace / path).is_file() for path in changed_paths
             ):
-                result = ApplyService(self.store).apply(
+                ApplyService(self.store).apply(
                     run_id, confirmed_project=Path(running.project_path)
                 )
         except Exception as exc:  # noqa: BLE001 - every background run must terminate durably.
@@ -240,7 +246,8 @@ class RunManager:
             self.settings,
             project_path=snapshot.workspace_path,
             specification=snapshot.message,
-            authorize_writes=True,
+            test_specification=snapshot.test_spec,
+            authorize_writes=snapshot.authorize_writes,
             run_id=snapshot.run_id,
             event_observer=observe,
         )

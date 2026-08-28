@@ -11,6 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import engineering_team.run_api as run_api_module
 from engineering_team.apply_service import ApplyService, file_hash, snapshot_project
 from engineering_team.config import Settings
 from engineering_team.graph.stategraph import build_engineering_graph
@@ -263,6 +264,86 @@ def test_post_creates_independent_persisted_runs(tmp_path: Path) -> None:
     assert {item["run_id"] for item in client.get("/api/runs").json()} == {first_id, second_id}
 
 
+def test_launch_defaults_to_dry_run_in_public_snapshot(tmp_path: Path) -> None:
+    source = _source(tmp_path)
+    manager = _manager(tmp_path, lambda snapshot, _emit: _completed_state(snapshot.run_id))
+    client = _client(manager)
+
+    run_id = client.post(
+        "/api/runs", json={"projectPath": str(source), "message": "keep it safe"},
+    ).json()["run_id"]
+
+    snapshot = _wait_for_phase(client, run_id, "approved")
+
+    assert snapshot["test_spec"] is None
+    assert snapshot["authorize_writes"] is False
+
+
+def test_launch_persists_test_spec_and_explicit_write_authorization(tmp_path: Path) -> None:
+    source = _source(tmp_path)
+    manager = _manager(tmp_path, lambda snapshot, _emit: _completed_state(snapshot.run_id))
+    client = _client(manager)
+
+    run_id = client.post("/api/runs", json={
+        "projectPath": str(source),
+        "message": "fix the calculation",
+        "testSpec": "tests/test_mediana_par.py must pass",
+        "authorizeWrites": True,
+    }).json()["run_id"]
+
+    snapshot = _wait_for_phase(client, run_id, "approved")
+
+    assert snapshot["test_spec"] == "tests/test_mediana_par.py must pass"
+    assert snapshot["authorize_writes"] is True
+
+
+def test_real_executor_forwards_persisted_test_spec_and_write_mode(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    source = _source(tmp_path)
+    captured: dict[str, Any] = {}
+
+    def fake_execute_on_project(
+        _settings: Settings,
+        *,
+        project_path: str,
+        specification: str,
+        test_specification: str | None = None,
+        authorize_writes: bool = False,
+        run_id: str | None = None,
+        event_observer: Callable[[dict[str, Any]], None] | None = None,
+    ) -> tuple[dict[str, Any], None, float, bool]:
+        captured.update({
+            "project_path": project_path,
+            "specification": specification,
+            "test_specification": test_specification,
+            "authorize_writes": authorize_writes,
+            "run_id": run_id,
+        })
+        return _completed_state(str(run_id)), None, 0.0, False
+
+    monkeypatch.setattr(run_api_module, "execute_on_project", fake_execute_on_project)
+    manager = RunManager(settings=_settings(tmp_path), store=RunStore(tmp_path / "records"))
+    client = _client(manager)
+
+    run_id = client.post("/api/runs", json={
+        "projectPath": str(source),
+        "message": "fix the calculation",
+        "testSpec": "tests/test_mediana_par.py must pass",
+        "authorizeWrites": False,
+    }).json()["run_id"]
+
+    _wait_for_phase(client, run_id, "approved")
+
+    assert captured == {
+        "project_path": str((tmp_path / "workspaces" / run_id).resolve()),
+        "specification": "fix the calculation",
+        "test_specification": "tests/test_mediana_par.py must pass",
+        "authorize_writes": False,
+        "run_id": run_id,
+    }
+
+
 def test_completed_run_persists_changed_paths_from_successful_writes(tmp_path: Path) -> None:
     source = _source(tmp_path)
 
@@ -287,6 +368,34 @@ def test_completed_run_persists_changed_paths_from_successful_writes(tmp_path: P
     assert body["changed_paths"] == ["app/service.py"]
 
 
+def test_default_dry_run_never_applies_workspace_change_to_selected_source(tmp_path: Path) -> None:
+    source = _source(tmp_path)
+    (source / "test_app.py").write_text(
+        "from app import value\n\ndef test_value():\n    assert value == 2\n", encoding="utf-8"
+    )
+
+    def executor(snapshot: RunSnapshot, _emit: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
+        (Path(snapshot.workspace_path) / "app.py").write_text("value = 2\n", encoding="utf-8")
+        state = _completed_state(snapshot.run_id)
+        state["implementation"]["action_mode"] = "APPLIED"
+        state["tool_results"].append({
+            "tool_name": "update_file", "status": "SUCCESS", "duration_ms": 1,
+            "allowed_role": "Developer", "output_summary": "app.py", "error": None,
+        })
+        return state
+
+    client = _client(_manager(tmp_path, executor))
+    run_id = client.post(
+        "/api/runs", json={"projectPath": str(source), "message": "write value"},
+    ).json()["run_id"]
+
+    snapshot = _wait_for_phase(client, run_id, "approved")
+
+    assert (source / "app.py").read_text(encoding="utf-8") == "value = 1\n"
+    assert snapshot["report"]["source_applied"] is False
+    assert snapshot["authorize_writes"] is False
+
+
 def test_approved_workspace_change_is_applied_to_selected_source(tmp_path: Path) -> None:
     source = _source(tmp_path)
     (source / "test_app.py").write_text(
@@ -305,7 +414,9 @@ def test_approved_workspace_change_is_applied_to_selected_source(tmp_path: Path)
 
     client = _client(_manager(tmp_path, executor))
     run_id = client.post(
-        "/api/runs", json={"projectPath": str(source), "message": "write value"}
+        "/api/runs", json={
+            "projectPath": str(source), "message": "write value", "authorizeWrites": True,
+        }
     ).json()["run_id"]
 
     snapshot = _wait_for_phase(client, run_id, "applied")
@@ -658,7 +769,7 @@ def test_real_execution_boundary_writes_only_to_isolated_workspace(
 
     assert Path(captured["project_path"]) == Path(snapshot["workspace_path"])
     assert Path(captured["project_path"]) != source.resolve()
-    assert captured["authorize_writes"] is True
+    assert captured["authorize_writes"] is False
     assert captured["specification"] == "make the change"
     assert captured["run_id"] == run_id
 

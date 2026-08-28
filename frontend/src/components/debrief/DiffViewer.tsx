@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { FileCode2Icon, FileTextIcon } from 'lucide-react';
-import { ChangedFile, DiffLine } from '../../types/mission';
+import { ApplyResult, ChangedFile, DiffLine, RunPhase } from '../../types/mission';
 
 interface DiffViewerProps {
   files: ChangedFile[];
-  applied: boolean;
+  workspaceChanged: boolean;
+  sourceApplied: boolean;
+  applyResult?: ApplyResult | null;
+  phase?: RunPhase;
 }
 
 const KEYWORDS = [
@@ -108,21 +111,32 @@ const LINE_STYLE: Record<DiffLine['type'], string> = {
 
 const SIGN: Record<DiffLine['type'], string> = { add: '+', del: '-', ctx: ' ', meta: '@' };
 
-export function DiffViewer({ files, applied }: DiffViewerProps) {
+export function DiffViewer({ files, workspaceChanged, sourceApplied, applyResult, phase }: DiffViewerProps) {
   const [activePath, setActivePath] = useState(files[0]?.path ?? '');
   const file = files.find((f) => f.path === activePath) ?? files[0];
   const lines = Array.isArray(file?.lines) ? file.lines : [];
+  // source_applied marks a successful, verified apply, not every source write.
+  // In particular, failed verification retains writes until the user restores.
+  const provenance = phase === 'applying' ? 'Applying to project…'
+    : applyResult?.status === 'restored' ? 'Restored from backup'
+    : applyResult?.status === 'apply_failed'
+      ? applyResult.test_exit_code !== null && applyResult.written_paths.length > 0
+        ? 'Verification failed · project changes retained' : 'Apply failed · check project state'
+    : applyResult?.status === 'conflict' ? 'Apply/restore conflict · review project state'
+    : sourceApplied ? 'Applied to project'
+    : workspaceChanged ? 'Workspace only · project unchanged'
+    : 'Proposed · no files written';
+  const provenanceClass = applyResult?.status === 'apply_failed' ? 'border-alert/40 bg-alert/10 text-alert'
+    : sourceApplied || applyResult?.status === 'restored' ? 'border-neon/40 bg-neon/10 text-neon'
+    : 'border-amber/40 bg-amber/10 text-amber';
 
   return (
     <section className="glass flex min-h-0 flex-col rounded-2xl shadow-panel" aria-label="Code diff">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hull-400/35 px-4 py-3">
-        <h2 className="text-sm font-semibold tracking-tight text-slate-100">Applied diff</h2>
+        <h2 className="text-sm font-semibold tracking-tight text-slate-100">Code changes</h2>
         <span
-          className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] ${
-          applied ? 'border-alert/40 bg-alert/10 text-alert' : 'border-amber/40 bg-amber/10 text-amber'}`
-          }>
-          
-          {applied ? 'written to disk' : 'dry run · not written'}
+          className={`rounded border px-2 py-1 text-xs ${provenanceClass}`}>
+          {provenance}
         </span>
       </div>
 

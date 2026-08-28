@@ -1,3 +1,4 @@
+import json
 import threading
 from pathlib import Path
 
@@ -23,6 +24,24 @@ def test_store_reloads_snapshot_and_replays_only_events_after_cursor(tmp_path: P
     assert second.sequence == 2
     assert [item.sequence for item in restarted.events_after("run-a", 1)] == [2]
     assert restarted.load("run-a").message == "change one thing"
+
+
+def test_store_loads_legacy_snapshot_with_safe_run_mode_defaults(tmp_path: Path) -> None:
+    legacy = RunSnapshot(
+        run_id="run-legacy", project_path=str(tmp_path / "source"),
+        workspace_path=str(tmp_path / "copy"), message="change one thing",
+        phase=RunPhase.QUEUED, source_hashes={},
+    ).model_dump(mode="json")
+    legacy.pop("test_spec", None)
+    legacy.pop("authorize_writes", None)
+    records = tmp_path / "_records"
+    records.mkdir()
+    (records / "run-legacy.json").write_text(json.dumps(legacy), encoding="utf-8")
+
+    snapshot = RunStore(tmp_path).load("run-legacy")
+
+    assert snapshot.test_spec is None
+    assert snapshot.authorize_writes is False
 
 
 def test_store_rejects_applying_before_approval(tmp_path: Path) -> None:

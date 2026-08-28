@@ -195,6 +195,8 @@ export interface RunSnapshot {
   project_path: string;
   workspace_path: string;
   message: string;
+  test_spec?: string | null;
+  authorize_writes?: boolean;
   phase: RunPhase;
   events: StoredEvent[];
   report: FinalReport | null;
@@ -209,6 +211,8 @@ export interface RunSummary {
   run_id: string;
   project_path: string;
   message: string;
+  test_spec?: string | null;
+  authorize_writes?: boolean;
   phase: RunPhase;
   created_at: string;
   updated_at: string;

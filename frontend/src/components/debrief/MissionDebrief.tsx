@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { HexagonIcon } from 'lucide-react';
-import { FinalReport } from '../../types/mission';
+import { ApplyResult, FinalReport, RunPhase } from '../../types/mission';
 import { AGENT_LABELS, STATUS_THEME } from '../../utils/format';
 import { DiffViewer } from './DiffViewer';
 import { Scorecard } from './Scorecard';
@@ -11,6 +11,8 @@ interface MissionDebriefProps {
   report: FinalReport;
   runId: string;
   projectPath: string;
+  applyResult?: ApplyResult | null;
+  phase?: RunPhase;
 }
 
 const ease = [0.23, 1, 0.32, 1] as const;
@@ -18,7 +20,7 @@ const ease = [0.23, 1, 0.32, 1] as const;
 /** Embedded review section for a RunCard — no page-level chrome, no fixed viewport
  *  height, and no replay/new-run navigation, all of which belonged to the old
  *  standalone debrief screen. */
-export function MissionDebrief({ report, runId, projectPath }: MissionDebriefProps) {
+export function MissionDebrief({ report, runId, projectPath, applyResult, phase }: MissionDebriefProps) {
   const theme = STATUS_THEME[report.review.status];
   const totalTokens = report.model_usage.reduce(
     (sum, u) => sum + u.input_tokens + u.output_tokens,
@@ -74,7 +76,7 @@ export function MissionDebrief({ report, runId, projectPath }: MissionDebriefPro
         <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
           <div className="flex min-h-0 flex-col gap-6">
             <div className="flex max-h-[560px] min-h-[280px] flex-col">
-              <DiffViewer files={report.changed_files} applied={report.applied_diff} />
+              <DiffViewer files={report.changed_files} workspaceChanged={report.workspace_changed} sourceApplied={report.source_applied} applyResult={applyResult} phase={phase} />
             </div>
             <EvidenceTabs
               rag={report.rag_evidence}

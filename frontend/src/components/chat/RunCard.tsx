@@ -10,6 +10,7 @@ import { MissionDebrief } from '../debrief/MissionDebrief';
 interface RunCardProps {
   runId: string;
   client: RunClient;
+  index: number;
 }
 
 /** Every phase label and every gated section (graph, ticker, debrief, diff,
@@ -41,7 +42,7 @@ const PHASE_BADGE_CLASS: Record<RunPhase, string> = {
 
 type Banner = { kind: 'error' | 'success'; text: string };
 
-export function RunCard({ runId, client }: RunCardProps) {
+export function RunCard({ runId, client, index }: RunCardProps) {
   const { snapshot, events, refresh } = usePersistentRun(runId, client);
   const [confirming, setConfirming] = useState(false);
   const [applyPending, setApplyPending] = useState(false);
@@ -104,11 +105,17 @@ export function RunCard({ runId, client }: RunCardProps) {
   };
 
   return (
-    <article aria-label={`Run ${runId}`} className="glass flex flex-col gap-4 rounded-2xl p-5 shadow-panel">
+    <article aria-label={`Run ${runId}`} className="glass flex flex-col gap-4 rounded-2xl border-l-[3px] border-l-electric/60 p-5 shadow-panel">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold tracking-tight text-slate-100">{message}</h3>
+          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-electric/80">Run #{index}</p>
+          <h3 className="mt-1 break-words text-sm font-semibold leading-snug tracking-tight text-slate-100">{message}</h3>
           <p className="mt-0.5 truncate font-mono text-[11px] text-mist/60">{project_path}</p>
+          <p aria-label="Run write permission" className="mt-2 text-xs text-mist">
+            {snapshot.authorize_writes === true ? 'Writes authorized · --authorize-writes'
+              : snapshot.authorize_writes === false ? 'Automatic writes not authorized · --dry-run'
+              : 'Write permission not recorded · legacy run'}
+          </p>
         </div>
         <span
           data-testid="run-phase-badge"
@@ -117,6 +124,13 @@ export function RunCard({ runId, client }: RunCardProps) {
           {PHASE_LABEL[phase]}
         </span>
       </header>
+
+      {snapshot.test_spec && (
+        <details className="rounded-lg border border-hull-400/50 bg-hull-800/40 px-3 py-2 text-sm">
+          <summary className="cursor-pointer rounded py-1 text-mist focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-electric">Test specification</summary>
+          <p className="mt-2 whitespace-pre-wrap break-words leading-relaxed text-slate-200">{snapshot.test_spec}</p>
+        </details>
+      )}
 
       {showGraph &&
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
@@ -136,7 +150,7 @@ export function RunCard({ runId, client }: RunCardProps) {
       }
 
       {showDebrief && report &&
-      <MissionDebrief report={report} runId={runId} projectPath={project_path} />
+      <MissionDebrief report={report} runId={runId} projectPath={project_path} applyResult={apply_result} phase={phase} />
       }
 
       {apply_result &&

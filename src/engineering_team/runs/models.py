@@ -46,6 +46,8 @@ class RunSnapshot(BaseModel):
     project_path: str
     workspace_path: str
     message: str
+    test_spec: str | None = None
+    authorize_writes: bool = False
     phase: RunPhase
     source_hashes: dict[str, str | None]
     events: list[StoredEvent] = Field(default_factory=list)

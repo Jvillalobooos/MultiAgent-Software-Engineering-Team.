@@ -168,11 +168,16 @@ def run_event_from_trace(
     return event
 
 
-def _diff_files(implementation: Mapping[str, Any] | None) -> list[dict[str, Any]]:
-    if not implementation:
+def _diff_files(
+    implementation: Mapping[str, Any] | None, diff_text: str, actual_paths: list[str],
+) -> list[dict[str, Any]]:
+    # `diff_text` (the get_diff MCP tool's difflib output over real before/after file
+    # content) is authoritative; implementation.diff is free-text the model wrote about
+    # its own change and is often empty or malformed even on a real successful write.
+    diff = diff_text or str((implementation or {}).get("diff") or "")
+    paths = actual_paths or list((implementation or {}).get("changed_files") or [])
+    if not diff and not paths:
         return []
-    diff = str(implementation.get("diff") or "")
-    paths = list(implementation.get("changed_files") or [])
     sections: dict[str, list[str]] = defaultdict(list)
     current = paths[0] if len(paths) == 1 else None
     for line in diff.splitlines():
@@ -318,6 +323,7 @@ def final_report_from_state(state_value: Any, *, completed_at: str | None = None
     tools = []
     workspace_changed = False
     written_paths: list[str] = []
+    diff_tool_text = ""
     for raw in state.get("tool_results", []):
         item = _plain(raw)
         raw_status = str(getattr(item.get("status"), "value", item.get("status", "FAIL")))
@@ -326,6 +332,8 @@ def final_report_from_state(state_value: Any, *, completed_at: str | None = None
             written_path = str(item.get("output_summary") or "").strip()
             if written_path and written_path not in written_paths:
                 written_paths.append(written_path)
+        if item.get("tool_name") == "get_diff" and raw_status == "SUCCESS":
+            diff_tool_text = str(item.get("output_summary") or "")
         tools.append({
             "name": str(item.get("tool_name", "")),
             "status": raw_status if raw_status in {"SUCCESS", "FAIL", "DENIED"} else "FAIL",
@@ -336,8 +344,11 @@ def final_report_from_state(state_value: Any, *, completed_at: str | None = None
     return {
         "route_history": _route_steps(state, completed_at),
         "model_usage": model_usage,
-        "changed_files": _diff_files(implementation),
-        "applied_diff": bool(implementation and implementation.get("action_mode") == "APPLIED"),
+        "changed_files": _diff_files(implementation, diff_tool_text, written_paths),
+        # Whether files were actually written into the run's sandboxed workspace copy,
+        # derived from real create_file/update_file tool successes -- not the model's
+        # self-reported action_mode, which can mismatch what tool calls actually did.
+        "applied_diff": workspace_changed,
         "workspace_changed": workspace_changed,
         "actual_changed_paths": written_paths,
         "source_applied": False,
