@@ -87,3 +87,26 @@ def test_cloud_http_error_never_leaks_response_body() -> None:
     attempt = runtime.attempts[-1]
     assert "secret-token-value" not in attempt.error
     assert "should never leak" not in attempt.error
+
+
+def test_governed_contradiction_reports_field_names_without_provider_values() -> None:
+    changed = product_candidate().model_copy(update={"source_requirement": "private-provider-value"})
+    body = {"candidates": [{"content": {"parts": [{"text": changed.model_dump_json()}]}}]}
+    settings = Settings(cloud_enabled=True, gemini_api_key="fixture-key",
+                        groq_api_key="fixture-key", gemini_models="gemini-3.6-flash")
+
+    def contradicting(request: httpx.Request) -> httpx.Response:
+        """Both providers answer with the same contradiction, so the chain is walked to
+        the end and the surfaced error is the contradiction rather than a shape error
+        from an unmocked second attempt."""
+        if "groq" in str(request.url):
+            return httpx.Response(200, json={
+                "choices": [{"message": {"content": changed.model_dump_json()}}]})
+        return httpx.Response(200, json=body)
+
+    with httpx.Client(transport=httpx.MockTransport(contradicting)) as client:
+        runtime = CloudModelRuntime(settings, client=client, primary=True)
+        with pytest.raises(RuntimeError, match="source_requirement"):
+            runtime.invoke_artifact(AgentRole.PRODUCT, cloud_envelope(), product_candidate())
+    assert runtime.attempts[-1].error_category == "governed_contradiction"
+    assert "private-provider-value" not in runtime.attempts[-1].error

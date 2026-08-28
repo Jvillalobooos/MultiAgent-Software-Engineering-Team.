@@ -51,16 +51,26 @@ def test_cross_provider_escape_sits_second_not_last() -> None:
     ]
 
 
-def test_developer_leads_with_a_model_that_answers_and_skips_the_escape() -> None:
-    """The pro tier stays in the pool but behind the two models that actually answer:
-    leading with one that returns 429 on every call spends a round trip for nothing.
-    Groq is dropped from this role because the Developer payload exceeds its
-    tokens-per-minute cap (HTTP 413)."""
+def test_developer_keeps_the_escape_as_a_tail_not_as_position_two() -> None:
+    """The Developer payload usually exceeds Groq's tokens-per-minute cap, so the escape
+    is unlikely to answer early -- but it must still be reachable. Dropping it entirely
+    left the role with no cross-provider path, and every Gemini rate limit then fell
+    straight through to a local model that takes 90s to time out."""
     chain = CloudRouter(Settings(_env_file=None)).selection_chain(AgentRole.DEVELOPER)
 
     assert (chain[0].provider, chain[0].model) == ("google", "gemini-3.6-flash")
-    assert all(item.provider == "google" for item in chain)
-    assert "gemini-3.1-pro-preview" in {item.model for item in chain}
+    assert (chain[-1].provider, chain[-1].model) == ("groq", "openai/gpt-oss-120b")
+    assert all(item.provider == "google" for item in chain[:-1])
+
+
+def test_every_role_has_a_cross_provider_path() -> None:
+    """No role may depend on a single provider: Gemini quota is per project and goes to
+    429 for all of its models at once."""
+    router = CloudRouter(Settings(_env_file=None))
+    for role in (AgentRole.PRODUCT, AgentRole.ARCHITECTURE, AgentRole.DEVELOPER,
+                 AgentRole.SECURITY, AgentRole.TESTING, AgentRole.REVIEWER):
+        providers = {item.provider for item in router.selection_chain(role)}
+        assert len(providers) > 1 or providers == {"groq"}, f"{role} is single-provider"
 
 
 def test_models_that_never_answer_are_not_in_any_pool() -> None:
@@ -88,9 +98,10 @@ def test_pools_are_configurable_per_role_and_deduplicated() -> None:
         ("groq", "openai/gpt-oss-20b"),
         ("google", "gemini-3.6-flash"),
     ]
-    # Developer is excluded from the escape by default, so its chain is Google only.
+    # Developer takes the escape as a tail rather than at position two.
     assert [(i.provider, i.model) for i in router.selection_chain(AgentRole.DEVELOPER)] == [
         ("google", "gemini-pro-latest"),
+        ("groq", "openai/gpt-oss-20b"),
     ]
 
 

@@ -27,6 +27,13 @@ _CLOUD_MAP = {
 }
 
 
+class _GovernedContradiction(ValueError):
+    def __init__(self, candidate: dict[str, Any], actual: BaseModel) -> None:
+        values = actual.model_dump(mode="json")
+        self.fields = sorted(key for key, value in candidate.items() if values.get(key) != value)
+        super().__init__("governed artifact contradiction")
+
+
 @dataclass
 class AttemptBudget:
     settings: Settings
@@ -121,15 +128,15 @@ class CloudRouter:
         google = [
             ModelSelection(role, "CLOUD_FALLBACK", "google", model) for model in pool
         ]
-        if role.value.lower() in self._escape_excluded_roles():
-            return tuple(google)
         escape = ModelSelection(
             role, "CLOUD_FALLBACK", "groq", self._settings.cloud_escape_model
         )
+        if role.value.lower() in self._escape_tail_roles():
+            return (*google, escape)
         return (google[0], escape, *google[1:])
 
-    def _escape_excluded_roles(self) -> frozenset[str]:
-        raw = self._settings.cloud_escape_excluded_roles
+    def _escape_tail_roles(self) -> frozenset[str]:
+        raw = self._settings.cloud_escape_tail_roles
         return frozenset(name.strip().lower() for name in raw.split(",") if name.strip())
 
     def selections_for(self, role: AgentRole) -> tuple[ModelSelection, ...]:
@@ -295,7 +302,7 @@ class CloudModelRuntime:
                 usage = payload.get("usage")
             artifact = type(candidate).model_validate_json(raw)
             if not _preserves_governed_facts(candidate.model_dump(mode="json"), artifact):
-                raise ValueError("governed artifact contradiction")
+                raise _GovernedContradiction(candidate_dict, artifact)
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
             category, retryable = _http_category(status)
@@ -323,13 +330,20 @@ class CloudModelRuntime:
                 )
             raise RuntimeError(error) from exc
         except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError, ValidationError) as exc:
-            error = f"CLOUD_FALLBACK_UNAVAILABLE: {type(exc).__name__}"
+            contradiction = isinstance(exc, _GovernedContradiction)
+            detail = (
+                f"governed fields differ: {', '.join(exc.fields)}"
+                if contradiction else type(exc).__name__
+            )
+            error = f"CLOUD_FALLBACK_UNAVAILABLE: {detail}"
             info = ModelExecutionInfo(
                 agent=role, provider=selection.provider, requested_model=selection.model,
                 actual_model=None, model_profile=selection.model_profile,
                 fallback_used=True, fallback_reason=fallback_reason, degraded=True,
                 latency_ms=int((time.perf_counter() - started) * 1000),
                 structured_output_success=False, error=error,
+                error_category="governed_contradiction" if contradiction else None,
+                retryable=True if contradiction else None,
             )
             self.attempts.append(info)
             if self.trace is not None:

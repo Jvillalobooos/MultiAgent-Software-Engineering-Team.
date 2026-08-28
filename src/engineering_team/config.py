@@ -55,11 +55,14 @@ class Settings(BaseSettings):
     # Sits at position 2 of a Google chain. Gemini quota is per project, so a 429 on one
     # Gemini model predicts a 429 on the next; leaving the provider is what recovers it.
     cloud_escape_model: str = "openai/gpt-oss-120b"
-    # Roles whose payload is too large for the escape provider. Groq's on_demand tier
-    # rejects requests above its tokens-per-minute cap with HTTP 413 from about 8k
-    # tokens up, and the Developer ships file contents, so for that role the escape is
-    # a guaranteed wasted attempt.
-    cloud_escape_excluded_roles: str = "developer"
+    # Roles that take the escape LAST instead of second. Groq's on_demand tier rejects
+    # oversized requests with HTTP 413 on its tokens-per-minute cap, and the Developer
+    # ships file contents, so the escape is unlikely to answer for that role early.
+    # It is still tried after the Gemini pool: a 413 costs ~0.4s, while the alternative
+    # is falling straight through to a local model that takes 90s to time out. Removing
+    # it entirely left the Developer with no cross-provider path at all, which is what
+    # made every Gemini rate limit end the run.
+    cloud_escape_tail_roles: str = "developer"
     langfuse_public_key: str | None = None
     langfuse_secret_key: SecretStr | None = None
     langfuse_base_url: str | None = Field(
