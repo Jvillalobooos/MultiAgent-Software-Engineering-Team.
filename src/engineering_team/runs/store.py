@@ -107,6 +107,20 @@ class RunStore:
             self._condition.notify_all()
             return snapshot.model_copy(deep=True)
 
+    def record_trace_id(self, run_id: str, trace_id: str) -> RunSnapshot:
+        """Persist the observability trace id as soon as tracing starts.
+
+        Written once, at the beginning of execution, so a live run can be cited by
+        its real trace id rather than by its position in a list.
+        """
+        with self._condition:
+            snapshot = self._candidate(run_id)
+            snapshot.trace_id = trace_id
+            snapshot.updated_at = datetime.now(UTC)
+            self._commit(snapshot)
+            self._condition.notify_all()
+            return snapshot.model_copy(deep=True)
+
     def record_apply_result(self, run_id: str, result: ApplyResult) -> RunSnapshot:
         """Persist an apply or restore audit record for an existing run."""
         with self._condition:

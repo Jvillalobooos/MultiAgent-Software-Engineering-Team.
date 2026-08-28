@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     ollama_timeout_seconds: float = Field(default=600, gt=0)
     gemini_api_key: str | None = None
     groq_api_key: str | None = None
+    # Ordered Gemini fallback chain, tried left to right when a model answers with an
+    # error. Set GEMINI_MODELS to reorder or extend it. The role's mapped model always
+    # leads regardless of where it appears here.
+    gemini_models: str = "gemini-3.6-flash,gemini-3.5-flash,gemini-3.1-flash-lite,gemini-2.5-flash"
     langfuse_public_key: str | None = None
     langfuse_secret_key: SecretStr | None = None
     langfuse_base_url: str | None = Field(

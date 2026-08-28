@@ -312,6 +312,7 @@ def test_real_executor_forwards_persisted_test_spec_and_write_mode(
         authorize_writes: bool = False,
         run_id: str | None = None,
         event_observer: Callable[[dict[str, Any]], None] | None = None,
+        on_trace_started: Callable[[str], None] | None = None,
     ) -> tuple[dict[str, Any], None, float, bool]:
         captured.update({
             "project_path": project_path,
@@ -320,6 +321,8 @@ def test_real_executor_forwards_persisted_test_spec_and_write_mode(
             "authorize_writes": authorize_writes,
             "run_id": run_id,
         })
+        if on_trace_started is not None:
+            on_trace_started("trace-abc123")
         return _completed_state(str(run_id)), None, 0.0, False
 
     monkeypatch.setattr(run_api_module, "execute_on_project", fake_execute_on_project)
@@ -333,7 +336,7 @@ def test_real_executor_forwards_persisted_test_spec_and_write_mode(
         "authorizeWrites": False,
     }).json()["run_id"]
 
-    _wait_for_phase(client, run_id, "approved")
+    snapshot = _wait_for_phase(client, run_id, "approved")
 
     assert captured == {
         "project_path": str((tmp_path / "workspaces" / run_id).resolve()),
@@ -342,6 +345,10 @@ def test_real_executor_forwards_persisted_test_spec_and_write_mode(
         "authorize_writes": False,
         "run_id": run_id,
     }
+    # The trace id the executor reported is persisted and publicly readable, so the
+    # UI can cite the real trace instead of a positional run label.
+    assert snapshot["trace_id"] == "trace-abc123"
+    assert client.get("/api/runs").json()[0]["trace_id"] == "trace-abc123"
 
 
 def test_completed_run_persists_changed_paths_from_successful_writes(tmp_path: Path) -> None:

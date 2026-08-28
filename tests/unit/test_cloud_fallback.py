@@ -35,20 +35,41 @@ def test_cloud_mapping_is_fixed(role: AgentRole, provider: str, model: str) -> N
     assert (selection.provider, selection.model) == (provider, model)
 
 
-def test_cloud_router_exposes_a_second_cloud_model_before_local_fallback() -> None:
-    selections = CloudRouter(Settings(_env_file=None)).selections_for(AgentRole.PRODUCT)
+def test_cloud_router_walks_the_whole_gemini_chain_before_local_fallback() -> None:
+    chain = CloudRouter(Settings(_env_file=None)).selection_chain(AgentRole.PRODUCT)
 
-    assert [(item.provider, item.model) for item in selections] == [
+    assert [(item.provider, item.model) for item in chain] == [
         ("google", "gemini-3.6-flash"),
+        ("google", "gemini-3.5-flash"),
         ("google", "gemini-3.1-flash-lite"),
+        ("google", "gemini-2.5-flash"),
+        ("groq", "openai/gpt-oss-120b"),
     ]
 
 
-def test_developer_uses_groq_as_the_second_cloud_provider_before_local():
-    selections = CloudRouter(Settings(_env_file=None)).selections_for(AgentRole.DEVELOPER)
+def test_gemini_chain_is_configurable_and_keeps_the_role_model_first() -> None:
+    settings = Settings(_env_file=None, gemini_models="gemini-2.5-flash, gemini-3.6-flash ,,")
+    chain = CloudRouter(settings).selection_chain(AgentRole.PRODUCT)
 
-    assert [(item.provider, item.model) for item in selections] == [
+    assert [(item.provider, item.model) for item in chain] == [
         ("google", "gemini-3.6-flash"),
+        ("google", "gemini-2.5-flash"),
+        ("groq", "openai/gpt-oss-120b"),
+    ]
+
+
+def test_developer_crosses_to_groq_after_every_gemini_model():
+    chain = CloudRouter(Settings(_env_file=None)).selection_chain(AgentRole.DEVELOPER)
+
+    assert [(item.provider, item.model) for item in chain][-1] == ("groq", "openai/gpt-oss-120b")
+    assert all(item.provider == "google" for item in chain[:-1])
+
+
+def test_groq_backed_role_keeps_its_single_alternate():
+    chain = CloudRouter(Settings(_env_file=None)).selection_chain(AgentRole.TESTING)
+
+    assert [(item.provider, item.model) for item in chain] == [
+        ("groq", "openai/gpt-oss-20b"),
         ("groq", "openai/gpt-oss-120b"),
     ]
 

@@ -75,6 +75,11 @@ class CloudBudget:
         return True
 
 
+# Cross-provider tail for Google-backed roles: a total Gemini outage must degrade to
+# another provider rather than end the run.
+_GOOGLE_CROSS_PROVIDER_TAIL = ("groq", "openai/gpt-oss-120b")
+
+
 class CloudRouter:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -83,22 +88,37 @@ class CloudRouter:
         provider, model = _CLOUD_MAP[role]
         return ModelSelection(role, "CLOUD_FALLBACK", provider, model)
 
-    def selections_for(self, role: AgentRole) -> tuple[ModelSelection, ModelSelection]:
+    def gemini_models(self) -> tuple[str, ...]:
+        """The configured Gemini chain, order-preserving and de-duplicated."""
+        configured = (name.strip() for name in self._settings.gemini_models.split(","))
+        return tuple(dict.fromkeys(name for name in configured if name))
+
+    def selection_chain(self, role: AgentRole) -> tuple[ModelSelection, ...]:
+        """Every cloud model to try for a role, in order, before giving up.
+
+        Gemini is the least reliable provider in practice, so a Google-backed role
+        walks the whole configured Gemini chain and then crosses to another provider
+        instead of failing after a single alternate.
+        """
         primary = self.for_role(role)
-        if role is AgentRole.DEVELOPER:
+        if primary.provider != "google":
+            alternate = (
+                "openai/gpt-oss-120b" if primary.model.endswith("20b") else "openai/gpt-oss-20b"
+            )
             return (
                 primary,
-                ModelSelection(role, "CLOUD_FALLBACK", "groq", "openai/gpt-oss-120b"),
+                ModelSelection(role, "CLOUD_FALLBACK", primary.provider, alternate),
             )
-        alternate_model = (
-            "gemini-3.1-flash-lite"
-            if primary.provider == "google"
-            else ("openai/gpt-oss-120b" if primary.model.endswith("20b") else "openai/gpt-oss-20b")
-        )
+        # The role's mapped model always leads, even when it is absent from the chain.
+        ordered = (primary.model, *(m for m in self.gemini_models() if m != primary.model))
         return (
-            primary,
-            ModelSelection(role, "CLOUD_FALLBACK", primary.provider, alternate_model),
+            *(ModelSelection(role, "CLOUD_FALLBACK", "google", model) for model in ordered),
+            ModelSelection(role, "CLOUD_FALLBACK", *_GOOGLE_CROSS_PROVIDER_TAIL),
         )
+
+    def selections_for(self, role: AgentRole) -> tuple[ModelSelection, ...]:
+        """Backwards-compatible alias for the full chain."""
+        return self.selection_chain(role)
 
     def enabled_for(self, selection: ModelSelection) -> bool:
         key = (
@@ -189,10 +209,20 @@ class CloudModelRuntime:
         candidate: BaseModel,
         *,
         fallback_reason: str = "CLOUD_FIRST",
-        _secondary_attempt: bool = False,
+        _attempt: int = 0,
     ) -> tuple[BaseModel, ModelExecutionInfo]:
-        selection = self.router.selections_for(role)[1 if _secondary_attempt else 0]
-        if not self.router.enabled_for(selection) or not self.budget.consume(role):
+        chain = self.router.selection_chain(role)
+        # Skip entries whose provider has no usable credential rather than aborting the
+        # whole chain on the first unconfigured one.
+        while _attempt < len(chain) and not self.router.enabled_for(chain[_attempt]):
+            _attempt += 1
+        if _attempt >= len(chain):
+            raise RuntimeError("CLOUD_FALLBACK_UNAVAILABLE: disabled, missing credential, or budget")
+        selection = chain[_attempt]
+        # The budget bounds *escalations*, not the retries within one escalation: every
+        # model in the chain is one attempt at the same escalation, so it is consumed
+        # once, on entry, and never again as the chain is walked.
+        if _attempt == 0 and not self.budget.consume(role):
             raise RuntimeError("CLOUD_FALLBACK_UNAVAILABLE: disabled, missing credential, or budget")
         candidate_dict = candidate.model_dump(mode="json")
         output_schema = governed_output_schema(type(candidate))
@@ -270,10 +300,10 @@ class CloudModelRuntime:
                     metadata=info.model_dump(mode="json"), level="ERROR",
                     status_message=error,
                 )
-            if not _secondary_attempt:
+            if _attempt + 1 < len(chain):
                 return self.invoke_artifact(
                     role, envelope, candidate, fallback_reason=fallback_reason,
-                    _secondary_attempt=True,
+                    _attempt=_attempt + 1,
                 )
             raise RuntimeError(error) from exc
         except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError, ValidationError) as exc:
@@ -293,10 +323,10 @@ class CloudModelRuntime:
                     metadata=info.model_dump(mode="json"), level="ERROR",
                     status_message=error,
                 )
-            if not _secondary_attempt:
+            if _attempt + 1 < len(chain):
                 return self.invoke_artifact(
                     role, envelope, candidate, fallback_reason=fallback_reason,
-                    _secondary_attempt=True,
+                    _attempt=_attempt + 1,
                 )
             raise RuntimeError(error) from exc
         finally:

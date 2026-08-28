@@ -49,6 +49,10 @@ class RunSnapshot(BaseModel):
     test_spec: str | None = None
     authorize_writes: bool = False
     phase: RunPhase
+    # The observability trace this run is recorded under. Populated by the executor
+    # the moment tracing starts, so the UI can cite a real id instead of a positional
+    # "Run #N" label. None only for a run that never reached execution.
+    trace_id: str | None = None
     source_hashes: dict[str, str | None]
     events: list[StoredEvent] = Field(default_factory=list)
     report: dict[str, Any] | None = None
@@ -67,6 +71,7 @@ class RunSummary(BaseModel):
     project_path: str
     message: str
     phase: RunPhase
+    trace_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -77,6 +82,7 @@ class RunSummary(BaseModel):
             project_path=snapshot.project_path,
             message=snapshot.message,
             phase=snapshot.phase,
+            trace_id=snapshot.trace_id,
             created_at=snapshot.created_at,
             updated_at=snapshot.updated_at,
         )

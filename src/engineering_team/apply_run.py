@@ -50,6 +50,7 @@ def execute_on_project(
     test_paths: list[str] | None = None,
     run_id: str | None = None,
     event_observer: Callable[[dict[str, Any]], None] | None = None,
+    on_trace_started: Callable[[str], None] | None = None,
 ) -> tuple[dict[str, Any], Any, float, bool]:
     """Execute the one production LangGraph and return its real terminal state."""
     project_root = Path(project_path).resolve()
@@ -70,6 +71,10 @@ def execute_on_project(
         base_url=settings.langfuse_base_url,
         offline_directory="evaluation/reports/traces",
     ).start_run(run_id, requirement)
+    if on_trace_started is not None:
+        # Publish the real trace id at the start of execution, not at the end, so a
+        # run in flight can already be cited by it.
+        on_trace_started(trace_session.trace_id)
     trace = (
         EventForwardingTrace(trace_session, event_observer)
         if event_observer is not None else trace_session

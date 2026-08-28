@@ -44,6 +44,7 @@ _SNAPSHOT_FIELDS = (
     "test_spec",
     "authorize_writes",
     "phase",
+    "trace_id",
     "events",
     "report",
     "changed_paths",
@@ -250,6 +251,9 @@ class RunManager:
             authorize_writes=snapshot.authorize_writes,
             run_id=snapshot.run_id,
             event_observer=observe,
+            on_trace_started=lambda trace_id: self.store.record_trace_id(
+                snapshot.run_id, trace_id
+            ),
         )
         return state
 
