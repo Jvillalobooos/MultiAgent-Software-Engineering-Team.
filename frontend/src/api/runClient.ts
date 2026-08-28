@@ -25,7 +25,8 @@ const object = (value: unknown): value is Record<string, unknown> =>
 
 const hasValidRunOptions = (value: Record<string, unknown>): boolean =>
   (value.test_spec === undefined || value.test_spec === null || typeof value.test_spec === 'string') &&
-  (value.authorize_writes === undefined || typeof value.authorize_writes === 'boolean');
+  (value.authorize_writes === undefined || typeof value.authorize_writes === 'boolean') &&
+  (value.trace_id === undefined || value.trace_id === null || typeof value.trace_id === 'string');
 
 /* ---------- Transport guards ---------- */
 

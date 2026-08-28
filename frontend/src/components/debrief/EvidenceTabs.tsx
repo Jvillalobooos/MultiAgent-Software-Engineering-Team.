@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { AlertOctagonIcon, DatabaseIcon, WrenchIcon } from 'lucide-react';
 import { RagEvidence, RunError, ToolResult } from '../../types/mission';
-import { AGENT_LABELS, TOOL_STATUS_CLASS } from '../../utils/format';
+import { AGENT_LABELS, TOOL_STATUS_CLASS, clampText } from '../../utils/format';
 
 interface EvidenceTabsProps {
   rag: RagEvidence[];
@@ -13,6 +13,35 @@ interface EvidenceTabsProps {
 type TabKey = 'rag' | 'tools' | 'errors';
 
 const ease = [0.23, 1, 0.32, 1] as const;
+
+/** Tool details are provider-authored and occasionally enormous — a single one can
+ *  push the whole table off-screen. Bound it to a readable excerpt and let the reader
+ *  ask for the rest, rather than truncating the text away entirely. */
+const DETAIL_LIMIT = 140;
+
+function ToolDetail({ detail }: { detail: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const overflows = detail.length > DETAIL_LIMIT;
+
+  if (!overflows) {
+    return <span className="break-words">{detail}</span>;
+  }
+
+  return (
+    <span className="flex flex-col items-start gap-1">
+      <span className="break-words" title={detail}>
+        {expanded ? detail : clampText(detail, DETAIL_LIMIT)}
+      </span>
+      <button
+        type="button"
+        onClick={() => setExpanded((open) => !open)}
+        aria-expanded={expanded}
+        className="-mx-1 shrink-0 rounded px-1 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-electric/80 transition-colors hover:text-electric focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric">
+        {expanded ? 'show less' : 'show more'}
+      </button>
+    </span>
+  );
+}
 
 export function EvidenceTabs({ rag, tools, errors }: EvidenceTabsProps) {
   const [tab, setTab] = useState<TabKey>('rag');
@@ -65,7 +94,7 @@ export function EvidenceTabs({ rag, tools, errors }: EvidenceTabsProps) {
                     {doc.score.toFixed(2)}
                   </span>
                 </div>
-                <p className="mt-1.5 text-[12px] leading-relaxed text-slate-300">{doc.snippet}</p>
+                <p className="mt-1.5 line-clamp-3 text-[12px] leading-relaxed text-slate-300" title={doc.snippet}>{doc.snippet}</p>
                 <span className="mt-1.5 inline-block font-mono text-[9.5px] uppercase tracking-[0.12em] text-mist/50">
                   cited by {AGENT_LABELS[doc.agent]}
                 </span>
@@ -82,7 +111,7 @@ export function EvidenceTabs({ rag, tools, errors }: EvidenceTabsProps) {
                 <th className="px-3 py-2 font-medium">status</th>
                 <th className="px-3 py-2 font-medium">duration</th>
                 <th className="px-3 py-2 font-medium">agent</th>
-                <th className="px-3 py-2 font-medium">detail</th>
+                <th className="w-1/2 px-3 py-2 font-medium">detail</th>
               </tr>
             </thead>
             <tbody>
@@ -100,7 +129,9 @@ export function EvidenceTabs({ rag, tools, errors }: EvidenceTabsProps) {
                     {t.duration_ms}ms
                   </td>
                   <td className="px-3 py-2.5 text-[12px] text-mist/85">{AGENT_LABELS[t.agent]}</td>
-                  <td className="px-3 py-2.5 text-[12px] text-slate-300">{t.detail}</td>
+                  <td className="max-w-0 px-3 py-2.5 align-top text-[12px] text-slate-300">
+                    <ToolDetail detail={t.detail} />
+                  </td>
                 </tr>
             )}
             </tbody>

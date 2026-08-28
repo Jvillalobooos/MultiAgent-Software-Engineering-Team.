@@ -1,38 +1,67 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { ArrowLeftIcon } from 'lucide-react';
 import { RunClient } from '../../api/runClient';
-import { ProjectRef } from '../../types/mission';
+import { ProjectRef, RunSummary } from '../../types/mission';
 import { ProjectHeader } from './ProjectHeader';
 import { ChatComposer, RunSubmission } from './ChatComposer';
 import { RunCard } from './RunCard';
+import { RunHistory } from './RunHistory';
+import { LaunchScreen } from './LaunchScreen';
 
 interface ChatWorkspaceProps {
   client: RunClient;
 }
 
-/** Owns the selected project and the ordered list of run identifiers for this
- *  session. Each submitted message starts exactly one independent run — never
- *  a continuation of a prior message's context. */
+/** Merge server truth over locally-known runs, keeping any run this session started
+ *  that the backend has not listed back yet. Server order (newest first) is preserved. */
+function mergeSummaries(local: RunSummary[], remote: RunSummary[]): RunSummary[] {
+  const remoteIds = new Set(remote.map((summary) => summary.run_id));
+  return [...remote, ...local.filter((summary) => !remoteIds.has(summary.run_id))];
+}
+
+/** Owns the selected project, the run-history index, and which single run is open.
+ *  Each submitted message starts exactly one independent run — never a continuation
+ *  of a prior message's context — and exactly one run is ever mounted at a time, so
+ *  past runs are navigable history rather than a stack of live cards. */
 export function ChatWorkspace({ client }: ChatWorkspaceProps) {
   const [selectedProject, setSelectedProject] = useState<ProjectRef | null>(null);
-  const [runIds, setRunIds] = useState<string[]>([]);
+  const [summaries, setSummaries] = useState<RunSummary[]>([]);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    client.listRuns()
-      .then((summaries) => {
-        if (cancelled) return;
-        setRunIds(summaries.map((summary) => summary.run_id));
-      })
-      .catch(() => {
-        // No history available (fresh backend, or offline) — start with an empty session.
-      });
-    return () => { cancelled = true; };
+  const loadHistory = useCallback(async () => {
+    try {
+      const remote = await client.listRuns();
+      setSummaries((current) => mergeSummaries(current, remote));
+    } catch {
+      // No history available (fresh backend, or offline) — keep what this session knows.
+    }
   }, [client]);
+
+  // The app always opens on the launch screen: history is indexed, never mounted.
+  useEffect(() => {void loadHistory();}, [loadHistory]);
 
   const handleSubmit = async ({ message, testSpec, authorizeWrites }: RunSubmission) => {
     if (!selectedProject) return;
     const runId = await client.createRun(selectedProject.path, message, { testSpec, authorizeWrites });
-    setRunIds((current) => [...current, runId]);
+    const now = new Date().toISOString();
+    // Recorded locally so the new run appears in history immediately; the next
+    // history load replaces it with the backend's authoritative summary.
+    setSummaries((current) => mergeSummaries(current, [{
+      run_id: runId,
+      project_path: selectedProject.path,
+      message,
+      test_spec: testSpec || null,
+      authorize_writes: authorizeWrites,
+      phase: 'queued',
+      created_at: now,
+      updated_at: now
+    }]));
+    setActiveRunId(runId);
+  };
+
+  const handleBackToHistory = () => {
+    setActiveRunId(null);
+    void loadHistory();
   };
 
   return (
@@ -40,12 +69,23 @@ export function ChatWorkspace({ client }: ChatWorkspaceProps) {
       <ProjectHeader client={client} selectedProject={selectedProject} onProjectSelected={setSelectedProject} />
 
       <div className="mx-auto flex w-full max-w-[1200px] flex-1 flex-col gap-5 px-4 py-6 md:px-8">
-        {runIds.length === 0 ?
-        <p className="mt-10 text-center font-mono text-[12px] text-mist/45">
-            Select a project folder, then describe a change to start your first run.
-          </p> :
+        {activeRunId === null ?
+        <div className="flex flex-col gap-5">
+            <LaunchScreen hasProject={selectedProject !== null} />
+            <RunHistory summaries={summaries} activeRunId={activeRunId} onOpenRun={setActiveRunId} />
+          </div> :
 
-        runIds.map((runId, index) => <RunCard key={runId} runId={runId} client={client} index={index + 1} />)
+        <div className="flex flex-col gap-4">
+            <button
+            type="button"
+            onClick={handleBackToHistory}
+            className="flex w-fit items-center gap-2 rounded-md border border-hull-400/55 px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-mist/80 transition-colors hover:border-electric/45 hover:text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-electric">
+
+              <ArrowLeftIcon aria-hidden="true" className="h-3.5 w-3.5" />
+              Back to history
+            </button>
+            <RunCard key={activeRunId} runId={activeRunId} client={client} />
+          </div>
         }
       </div>
 

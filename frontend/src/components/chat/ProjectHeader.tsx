@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useId, useRef, useState } from 'react';
-import { FolderOpenIcon, HexagonIcon } from 'lucide-react';
+import { FolderOpenIcon } from 'lucide-react';
+import { BrandMark } from '../brand/BrandMark';
 import { RunClient } from '../../api/runClient';
 import { ProjectRef } from '../../types/mission';
 
@@ -81,7 +82,7 @@ export function ProjectHeader({ client, selectedProject, onProjectSelected }: Pr
   return (
     <header className="glass sticky top-0 z-10 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-b-2xl px-5 py-4 shadow-panel">
       <div className="flex items-center gap-2.5">
-        <HexagonIcon className="h-4 w-4 text-electric" strokeWidth={2.2} />
+        <BrandMark className="h-6 w-6" />
         <span className="text-sm font-semibold tracking-tight text-slate-50">Multiagent Chat</span>
       </div>
 

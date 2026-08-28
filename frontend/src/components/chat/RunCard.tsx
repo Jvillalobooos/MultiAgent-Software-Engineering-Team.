@@ -1,16 +1,18 @@
-import { useState } from 'react';
-import { LoaderCircleIcon } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { HashIcon, LoaderCircleIcon } from 'lucide-react';
 import { RunClient } from '../../api/runClient';
 import { usePersistentRun } from '../../hooks/usePersistentRun';
-import { AgentId, Provider, RunPhase } from '../../types/mission';
+import { RunPhase } from '../../types/mission';
+import { AGENT_LABELS, formatDuration, formatTimestamp, shortTrace } from '../../utils/format';
+import { useRunGraph } from '../../hooks/useRunGraph';
 import { AgentGraph } from '../mission/AgentGraph';
+import { RouteTrace } from '../mission/RouteTrace';
 import { ActionTicker } from '../mission/ActionTicker';
 import { MissionDebrief } from '../debrief/MissionDebrief';
 
 interface RunCardProps {
   runId: string;
   client: RunClient;
-  index: number;
 }
 
 /** Every phase label and every gated section (graph, ticker, debrief, diff,
@@ -42,8 +44,24 @@ const PHASE_BADGE_CLASS: Record<RunPhase, string> = {
 
 type Banner = { kind: 'error' | 'success'; text: string };
 
-export function RunCard({ runId, client, index }: RunCardProps) {
+/** One measured fact about the run. Every value here is read from the persisted
+ *  snapshot or its recorded events — nothing is estimated client-side. */
+function Metric({ label, value, accent }: { label: string; value: string; accent?: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-mist/45">{label}</div>
+      <div className={`mt-0.5 truncate font-mono text-[12px] tabular-nums ${accent ?? 'text-slate-100'}`}>
+        {value}
+      </div>
+    </div>
+  );
+}
+
+
+export function RunCard({ runId, client }: RunCardProps) {
   const { snapshot, events, refresh } = usePersistentRun(runId, client);
+  const runEvents = useMemo(() => events.map((event) => event.payload), [events]);
+  const graph = useRunGraph(runEvents);
   const [confirming, setConfirming] = useState(false);
   const [applyPending, setApplyPending] = useState(false);
   const [restorePending, setRestorePending] = useState(false);
@@ -59,15 +77,38 @@ export function RunCard({ runId, client, index }: RunCardProps) {
   }
 
   const { phase, report, apply_result, project_path, message, changed_paths } = snapshot;
-  const runEvents = events.map((event) => event.payload);
 
   const showGraph = phase === 'preparing' || phase === 'running';
   const showDebrief = report !== null;
   const canApply = phase === 'approved' && report?.workspace_changed === true;
   const canRestore = apply_result?.status === 'apply_failed' && Boolean(apply_result.backup_path);
 
-  const providers = Object.create(null) as Record<AgentId, Provider | null>;
-  const lastEvent = runEvents[runEvents.length - 1];
+
+  // Every metric below is counted from what was actually recorded for this run.
+  const traceLabel = snapshot.trace_id ?? runId;
+  const activeAgent = graph.activeAgent;
+  const iteration = report ? report.route_history.length : graph.iteration;
+  const modelCalls = report
+    ? report.model_usage.reduce((sum, usage) => sum + usage.calls, 0)
+    : runEvents.filter((event) => event.type === 'model').length;
+  const totalTokens = report
+    ? report.model_usage.reduce((sum, usage) => sum + usage.input_tokens + usage.output_tokens, 0)
+    : runEvents.reduce(
+        (sum, event) =>
+          sum + (event.usage_details
+            ? event.usage_details.input_tokens + event.usage_details.output_tokens
+            : 0),
+        0,
+      );
+  const toolCalls = report
+    ? report.tool_results.length
+    : runEvents.filter((event) => event.type === 'tool').length;
+  const ragHits = report
+    ? report.rag_evidence.length
+    : runEvents.filter((event) => event.type === 'rag').length;
+  const errorCount = report
+    ? report.errors.length
+    : runEvents.filter((event) => event.type === 'error' && event.level === 'error').length;
 
   const handleApplyConfirmed = async () => {
     setApplyPending(true);
@@ -108,7 +149,16 @@ export function RunCard({ runId, client, index }: RunCardProps) {
     <article aria-label={`Run ${runId}`} className="glass flex flex-col gap-4 rounded-2xl border-l-[3px] border-l-electric/60 p-5 shadow-panel">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-electric/80">Run #{index}</p>
+          <p
+            data-testid="run-trace-id"
+            aria-label="Run trace id"
+            title={traceLabel}
+            className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-electric/80">
+
+            <HashIcon aria-hidden="true" className="h-3 w-3" />
+            trace {shortTrace(traceLabel)}
+            {snapshot.trace_id ? null : <span className="text-mist/45">· pending</span>}
+          </p>
           <h3 className="mt-1 break-words text-sm font-semibold leading-snug tracking-tight text-slate-100">{message}</h3>
           <p className="mt-0.5 truncate font-mono text-[11px] text-mist/60">{project_path}</p>
           <p aria-label="Run write permission" className="mt-2 text-xs text-mist">
@@ -125,6 +175,24 @@ export function RunCard({ runId, client, index }: RunCardProps) {
         </span>
       </header>
 
+      <section
+        aria-label="Run metrics"
+        className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border border-hull-400/35 bg-hull-800/40 px-4 py-3 sm:grid-cols-4 lg:grid-cols-8">
+
+        <Metric label="started" value={formatTimestamp(snapshot.created_at)} />
+        <Metric label="duration" value={formatDuration(snapshot.created_at, snapshot.updated_at)} />
+        <Metric label="stage" value={activeAgent ? AGENT_LABELS[activeAgent] : '—'} accent="text-electric" />
+        <Metric label="iteration" value={String(iteration)} />
+        <Metric label="events" value={String(runEvents.length)} />
+        <Metric label="model calls" value={`${modelCalls}${totalTokens ? ` · ${totalTokens.toLocaleString()} tok` : ''}`} />
+        <Metric label="tools / rag" value={`${toolCalls} / ${ragHits}`} />
+        <Metric
+          label="errors"
+          value={String(errorCount)}
+          accent={errorCount > 0 ? 'text-alert' : 'text-mist/70'} />
+
+      </section>
+
       {snapshot.test_spec && (
         <details className="rounded-lg border border-hull-400/50 bg-hull-800/40 px-3 py-2 text-sm">
           <summary className="cursor-pointer rounded py-1 text-mist focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-electric">Test specification</summary>
@@ -133,24 +201,39 @@ export function RunCard({ runId, client, index }: RunCardProps) {
       )}
 
       {showGraph &&
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-          <div className="min-h-[280px] overflow-x-auto rounded-xl border border-hull-400/35 bg-hull-800/40 p-3">
-            <AgentGraph
-            activeAgent={lastEvent ? lastEvent.agent : null}
-            caption={lastEvent ? lastEvent.status_message : ''}
-            providers={providers}
-            fallbacks={{}}
-            activeEdge={null}
-            visitedEdges={[]}
-            dimmed={false} />
+      <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+            <div className="min-h-[280px] overflow-x-auto rounded-xl border border-hull-400/35 bg-hull-800/40 p-3">
+              <AgentGraph
+              activeAgent={graph.activeAgent}
+              visitedAgents={graph.visitedAgents}
+              caption={graph.caption}
+              providers={graph.providers}
+              fallbacks={graph.fallbacks}
+              activeEdge={graph.activeEdge}
+              visitedEdges={graph.visitedEdges}
+              dimmed={false} />
 
+            </div>
+            <ActionTicker events={runEvents} />
           </div>
-          <ActionTicker events={runEvents} />
+          <RouteTrace route={graph.route} />
         </div>
       }
 
+      {!showGraph && runEvents.length > 0 &&
+      <details className="rounded-xl border border-hull-400/35 bg-hull-800/40 px-3 py-2">
+          <summary className="cursor-pointer rounded py-1 font-mono text-[11px] uppercase tracking-[0.12em] text-mist/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-electric">
+            Execution timeline · {runEvents.length} events
+          </summary>
+          <div className="mt-2">
+            <ActionTicker events={runEvents} />
+          </div>
+        </details>
+      }
+
       {showDebrief && report &&
-      <MissionDebrief report={report} runId={runId} projectPath={project_path} applyResult={apply_result} phase={phase} />
+      <MissionDebrief report={report} runId={runId} traceId={snapshot.trace_id} projectPath={project_path} applyResult={apply_result} phase={phase} />
       }
 
       {apply_result &&

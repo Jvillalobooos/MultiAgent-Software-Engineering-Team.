@@ -13,6 +13,7 @@ describe('ChatWorkspace', () => {
     const client = new FakeRunClient(snapshot);
     client.listRuns = vi.fn().mockResolvedValue([snapshot]);
     render(<ChatWorkspace client={client} />);
+    await userEvent.click(await screen.findByRole('button', { name: /change it/i }));
     expect(await screen.findByLabelText('Run write permission')).toHaveTextContent('Writes authorized');
     await userEvent.click(screen.getByText('Test specification', { selector: 'summary' }));
     expect(screen.getByText(snapshot.test_spec)).toBeVisible();
@@ -28,6 +29,7 @@ describe('ChatWorkspace', () => {
     const client = new FakeRunClient(snapshot);
     client.listRuns = vi.fn().mockResolvedValue([snapshot]);
     render(<ChatWorkspace client={client} />);
+    await userEvent.click(await screen.findByRole('button', { name: /change it/i }));
     expect(await screen.findByRole('region', { name: 'Code diff' })).toHaveTextContent('Verification failed · project changes retained');
   });
 
@@ -67,7 +69,54 @@ describe('ChatWorkspace', () => {
         { projectPath: 'C:\\projects\\calculator', message: 'second change', authorizeWrites: false },
       ])
     );
-    expect(screen.getAllByRole('article')).toHaveLength(2);
+    // Only the run just launched is mounted; the earlier one is history, not a card.
+    expect(screen.getAllByRole('article')).toHaveLength(1);
+    expect(screen.getByTestId('run-trace-id')).toHaveTextContent('run-2');
+    // Both runs are still reachable as separate history entries.
+    await userEvent.click(screen.getByRole('button', { name: /back to history/i }));
+    expect(screen.getByRole('region', { name: 'Run history' })).toHaveTextContent('2 executions');
+    expect(screen.getByRole('button', { name: /first change/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /second change/i })).toBeInTheDocument();
+  });
+
+  it('opens on the launch screen and lists stored runs as history instead of mounting them', async () => {
+    const client = new FakeRunClient();
+    client.listRuns = vi.fn().mockResolvedValue([
+      { ...approvedFixture(), run_id: 'run-old', message: 'an earlier change' },
+    ]);
+    render(<ChatWorkspace client={client} />);
+
+    expect(await screen.findByRole('region', { name: 'Run history' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Start a run' })).toBeInTheDocument();
+    // Restarting the backend must not replay stored runs into the viewport.
+    expect(screen.queryByRole('article')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /an earlier change/i }));
+    expect(await screen.findByRole('article')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /back to history/i }));
+    expect(screen.queryByRole('article')).not.toBeInTheDocument();
+  });
+
+  it('collapses retries of the same instruction on the same project into one history entry', async () => {
+    const base = approvedFixture();
+    const client = new FakeRunClient();
+    client.listRuns = vi.fn().mockResolvedValue([
+      { ...base, run_id: 'run-3', message: 'fix median', phase: 'approved', created_at: '2026-08-27T10:02:00-06:00' },
+      { ...base, run_id: 'run-2', message: 'fix median', phase: 'failed', created_at: '2026-08-27T10:01:00-06:00' },
+      { ...base, run_id: 'run-1', message: 'fix median', phase: 'failed', created_at: '2026-08-27T10:00:00-06:00' },
+      { ...base, run_id: 'run-other', message: 'unrelated change', created_at: '2026-08-27T09:00:00-06:00' },
+    ]);
+    render(<ChatWorkspace client={client} />);
+
+    const history = await screen.findByRole('region', { name: 'Run history' });
+    expect(history).toHaveTextContent('2 executions');
+    // The three attempts collapse behind one row, expandable to reach each attempt.
+    const attempts = screen.getByRole('button', { name: /3 attempts of this run/i });
+    expect(attempts).toHaveTextContent('×3');
+
+    await userEvent.click(attempts);
+    expect(screen.getByRole('button', { name: /attempt 2/i })).toBeInTheDocument();
   });
 
   it('does not select a project when the native picker is cancelled', async () => {

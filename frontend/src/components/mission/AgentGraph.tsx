@@ -14,6 +14,7 @@ import {
 import { AgentId, EdgeKind, Provider } from '../../types/mission';
 import { AGENTS, EDGES, EDGE_MAP, NODE_H, NODE_W, VIEW_H, VIEW_W } from '../../data/agents';
 import { EDGE_COLOR } from '../../utils/format';
+import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
 
 export interface ActiveEdge {
   key: number;
@@ -25,6 +26,7 @@ export interface ActiveEdge {
 
 interface AgentGraphProps {
   activeAgent: AgentId | null;
+  visitedAgents?: AgentId[];
   caption: string;
   providers: Record<AgentId, Provider | null>;
   fallbacks: Record<string, string>;
@@ -44,6 +46,7 @@ const ICONS: Record<AgentId, LucideIcon> = {
 };
 
 const ease = [0.23, 1, 0.32, 1] as const;
+const PARTICLE_STAGGER = [0, 0.34, 0.67] as const;
 const pct = (value: number, total: number) => `${value / total * 100}%`;
 
 function ProviderBadge({
@@ -81,6 +84,7 @@ function ProviderBadge({
 
 export function AgentGraph({
   activeAgent,
+  visitedAgents = [],
   caption,
   providers,
   fallbacks,
@@ -89,6 +93,9 @@ export function AgentGraph({
   dimmed
 }: AgentGraphProps) {
   const activeEdgeId = activeEdge ? `${activeEdge.from}-${activeEdge.to}` : null;
+  // SMIL ignores the global reduced-motion CSS rule, so the particles have to be
+  // withheld here rather than merely slowed down.
+  const reducedMotion = usePrefersReducedMotion();
 
   return (
     <motion.section
@@ -135,25 +142,25 @@ export function AgentGraph({
 
             })}
 
-            {activeEdge && activeEdgeId && EDGE_MAP[activeEdgeId] &&
+            {activeEdge && activeEdgeId && EDGE_MAP[activeEdgeId] && !reducedMotion &&
             <g key={`${activeEdge.key}-${activeEdgeId}`}>
-                {[0, 1, 2].map((i) =>
+                {PARTICLE_STAGGER.map((offset, i) =>
               <circle
                 key={i}
-                r={i === 0 ? 4.5 : 2.6}
+                r={i === 0 ? 4.2 : 2.6}
                 fill={EDGE_COLOR[activeEdge.kind]}
-                opacity={i === 0 ? 0.95 : 0.6}
+                opacity={i === 0 ? 0.95 : 0.55}
                 filter="url(#edge-glow)">
-                
+
                     <animateMotion
-                  dur={`${Math.round(activeEdge.duration * 0.7)}ms`}
-                  begin={`${i * 130}ms`}
-                  fill="freeze"
+                  dur={`${activeEdge.duration}ms`}
+                  begin={`${Math.round(offset * activeEdge.duration)}ms`}
+                  repeatCount="indefinite"
                   calcMode="linear"
                   keyPoints={activeEdge.kind === 'reject' ? '1;0' : '0;1'}
                   keyTimes="0;1"
                   path={EDGE_MAP[activeEdgeId].d} />
-                
+
                   </circle>
               )}
               </g>
@@ -163,6 +170,9 @@ export function AgentGraph({
           {AGENTS.map((node) => {
             const Icon = ICONS[node.id];
             const isActive = activeAgent === node.id;
+            // Three states, not two: an agent that has already run is finished work,
+            // not the same as one the run never reached.
+            const isDone = !isActive && visitedAgents.includes(node.id);
             return (
               <div
                 key={node.id}
@@ -178,10 +188,12 @@ export function AgentGraph({
                   className={`relative flex h-full w-full flex-col justify-between rounded-xl border px-3 py-2.5 transition-all duration-300 ease-command ${
                   isActive ?
                   'border-electric/70 bg-electric/[0.09] shadow-glow-electric' :
-                  'border-hull-400/55 bg-hull-800/55'}`
+                  isDone ?
+                  'border-neon/30 bg-hull-800/70' :
+                  'border-hull-400/45 bg-hull-800/40 opacity-60'}`
                   }>
                   
-                  {isActive &&
+                  {isActive && !reducedMotion &&
                   <>
                       <motion.span
                       aria-hidden
@@ -198,14 +210,14 @@ export function AgentGraph({
                     <div className="flex items-center gap-2">
                       <Icon
                         className={`h-4 w-4 transition-colors duration-300 ease-command ${
-                        isActive ? 'text-electric' : 'text-mist/60'}`
+                        isActive ? 'text-electric' : isDone ? 'text-neon/75' : 'text-mist/55'}`
                         }
                         strokeWidth={2} />
                       
                       <div className="leading-tight">
                         <div
                           className={`text-[12.5px] font-semibold tracking-tight transition-colors duration-300 ease-command ${
-                          isActive ? 'text-slate-50' : 'text-slate-300/80'}`
+                          isActive ? 'text-slate-50' : isDone ? 'text-slate-200' : 'text-slate-300/70'}`
                           }>
                           
                           {node.label}
@@ -221,10 +233,15 @@ export function AgentGraph({
                       provider={providers[node.id]}
                       fallback={fallbacks[node.id]}
                       operator={node.id === 'human_review'} />
-                    {isActive &&
+                    {isActive ?
                     <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-electric/80">
                         active
-                      </span>
+                      </span> :
+                    isDone ?
+                    <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-neon/70">
+                        done
+                      </span> :
+                    null
                     }
                   </div>
                 </div>

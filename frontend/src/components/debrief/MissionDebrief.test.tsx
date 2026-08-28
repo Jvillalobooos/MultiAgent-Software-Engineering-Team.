@@ -80,6 +80,9 @@ describe('MissionDebrief', () => {
 
     render(<MissionDebrief report={report} runId="run-1" projectPath="C:\\projects\\demo" />);
 
-    expect(screen.getByText(/diff contents unavailable/i)).toBeInTheDocument();
+    // The file is named as a target but carries no hunks: a real early-exit outcome,
+    // reported as such rather than as a rendering failure.
+    expect(screen.getByText(/no changes were recorded for/i)).toBeInTheDocument();
+    expect(screen.getByText('calculadora/operaciones.py', { selector: 'span' })).toBeInTheDocument();
   });
 });

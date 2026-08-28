@@ -60,6 +60,31 @@ export const EDGES: GraphEdge[] = [
   to: 'architecture',
   kind: 'reject',
   d: 'M 1212,150 C 1140,4 470,-8 332,150'
+},
+// Routes the real workflow actually takes, recovered from recorded run events:
+// after a remediation loop the Developer re-enters Testing directly (Security is
+// not re-run), and both Reviewer and Developer can escalate to the operator gate.
+{
+  id: 'developer-testing',
+  from: 'developer',
+  to: 'testing',
+  kind: 'forward',
+  d: 'M 552,248 C 680,322 864,322 992,248'
+},
+{
+  id: 'reviewer-human_review',
+  from: 'reviewer',
+  to: 'human_review',
+  kind: 'branch',
+  d: 'M 1212,248 C 1212,364 1092,412 980,412'
+},
+{
+  id: 'developer-human_review',
+  from: 'developer',
+  to: 'human_review',
+  kind: 'branch',
+  dashed: true,
+  d: 'M 552,248 C 556,394 664,456 796,438'
 }];
 
 

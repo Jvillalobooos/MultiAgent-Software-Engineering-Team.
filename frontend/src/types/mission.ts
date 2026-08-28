@@ -198,6 +198,8 @@ export interface RunSnapshot {
   test_spec?: string | null;
   authorize_writes?: boolean;
   phase: RunPhase;
+  /** Observability trace this run is recorded under. Null until execution starts. */
+  trace_id?: string | null;
   events: StoredEvent[];
   report: FinalReport | null;
   changed_paths: string[];
@@ -214,6 +216,7 @@ export interface RunSummary {
   test_spec?: string | null;
   authorize_writes?: boolean;
   phase: RunPhase;
+  trace_id?: string | null;
   created_at: string;
   updated_at: string;
 }

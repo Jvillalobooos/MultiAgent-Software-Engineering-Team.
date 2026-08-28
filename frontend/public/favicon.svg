@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Multiagent Chat">
+  <rect x="1" y="1" width="30" height="30" rx="8" fill="#080d18" />
+  <rect x="1.75" y="1.75" width="28.5" height="28.5" rx="7.25" fill="none" stroke="#243352" stroke-width="1.5" />
+  <g fill="none" stroke="#3fb6ff" stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11 10.5 L16.5 16 L11 21.5" />
+    <path d="M17.5 22 H22.5" />
+  </g>
+</svg>

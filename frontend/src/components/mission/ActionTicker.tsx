@@ -8,7 +8,7 @@ import {
   WrenchIcon } from
 'lucide-react';
 import { EventType, RunEvent, ToolStatus } from '../../types/mission';
-import { AGENT_LABELS, TOOL_STATUS_CLASS, formatClock } from '../../utils/format';
+import { AGENT_LABELS, TOOL_STATUS_CLASS, clampText, formatClock } from '../../utils/format';
 
 interface ActionTickerProps {
   events: RunEvent[];
@@ -53,8 +53,8 @@ function EventCard({ event }: {event: RunEvent;}) {
         </span>
       </div>
 
-      <p className="mt-1.5 font-mono text-[11px] leading-snug text-slate-300">
-        {event.status_message}
+      <p className="mt-1.5 font-mono text-[11px] leading-snug text-slate-300" title={event.status_message}>
+        {clampText(event.status_message, 160)}
       </p>
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -84,7 +84,35 @@ function EventCard({ event }: {event: RunEvent;}) {
             {String(event.metadata.code)}
           </span>
         }
+        {event.model &&
+        <span className="rounded border border-plasma/35 bg-plasma/[0.07] px-1.5 py-[1px] font-mono text-[9px] text-plasma/90">
+            {event.model}
+          </span>
+        }
+        {event.usage_details &&
+        <span className="rounded border border-hull-400/55 px-1.5 py-[1px] font-mono text-[9px] text-mist/60">
+            {event.usage_details.input_tokens} in / {event.usage_details.output_tokens} out
+          </span>
+        }
       </div>
+
+      {(event.input || event.output) &&
+      <details className="mt-2">
+          <summary className="cursor-pointer rounded font-mono text-[9px] uppercase tracking-[0.12em] text-mist/50 transition-colors hover:text-electric focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric">
+            payload
+          </summary>
+          {event.input &&
+        <pre className="thin-scroll mt-1.5 max-h-28 overflow-auto whitespace-pre-wrap break-words rounded border border-hull-400/30 bg-hull-900/60 p-2 font-mono text-[9.5px] leading-snug text-mist/70">
+              {clampText(event.input, 1200)}
+            </pre>
+        }
+          {event.output &&
+        <pre className="thin-scroll mt-1.5 max-h-28 overflow-auto whitespace-pre-wrap break-words rounded border border-hull-400/30 bg-hull-900/60 p-2 font-mono text-[9.5px] leading-snug text-slate-300/80">
+              {clampText(event.output, 1200)}
+            </pre>
+        }
+        </details>
+      }
     </motion.li>);
 
 }

@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { HexagonIcon } from 'lucide-react';
 import { ApplyResult, FinalReport, RunPhase } from '../../types/mission';
-import { AGENT_LABELS, STATUS_THEME } from '../../utils/format';
+import { AGENT_LABELS, STATUS_THEME, shortTrace } from '../../utils/format';
 import { DiffViewer } from './DiffViewer';
 import { Scorecard } from './Scorecard';
 import { DecisionTimeline } from './DecisionTimeline';
@@ -10,6 +10,8 @@ import { EvidenceTabs } from './EvidenceTabs';
 interface MissionDebriefProps {
   report: FinalReport;
   runId: string;
+  /** Observability trace for this run; falls back to the run id when absent. */
+  traceId?: string | null;
   projectPath: string;
   applyResult?: ApplyResult | null;
   phase?: RunPhase;
@@ -20,7 +22,7 @@ const ease = [0.23, 1, 0.32, 1] as const;
 /** Embedded review section for a RunCard — no page-level chrome, no fixed viewport
  *  height, and no replay/new-run navigation, all of which belonged to the old
  *  standalone debrief screen. */
-export function MissionDebrief({ report, runId, projectPath, applyResult, phase }: MissionDebriefProps) {
+export function MissionDebrief({ report, runId, traceId, projectPath, applyResult, phase }: MissionDebriefProps) {
   const theme = STATUS_THEME[report.review.status];
   const totalTokens = report.model_usage.reduce(
     (sum, u) => sum + u.input_tokens + u.output_tokens,
@@ -44,8 +46,8 @@ export function MissionDebrief({ report, runId, projectPath, applyResult, phase 
             </div>
             <div>
               <h4 className="text-sm font-semibold tracking-tight text-slate-50">Mission Debrief</h4>
-              <p className="font-mono text-[11px] text-mist/70">
-                {runId} · {projectPath}
+              <p className="font-mono text-[11px] text-mist/70" title={traceId ?? runId}>
+                trace {shortTrace(traceId ?? runId)} · {projectPath}
               </p>
             </div>
           </div>

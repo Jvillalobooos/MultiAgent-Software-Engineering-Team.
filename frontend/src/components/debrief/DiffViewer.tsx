@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { motion } from 'framer-motion';
 import { FileCode2Icon, FileTextIcon } from 'lucide-react';
 import { ApplyResult, ChangedFile, DiffLine, RunPhase } from '../../types/mission';
@@ -103,15 +103,16 @@ function highlight(text: string, language: ChangedFile['language']): React.React
 }
 
 const LINE_STYLE: Record<DiffLine['type'], string> = {
-  add: 'bg-neon/[0.08] border-l-2 border-neon/60',
-  del: 'bg-alert/[0.08] border-l-2 border-alert/60',
-  ctx: 'border-l-2 border-transparent',
-  meta: 'bg-hull-600/50 border-l-2 border-plasma/50 text-plasma'
+  add: 'bg-neon/[0.09]',
+  del: 'bg-alert/[0.09]',
+  ctx: '',
+  meta: 'bg-hull-600/45 text-plasma'
 };
 
 const SIGN: Record<DiffLine['type'], string> = { add: '+', del: '-', ctx: ' ', meta: '@' };
 
 export function DiffViewer({ files, workspaceChanged, sourceApplied, applyResult, phase }: DiffViewerProps) {
+  const tabId = useId();
   const [activePath, setActivePath] = useState(files[0]?.path ?? '');
   const file = files.find((f) => f.path === activePath) ?? files[0];
   const lines = Array.isArray(file?.lines) ? file.lines : [];
@@ -140,6 +141,11 @@ export function DiffViewer({ files, workspaceChanged, sourceApplied, applyResult
         </span>
       </div>
 
+      {files.length === 0 ?
+      <p className="px-4 py-8 text-center font-mono text-[11px] text-mist/60">
+          This run proposed no file changes.
+        </p> :
+      <>
       <div
         role="tablist"
         aria-label="Changed files"
@@ -152,7 +158,9 @@ export function DiffViewer({ files, workspaceChanged, sourceApplied, applyResult
             <button
               key={f.path}
               role="tab"
+              id={`${tabId}-tab-${f.path}`}
               aria-selected={active}
+              aria-controls={`${tabId}-panel`}
               onClick={() => setActivePath(f.path)}
               className={`relative flex shrink-0 items-center gap-2 rounded-md px-3 py-2 font-mono text-[11px] transition-colors duration-200 ease-command ${
               active ?
@@ -162,8 +170,8 @@ export function DiffViewer({ files, workspaceChanged, sourceApplied, applyResult
               
               <Icon className={`h-3.5 w-3.5 ${active ? 'text-electric' : 'text-mist/50'}`} />
               {f.path}
-              <span className="text-neon/90">+{f.additions}</span>
-              <span className="text-alert/90">-{f.deletions}</span>
+              <span className="text-neon/90" aria-label={`${f.additions} added`}>+{f.additions}</span>
+              <span className="text-alert/90" aria-label={`${f.deletions} removed`}>-{f.deletions}</span>
               {active &&
               <motion.span
                 layoutId="diff-tab"
@@ -176,24 +184,29 @@ export function DiffViewer({ files, workspaceChanged, sourceApplied, applyResult
         })}
       </div>
 
-      <div className="thin-scroll min-h-0 flex-1 overflow-auto py-2">
+      <div
+        id={`${tabId}-panel`}
+        role="tabpanel"
+        aria-labelledby={file ? `${tabId}-tab-${file.path}` : undefined}
+        tabIndex={0}
+        className="thin-scroll min-h-0 flex-1 overflow-auto py-2 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-electric">
         <table className="w-full border-collapse font-mono text-[11.5px] leading-[1.65]">
           <tbody>
             {lines.map((line, i) =>
             <tr key={i} className={LINE_STYLE[line.type]}>
-                <td className="w-10 select-none pl-3 pr-1 text-right align-top text-mist/35 tabular-nums">
+                <td className="w-12 select-none pl-3 pr-1 text-right align-top text-mist/80 tabular-nums">
                   {line.oldNo ?? ''}
                 </td>
-                <td className="w-10 select-none pr-2 text-right align-top text-mist/35 tabular-nums">
+                <td className="w-12 select-none pr-2 text-right align-top text-mist/80 tabular-nums">
                   {line.newNo ?? ''}
                 </td>
                 <td
-                className={`w-4 select-none pr-1 align-top ${
+                className={`w-4 select-none border-l border-hull-400/30 pl-2 pr-1 align-top ${
                 line.type === 'add' ?
                 'text-neon' :
                 line.type === 'del' ?
                 'text-alert' :
-                'text-mist/40'}`
+                'text-mist/45'}`
                 }>
                 
                   {SIGN[line.type]}
@@ -203,20 +216,28 @@ export function DiffViewer({ files, workspaceChanged, sourceApplied, applyResult
                 line.type === 'meta' ? 'text-plasma' : 'text-slate-300'}`
                 }>
                 
-                  {line.type === 'meta' ? line.text : highlight(line.text, file?.language ?? 'text')}
+                  {line.type === 'meta' ? line.text : highlight(line.text, file?.language ?? 'python')}
                 </td>
               </tr>
             )}
             {lines.length === 0 &&
             <tr>
-                <td colSpan={4} className="px-4 py-5 text-center text-mist/60">
-                  Diff contents unavailable for this run.
+                <td colSpan={4} className="px-4 py-6 text-center">
+                  <p className="text-[12.5px] text-slate-300">
+                    No changes were recorded for{' '}
+                    <span className="font-mono text-mist">{file?.path}</span>.
+                  </p>
+                  <p className="mt-1 text-[11.5px] text-mist/70">
+                    The run named this file as a target but ended before any hunks were written.
+                  </p>
                 </td>
               </tr>
             }
           </tbody>
         </table>
       </div>
+      </>
+      }
     </section>);
 
 }
