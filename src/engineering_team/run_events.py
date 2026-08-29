@@ -169,12 +169,16 @@ def run_event_from_trace(
 
 
 def _diff_files(
-    implementation: Mapping[str, Any] | None, diff_text: str, actual_paths: list[str],
+    implementation: Mapping[str, Any] | None, diff_text: str | None, actual_paths: list[str],
 ) -> list[dict[str, Any]]:
     # `diff_text` (the get_diff MCP tool's difflib output over real before/after file
     # content) is authoritative; implementation.diff is free-text the model wrote about
     # its own change and is often empty or malformed even on a real successful write.
-    diff = diff_text or str((implementation or {}).get("diff") or "")
+    # None means no verified diff was collected; an empty verified diff means no
+    # textual change, even if a model claims otherwise or a file was rewritten.
+    if diff_text == "":
+        return []
+    diff = diff_text if diff_text is not None else str((implementation or {}).get("diff") or "")
     paths = actual_paths or list((implementation or {}).get("changed_files") or [])
     if not diff and not paths:
         return []
@@ -187,8 +191,9 @@ def _diff_files(
                 current = candidate
         if current:
             sections[current].append(line)
-    for path in paths:
-        sections.setdefault(path, [])
+    if diff_text is None:
+        for path in paths:
+            sections.setdefault(path, [])
 
     files: list[dict[str, Any]] = []
     for path, raw_lines in sections.items():
@@ -323,7 +328,7 @@ def final_report_from_state(state_value: Any, *, completed_at: str | None = None
     tools = []
     workspace_changed = False
     written_paths: list[str] = []
-    diff_tool_text = ""
+    diff_tool_text = None
     for raw in state.get("tool_results", []):
         item = _plain(raw)
         raw_status = str(getattr(item.get("status"), "value", item.get("status", "FAIL")))

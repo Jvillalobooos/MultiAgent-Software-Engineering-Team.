@@ -6,7 +6,7 @@ from engineering_team.contracts.enums import AgentRole
 from engineering_team.contracts.enums import ToolStatus
 from engineering_team.contracts.models import ToolResult
 from engineering_team.contracts.state import EngineeringState
-from engineering_team.llm.prompting import build_role_prompts
+from engineering_team.llm.prompting import build_role_prompts, governed_output_schema
 from engineering_team.models.context import build_context
 
 
@@ -64,3 +64,17 @@ def test_remediation_prompt_uses_latest_read_of_each_file_and_preserves_audit():
     assert "obsolete_value" not in user
     assert user.count("current_value = 2") == 1
     assert envelope.tool_results == tools
+
+
+def test_apply_schema_constrains_paths_and_facts_but_leaves_code_to_the_model():
+    from engineering_team.contracts.models import ImplementationResult
+    candidate = ImplementationResult(action_mode="APPLIED", changed_files=["app.py"],
+        diff="planned", evidence=["mcp://read/app.py"], validation_result="pending",
+        security_surface_changed=True, file_contents={})
+    schema = governed_output_schema(ImplementationResult, candidate.model_dump(mode="json"))
+    assert schema["properties"]["changed_files"]["const"] == ["app.py"]
+    assert schema["properties"]["evidence"]["const"] == candidate.evidence
+    contents = schema["properties"]["file_contents"]
+    assert contents["required"] == ["app.py"]
+    assert contents["additionalProperties"] is False
+    assert contents["properties"]["app.py"] == {"type": "string"}

@@ -10,6 +10,7 @@ from engineering_team.contracts.enums import AgentRole, ErrorCode
 from engineering_team.contracts.state import EngineeringState
 from engineering_team.llm.cloud import (
     _CLOUD_MAP,
+    _OPENAI_COMPATIBLE,
     AttemptBudget,
     CloudBudget,
     CloudModelRuntime,
@@ -23,12 +24,12 @@ from engineering_team.models.context import build_context
 @pytest.mark.parametrize(
     ("role", "provider", "model"),
     [
-        (AgentRole.PRODUCT, "google", "gemini-3.6-flash"),
-        (AgentRole.ARCHITECTURE, "google", "gemini-3.6-flash"),
-        (AgentRole.DEVELOPER, "google", "gemini-3.1-pro-preview"),
-        (AgentRole.SECURITY, "groq", "openai/gpt-oss-120b"),
+        (AgentRole.PRODUCT, "groq", "openai/gpt-oss-120b"),
+        (AgentRole.ARCHITECTURE, "mistral", "mistral-medium-latest"),
+        (AgentRole.DEVELOPER, "mistral", "codestral-latest"),
+        (AgentRole.SECURITY, "openrouter", "nvidia/nemotron-3-super-120b-a12b:free"),
         (AgentRole.TESTING, "groq", "openai/gpt-oss-20b"),
-        (AgentRole.REVIEWER, "google", "gemini-3.6-flash"),
+        (AgentRole.REVIEWER, "groq", "openai/gpt-oss-120b"),
     ],
 )
 def test_cloud_mapping_is_fixed(role: AgentRole, provider: str, model: str) -> None:
@@ -36,73 +37,80 @@ def test_cloud_mapping_is_fixed(role: AgentRole, provider: str, model: str) -> N
     assert (selection.provider, selection.model) == (provider, model)
 
 
-def test_cross_provider_escape_sits_second_not_last() -> None:
-    """Gemini quota is per project, so a 429 on one Gemini model predicts a 429 on the
-    next. Walking the whole Gemini pool first spends every attempt inside the same
-    failing quota domain."""
-    chain = CloudRouter(Settings(_env_file=None)).selection_chain(AgentRole.PRODUCT)
-
-    assert [(item.provider, item.model) for item in chain] == [
-        ("google", "gemini-3.6-flash"),
-        ("groq", "openai/gpt-oss-120b"),
-        ("google", "gemini-3.5-flash"),
-        ("google", "gemini-3.7-flash"),
-        ("google", "gemini-flash-latest"),
-    ]
+def test_primary_models_span_three_providers() -> None:
+    """Distribute load without promoting a repeatedly throttled fourth provider."""
+    router = CloudRouter(Settings(_env_file=None))
+    roles = (AgentRole.PRODUCT, AgentRole.ARCHITECTURE, AgentRole.DEVELOPER, AgentRole.SECURITY)
+    primaries = [router.selection_chain(role)[0].provider for role in roles]
+    assert len(set(primaries)) >= 3, f"providers concentrated: {primaries}"
 
 
-def test_developer_keeps_the_escape_as_a_tail_not_as_position_two() -> None:
-    """The Developer payload usually exceeds Groq's tokens-per-minute cap, so the escape
-    is unlikely to answer early -- but it must still be reachable. Dropping it entirely
-    left the role with no cross-provider path, and every Gemini rate limit then fell
-    straight through to a local model that takes 90s to time out."""
+def test_the_first_fallback_always_leaves_the_failing_provider() -> None:
+    """Provider diversity limits correlated outages; quotas may also be model scoped."""
+    router = CloudRouter(Settings(_env_file=None))
+    for role in (AgentRole.PRODUCT, AgentRole.ARCHITECTURE, AgentRole.DEVELOPER, AgentRole.SECURITY):
+        chain = router.selection_chain(role)
+        assert chain[0].provider != chain[1].provider, f"{role} retries its own provider"
+
+
+def test_developer_leads_with_a_verified_coder_and_crosses_providers() -> None:
     chain = CloudRouter(Settings(_env_file=None)).selection_chain(AgentRole.DEVELOPER)
+    assert (chain[0].provider, chain[0].model) == ("mistral", "codestral-latest")
+    assert (chain[1].provider, chain[1].model) == ("groq", "openai/gpt-oss-120b")
+    assert chain[-1].model == "gemini-3.5-flash"
+    assert ("mistral", "mistral-small-latest") in {(item.provider, item.model) for item in chain}
+    assert all(item.model != "mistral-medium-latest" for item in chain)
 
-    assert (chain[0].provider, chain[0].model) == ("google", "gemini-3.6-flash")
-    assert (chain[-1].provider, chain[-1].model) == ("groq", "openai/gpt-oss-120b")
-    assert all(item.provider == "google" for item in chain[:-1])
 
-
-def test_every_role_has_a_cross_provider_path() -> None:
-    """No role may depend on a single provider: Gemini quota is per project and goes to
-    429 for all of its models at once."""
+def test_models_verified_unusable_are_absent_from_every_chain() -> None:
+    """Each of these was probed with the real request shape and answered 404, 402, or
+    malformed JSON. Appearing in a catalogue is not evidence a model is callable."""
     router = CloudRouter(Settings(_env_file=None))
-    for role in (AgentRole.PRODUCT, AgentRole.ARCHITECTURE, AgentRole.DEVELOPER,
-                 AgentRole.SECURITY, AgentRole.TESTING, AgentRole.REVIEWER):
+    dead = {
+        "gemini-2.5-flash", "gemini-3.1-flash-lite",
+        "openai/gpt-oss-120b:free", "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "thinkingmachines/inkling:free", "z-ai/glm-5.2:free",
+        "ministral-3b-latest", "mistral-large-latest",
+        "qwen/qwen3.6-27b", "cohere/north-mini-code:free",
+        "devstral-latest", "minimax/minimax-m3:free",
+    }
+    for role in AgentRole:
+        assert not ({item.model for item in router.selection_chain(role)} & dead)
+
+
+def test_each_role_has_at_least_three_provider_options() -> None:
+    """Do not add a failing model just to fill a provider slot."""
+    router = CloudRouter(Settings(_env_file=None))
+    for role in (AgentRole.PRODUCT, AgentRole.ARCHITECTURE, AgentRole.DEVELOPER, AgentRole.SECURITY):
         providers = {item.provider for item in router.selection_chain(role)}
-        assert len(providers) > 1 or providers == {"groq"}, f"{role} is single-provider"
+        assert len(providers) >= 3, f"{role} only reaches {providers}"
 
 
-def test_models_that_never_answer_are_not_in_any_pool() -> None:
-    """gemini-2.5-flash returns HTTP 404 'no longer available to new users' for every
-    request shape, and gemini-3.1-flash-lite failed schema validation on 40% of the
-    responses it delivered. Both are removed rather than demoted."""
-    router = CloudRouter(Settings(_env_file=None))
-    dead = {"gemini-2.5-flash", "gemini-3.1-flash-lite"}
-    for role in (AgentRole.PRODUCT, AgentRole.ARCHITECTURE, AgentRole.DEVELOPER,
-                 AgentRole.SECURITY, AgentRole.TESTING, AgentRole.REVIEWER):
-        assert not ({i.model for i in router.selection_chain(role)} & dead)
+def test_a_chain_can_be_overridden_per_role_from_settings() -> None:
+    settings = Settings(_env_file=None,
+                        cloud_chain_developer="groq:qwen/qwen3.6-27b, openrouter:openai/gpt-oss-120b")
+    chain = CloudRouter(settings).selection_chain(AgentRole.DEVELOPER)
+    assert [(i.provider, i.model) for i in chain] == [
+        ("groq", "qwen/qwen3.6-27b"),
+        ("openrouter", "openai/gpt-oss-120b"),
+    ]
 
 
-def test_pools_are_configurable_per_role_and_deduplicated() -> None:
-    settings = Settings(
-        _env_file=None,
-        gemini_models="gemini-2.5-flash, gemini-2.5-flash ,, gemini-3.6-flash",
-        gemini_developer_models="gemini-pro-latest",
-        cloud_escape_model="openai/gpt-oss-20b",
-    )
+def test_a_provider_without_a_credential_is_skipped_not_fatal() -> None:
+    settings = Settings(_env_file=None, cloud_enabled=True, groq_api_key="fixture")
     router = CloudRouter(settings)
+    chain = router.selection_chain(AgentRole.DEVELOPER)
+    usable = [item for item in chain if router.enabled_for(item)]
+    assert usable and all(item.provider == "groq" for item in usable)
 
-    assert [(i.provider, i.model) for i in router.selection_chain(AgentRole.PRODUCT)] == [
-        ("google", "gemini-2.5-flash"),
-        ("groq", "openai/gpt-oss-20b"),
-        ("google", "gemini-3.6-flash"),
-    ]
-    # Developer takes the escape as a tail rather than at position two.
-    assert [(i.provider, i.model) for i in router.selection_chain(AgentRole.DEVELOPER)] == [
-        ("google", "gemini-pro-latest"),
-        ("groq", "openai/gpt-oss-20b"),
-    ]
+
+def test_sambanova_is_gone_entirely() -> None:
+    """All seven models in its catalogue answer HTTP 402 on this account: there is no
+    free tier, so the provider was removed rather than demoted."""
+    router = CloudRouter(Settings(_env_file=None))
+    for role in AgentRole:
+        assert all(i.provider != "sambanova" for i in router.selection_chain(role))
+    assert "sambanova" not in _OPENAI_COMPATIBLE
 
 
 def test_no_chain_ever_retries_the_same_model_twice() -> None:
@@ -113,16 +121,15 @@ def test_no_chain_ever_retries_the_same_model_twice() -> None:
         assert len(set(models)) == len(models), f"{role} retries a model: {models}"
 
 
-def test_groq_backed_role_never_retries_its_own_primary_model() -> None:
-    """"openai/gpt-oss-120b" also ends with "20b", so a suffix test resolved Security's
-    alternate back to its own primary and wasted the attempt."""
+def test_security_crosses_providers_instead_of_retrying_groq() -> None:
+    """Security used to hold two Groq models whose suffix test resolved the alternate
+    back to its own primary. It now leaves the provider on the first fallback."""
     chain = CloudRouter(Settings(_env_file=None)).selection_chain(AgentRole.SECURITY)
 
-    assert [(item.provider, item.model) for item in chain] == [
-        ("groq", "openai/gpt-oss-120b"),
-        ("groq", "openai/gpt-oss-20b"),
-    ]
-    assert len({item.model for item in chain}) == len(chain)
+    assert (chain[0].provider, chain[0].model) == (
+        "openrouter", "nvidia/nemotron-3-super-120b-a12b:free")
+    assert chain[1].provider == "groq"
+    assert len({(i.provider, i.model) for i in chain}) == len(chain)
 
 
 def test_groq_backed_role_keeps_its_single_alternate():

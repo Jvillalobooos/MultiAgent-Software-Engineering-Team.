@@ -3,15 +3,15 @@
 BANCA_DEMO_THROUGH=N selects the cumulative capabilities expected after case N.
 """
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
-import sys
 
 import pytest
 
 PROJECT = Path(__file__).resolve().parent.parent / "banca-demo"
 sys.path.insert(0, str(PROJECT))
-from banca import auth, db, perfil, seguridad, transacciones  # noqa: E402
+from banca import auth, cuentas, db, perfil, seguridad, transacciones
 
 THROUGH = int(os.environ.get("BANCA_DEMO_THROUGH", "5"))
 
@@ -57,14 +57,14 @@ def test_recovery_is_private_single_use_and_expires(connection):
     auth.restablecer_password(connection, token, "Changed#2026")
     hashed = row(connection, "SELECT password_hash FROM usuarios WHERE id=1")[0]
     assert seguridad.verificar_password("Changed#2026", hashed)
-    with pytest.raises(Exception):
+    with pytest.raises((auth.ErrorAutenticacion, ValueError)):
         auth.restablecer_password(connection, token, "Reused#2026")
     auth.solicitar_recuperacion(connection, "ana@banca.demo")
     fresh = row(connection, "SELECT * FROM tokens_recuperacion WHERE usuario_id=1 ORDER BY rowid DESC")
     connection.execute("UPDATE tokens_recuperacion SET expira_en=? WHERE token=?",
                        (expired_value(fresh["expira_en"], 900), fresh["token"]))
     connection.commit()
-    with pytest.raises(Exception):
+    with pytest.raises((auth.ErrorAutenticacion, ValueError)):
         auth.restablecer_password(connection, fresh["token"], "Expired#2026")
     assert seguridad.verificar_password("Changed#2026", row(connection, "SELECT password_hash FROM usuarios WHERE id=1")[0])
 
@@ -92,8 +92,9 @@ def test_locking_and_reset_counter(connection):
 
 @pytest.fixture
 def client(connection, monkeypatch):
-    from fastapi.testclient import TestClient
     from banca import api
+    from fastapi.testclient import TestClient
+
     monkeypatch.setattr(api, "conexion", connection)
     return TestClient(api.app)
 
@@ -162,22 +163,22 @@ def test_sensitive_transfer_requires_valid_owner_confirmation(connection):
     assert row(connection, "SELECT COUNT(*) FROM transacciones")[0] == initial + 1
     confirmation = row(connection, "SELECT * FROM confirmaciones ORDER BY rowid DESC")
     code = confirmation["codigo"]
-    assert len(code) >= 32 and code not in str(pending)
+    assert len(code) >= 43 and code not in str(pending)
     expired_value(confirmation["expira_en"], 300)
-    with pytest.raises(Exception):
+    with pytest.raises((ValueError, PermissionError, cuentas.CuentaNoEncontrada)):
         transacciones.confirmar_transferencia(connection, pending["solicitud_id"], "wrong", 1)
-    with pytest.raises(Exception):
+    with pytest.raises((ValueError, PermissionError, cuentas.CuentaNoEncontrada)):
         transacciones.confirmar_transferencia(connection, pending["solicitud_id"], code, 2)
     assert row(connection, "SELECT COUNT(*) FROM transacciones")[0] == initial + 1
     transacciones.confirmar_transferencia(connection, pending["solicitud_id"], code, 1)
     assert row(connection, "SELECT COUNT(*) FROM transacciones")[0] == initial + 2
-    with pytest.raises(Exception):
+    with pytest.raises((ValueError, PermissionError, cuentas.CuentaNoEncontrada)):
         transacciones.confirmar_transferencia(connection, pending["solicitud_id"], code, 1)
     next_pending = transacciones.solicitar_transferencia_alta(connection, 1, 1, 1100, "CR-0002")
     latest = row(connection, "SELECT * FROM confirmaciones ORDER BY rowid DESC")
     connection.execute("UPDATE confirmaciones SET expira_en=? WHERE codigo=?",
                        (expired_value(latest["expira_en"], 300), latest["codigo"]))
     connection.commit()
-    with pytest.raises(Exception):
+    with pytest.raises((ValueError, PermissionError, cuentas.CuentaNoEncontrada)):
         transacciones.confirmar_transferencia(connection, next_pending["solicitud_id"], latest["codigo"], 1)
     assert row(connection, "SELECT COUNT(*) FROM transacciones")[0] == initial + 2

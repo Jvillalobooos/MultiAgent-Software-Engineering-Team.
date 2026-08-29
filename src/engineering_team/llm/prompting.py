@@ -19,10 +19,20 @@ from engineering_team.models.context import ContextEnvelope
 _PROMPTS_DIR = Path(__file__).parents[1] / "prompts"
 
 
-def governed_output_schema(schema_type: type[BaseModel]) -> dict[str, Any]:
+def governed_output_schema(
+    schema_type: type[BaseModel], candidate: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Require every governed candidate key in the provider's structured output grammar."""
     schema = schema_type.model_json_schema()
     schema["required"] = list(schema.get("properties", {}))
+    if candidate and schema_type.__name__ == "ImplementationResult" and candidate.get("action_mode") == "APPLIED":
+        for name in ("action_mode", "changed_files", "evidence", "security_surface_changed"):
+            schema["properties"][name]["const"] = candidate[name]
+        paths = candidate["changed_files"]
+        schema["properties"]["file_contents"] = {
+            "type": "object", "properties": {path: {"type": "string"} for path in paths},
+            "required": paths, "additionalProperties": False,
+        }
     return schema
 
 

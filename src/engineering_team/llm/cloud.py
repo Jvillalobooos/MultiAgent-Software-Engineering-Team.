@@ -2,6 +2,8 @@
 
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
@@ -17,14 +19,69 @@ from engineering_team.models.context import ContextEnvelope
 from .registry import ModelSelection
 from .runtime import _preserves_governed_facts
 
-_CLOUD_MAP = {
-    AgentRole.PRODUCT: ("google", "gemini-3.6-flash"),
-    AgentRole.ARCHITECTURE: ("google", "gemini-3.6-flash"),
-    AgentRole.DEVELOPER: ("google", "gemini-3.1-pro-preview"),
-    AgentRole.SECURITY: ("groq", "openai/gpt-oss-120b"),
-    AgentRole.TESTING: ("groq", "openai/gpt-oss-20b"),
-    AgentRole.REVIEWER: ("google", "gemini-3.6-flash"),
+# Every provider but Google speaks the OpenAI chat-completions shape, so one code
+# path serves them all; only the endpoint and the credential differ.
+_OPENAI_COMPATIBLE = {
+    "groq": ("https://api.groq.com/openai/v1/chat/completions", "groq_api_key"),
+    "mistral": ("https://api.mistral.ai/v1/chat/completions", "mistral_api_key"),
+    "openrouter": ("https://openrouter.ai/api/v1/chat/completions", "open_router_api_key"),
 }
+
+# Selected from observed role-level results, not catalogue size. See the model
+# evaluation in banca-demo-support. Primaries span three providers and the first
+# fallback always crosses providers. Google quotas can be model scoped: a 3.6 quota
+# failure must not disable a working 3.5 fallback. Testing/Reviewer are deterministic.
+_ROLE_CHAINS: dict[AgentRole, tuple[tuple[str, str], ...]] = {
+    AgentRole.PRODUCT: (
+        ("groq", "openai/gpt-oss-120b"),
+        ("mistral", "mistral-small-latest"),
+        ("openrouter", "nvidia/nemotron-3-super-120b-a12b:free"),
+        ("google", "gemini-3.5-flash"),
+    ),
+    AgentRole.ARCHITECTURE: (
+        ("mistral", "mistral-medium-latest"),
+        ("groq", "openai/gpt-oss-120b"),
+        ("openrouter", "nvidia/nemotron-3-super-120b-a12b:free"),
+        ("google", "gemini-3.5-flash"),
+    ),
+    # Codestral and Small passed the isolated recovery acceptance test. Medium was
+    # 0/10 on Developer in the historical runs, although reliable on Architecture.
+    # Groq can reject full source payloads with HTTP 413, but does so quickly.
+    # Gemini is last after the new 90s timeout; do not spend its wait before Small.
+    AgentRole.DEVELOPER: (
+        ("mistral", "codestral-latest"),
+        ("groq", "openai/gpt-oss-120b"),
+        ("mistral", "mistral-small-latest"),
+        ("google", "gemini-3.5-flash"),
+    ),
+    AgentRole.SECURITY: (
+        ("openrouter", "nvidia/nemotron-3-super-120b-a12b:free"),
+        ("groq", "openai/gpt-oss-120b"),
+        ("mistral", "mistral-small-latest"),
+        ("google", "gemini-3.5-flash"),
+    ),
+}
+
+# SambaNova was removed, not demoted: all seven models in its catalogue answer
+# HTTP 402 ("a payment method is required") on this account, so it has no free tier to
+# fall back to and every attempt would be a wasted round trip.
+
+# Probed with the real request shape and deliberately absent from every chain:
+#   openai/gpt-oss-120b:free       HTTP 404, no longer offered free by OpenRouter
+#   nvidia/nemotron-3-ultra:free   answers 200 with malformed JSON, twice out of two
+#   thinkingmachines/inkling:free  HTTP 403, paid plans only
+#   z-ai/glm-5.2:free              HTTP 429 from the upstream provider
+#   google/gemma-4-*:free          HTTP 429 from the upstream provider
+#   ministral-3b-latest            returns valid JSON that omits required fields
+#   mistral-large-latest           read timeout
+#   gemini-2.5-flash               HTTP 404, no longer available to new users
+#   gemini-3.1-flash-lite          failed schema validation on 40% of its responses
+
+_CLOUD_MAP = {
+    role: (chain[0][0], chain[0][1]) for role, chain in _ROLE_CHAINS.items()
+}
+_CLOUD_MAP[AgentRole.TESTING] = ("groq", "openai/gpt-oss-20b")
+_CLOUD_MAP[AgentRole.REVIEWER] = ("groq", "openai/gpt-oss-120b")
 
 
 class _GovernedContradiction(ValueError):
@@ -32,6 +89,10 @@ class _GovernedContradiction(ValueError):
         values = actual.model_dump(mode="json")
         self.fields = sorted(key for key, value in candidate.items() if values.get(key) != value)
         super().__init__("governed artifact contradiction")
+
+
+class _IncompleteOutput(ValueError):
+    pass
 
 
 @dataclass
@@ -90,65 +151,50 @@ class CloudRouter:
         provider, model = _CLOUD_MAP[role]
         return ModelSelection(role, "CLOUD_FALLBACK", provider, model)
 
-    def gemini_models(self, role: AgentRole | None = None) -> tuple[str, ...]:
-        """The configured Gemini pool for a role, order-preserving and de-duplicated."""
-        raw = (
-            self._settings.gemini_developer_models
-            if role is AgentRole.DEVELOPER
-            else self._settings.gemini_models
-        )
-        configured = (name.strip() for name in raw.split(","))
-        return tuple(dict.fromkeys(name for name in configured if name))
+    def _override(self, role: AgentRole) -> tuple[tuple[str, str], ...]:
+        """Per-role override from settings, as "provider:model,provider:model"."""
+        raw = getattr(self._settings, f"cloud_chain_{role.value.lower()}", "") or ""
+        parsed = []
+        for item in raw.split(","):
+            item = item.strip()
+            if not item or ":" not in item:
+                continue
+            provider, _, model = item.partition(":")
+            parsed.append((provider.strip(), model.strip()))
+        return tuple(parsed)
 
     def selection_chain(self, role: AgentRole) -> tuple[ModelSelection, ...]:
         """Every cloud model to try for a role, in order, before giving up.
 
-        Google-backed roles do not walk their whole Gemini pool before changing
-        provider. Gemini quota is per project, so a 429 on one Gemini model predicts a
-        429 on the next; walking four of them in a row spends four attempts inside the
-        same failing quota domain. The cross-provider escape therefore sits at position
-        2, and the remaining Gemini options follow it for the case where the first
-        failure was model-specific rather than account-wide.
+        Cross providers early to limit correlated outages, but keep validated models
+        only. Rate limits may be scoped to a model, account, or upstream provider.
         """
-        primary = self.for_role(role)
-        if primary.provider != "google":
-            # Exact match, not a suffix test: "openai/gpt-oss-120b" also ends with
-            # "20b", which made Security's alternate resolve back to its own primary
-            # and burn a chain slot retrying the model that just failed.
+        pairs = self._override(role) or _ROLE_CHAINS.get(role)
+        if not pairs:
+            provider, model = _CLOUD_MAP[role]
             alternate = (
                 "openai/gpt-oss-120b"
-                if primary.model == "openai/gpt-oss-20b"
+                if model == "openai/gpt-oss-20b"
                 else "openai/gpt-oss-20b"
             )
             return (
-                primary,
-                ModelSelection(role, "CLOUD_FALLBACK", primary.provider, alternate),
+                ModelSelection(role, "CLOUD_FALLBACK", provider, model),
+                ModelSelection(role, "CLOUD_FALLBACK", provider, alternate),
             )
-        pool = self.gemini_models(role) or (primary.model,)
-        google = [
-            ModelSelection(role, "CLOUD_FALLBACK", "google", model) for model in pool
-        ]
-        escape = ModelSelection(
-            role, "CLOUD_FALLBACK", "groq", self._settings.cloud_escape_model
-        )
-        if role.value.lower() in self._escape_tail_roles():
-            return (*google, escape)
-        return (google[0], escape, *google[1:])
-
-    def _escape_tail_roles(self) -> frozenset[str]:
-        raw = self._settings.cloud_escape_tail_roles
-        return frozenset(name.strip().lower() for name in raw.split(",") if name.strip())
-
-    def selections_for(self, role: AgentRole) -> tuple[ModelSelection, ...]:
-        """Backwards-compatible alias for the full chain."""
-        return self.selection_chain(role)
+        seen, chain = set(), []
+        for provider, model in pairs:
+            if (provider, model) in seen:
+                continue
+            seen.add((provider, model))
+            chain.append(ModelSelection(role, "CLOUD_FALLBACK", provider, model))
+        return tuple(chain)
 
     def enabled_for(self, selection: ModelSelection) -> bool:
-        key = (
-            self._settings.gemini_api_key
-            if selection.provider == "google"
-            else self._settings.groq_api_key
-        )
+        if selection.provider == "google":
+            key = self._settings.gemini_api_key
+        else:
+            entry = _OPENAI_COMPATIBLE.get(selection.provider)
+            key = getattr(self._settings, entry[1], None) if entry else None
         return self._settings.cloud_enabled and bool(key)
 
 
@@ -204,12 +250,12 @@ def build_cloud_context(
 
 
 class CloudModelRuntime:
-    """Schema-constrained Gemini/Groq runtime.
+    """Validated runtime for Gemini, Groq, Mistral and OpenRouter.
 
     Usable either as the *fallback* runtime (bounded by ``CloudBudget``, the
     historical role) or as the *primary* runtime for a cloud-first
     configuration (``primary=True``), in which case the per-agent/per-run
-    escalation caps are disabled since six agents per run is the expected
+    escalation caps are disabled since four model-invoking agents per run is the expected
     steady-state workload, not an emergency contingency.
     """
 
@@ -224,6 +270,7 @@ class CloudModelRuntime:
         self.trace = trace
         self.primary = primary
         self.attempts: list[ModelExecutionInfo] = []
+        self._unavailable_until: dict[tuple[str, str], float] = {}
 
     def invoke_artifact(
         self,
@@ -233,22 +280,34 @@ class CloudModelRuntime:
         *,
         fallback_reason: str = "CLOUD_FIRST",
         _attempt: int = 0,
+        _deadline: float | None = None,
     ) -> tuple[BaseModel, ModelExecutionInfo]:
         chain = self.router.selection_chain(role)
+        deadline = _deadline if _deadline is not None else time.monotonic() + self.settings.cloud_role_timeout_seconds
+        # The budget bounds *escalations*, not the retries within one escalation: every
+        # model in the chain is one attempt at the same escalation, so it is consumed
+        # once, on entry, and never again as the chain is walked. It must be charged
+        # before the credential skip below, otherwise an unconfigured first provider
+        # would advance the cursor past this check and escalate for free.
+        if _attempt == 0 and not self.budget.consume(role):
+            raise RuntimeError("CLOUD_FALLBACK_UNAVAILABLE: disabled, missing credential, or budget")
         # Skip entries whose provider has no usable credential rather than aborting the
         # whole chain on the first unconfigured one.
-        while _attempt < len(chain) and not self.router.enabled_for(chain[_attempt]):
+        while _attempt < len(chain) and (
+            not self.router.enabled_for(chain[_attempt])
+            or self._unavailable_until.get((chain[_attempt].provider, "*"), 0) > time.monotonic()
+            or self._unavailable_until.get((chain[_attempt].provider, chain[_attempt].model), 0) > time.monotonic()
+        ):
             _attempt += 1
         if _attempt >= len(chain):
             raise RuntimeError("CLOUD_FALLBACK_UNAVAILABLE: disabled, missing credential, or budget")
         selection = chain[_attempt]
-        # The budget bounds *escalations*, not the retries within one escalation: every
-        # model in the chain is one attempt at the same escalation, so it is consumed
-        # once, on entry, and never again as the chain is walked.
-        if _attempt == 0 and not self.budget.consume(role):
-            raise RuntimeError("CLOUD_FALLBACK_UNAVAILABLE: disabled, missing credential, or budget")
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise RuntimeError("CLOUD_FALLBACK_UNAVAILABLE: role deadline exceeded")
+        request_timeout = min(self.settings.llm_timeout_seconds, remaining)
         candidate_dict = candidate.model_dump(mode="json")
-        output_schema = governed_output_schema(type(candidate))
+        output_schema = governed_output_schema(type(candidate), candidate_dict)
         system_prompt, user_prompt = build_role_prompts(
             role, envelope, output_schema, candidate_dict
         )
@@ -261,13 +320,14 @@ class CloudModelRuntime:
         require_safe_cloud_context(system_prompt)
         require_safe_cloud_context(user_prompt)
         owns_client = self.client is None
-        client = self.client or httpx.Client(timeout=self.settings.llm_timeout_seconds)
+        client = self.client or httpx.Client(timeout=request_timeout)
         started = time.perf_counter()
         try:
             if selection.provider == "google":
                 response = client.post(
                     f"https://generativelanguage.googleapis.com/v1beta/models/{selection.model}:generateContent",
                     headers={"x-goog-api-key": self.settings.gemini_api_key or ""},
+                    timeout=request_timeout,
                     json={
                         "systemInstruction": {"parts": [{"text": system_prompt}]},
                         "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
@@ -283,9 +343,23 @@ class CloudModelRuntime:
                 raw = payload["candidates"][0]["content"]["parts"][0]["text"]
                 usage = payload.get("usageMetadata")
             else:
+                endpoint, credential = _OPENAI_COMPATIBLE[selection.provider]
+                schema_mode = (selection.provider == "mistral" or
+                    (selection.provider == "openrouter" and selection.model != "minimax/minimax-m3:free"))
+                response_format = ({"type": "json_schema", "json_schema": {
+                    "name": type(candidate).__name__, "schema": output_schema, "strict": True,
+                }} if schema_mode else {"type": "json_object"})
+                provider_options = ({"provider": {
+                    "require_parameters": True, "max_price": {"prompt": 0, "completion": 0},
+                }, "max_tokens": 16000 if role is AgentRole.DEVELOPER else 4096,
+                    "reasoning": {"effort": "low", "exclude": True},
+                } if selection.provider == "openrouter" else {})
                 response = client.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {self.settings.groq_api_key or ''}"},
+                    endpoint,
+                    headers={
+                        "Authorization": f"Bearer {getattr(self.settings, credential, None) or ''}"
+                    },
+                    timeout=request_timeout,
                     json={
                         "model": selection.model,
                         "messages": [
@@ -293,11 +367,14 @@ class CloudModelRuntime:
                             {"role": "user", "content": user_prompt},
                         ],
                         "temperature": 0,
-                        "response_format": {"type": "json_object"},
+                        "response_format": response_format,
+                        **provider_options,
                     },
                 )
                 response.raise_for_status()
                 payload = response.json()
+                if payload["choices"][0].get("finish_reason") == "length":
+                    raise _IncompleteOutput("model output reached its token limit")
                 raw = payload["choices"][0]["message"]["content"]
                 usage = payload.get("usage")
             artifact = type(candidate).model_validate_json(raw)
@@ -306,6 +383,24 @@ class CloudModelRuntime:
         except httpx.HTTPStatusError as exc:
             status = exc.response.status_code
             category, retryable = _http_category(status)
+            if status in {401, 402, 403, 429, 503}:
+                cooldown = 30.0
+                hint = exc.response.headers.get("Retry-After")
+                if hint:
+                    try:
+                        cooldown = max(0, float(hint))
+                    except ValueError:
+                        try:
+                            cooldown = max(0, (parsedate_to_datetime(hint) - datetime.now(timezone.utc)).total_seconds())
+                        except (ValueError, TypeError, OverflowError):
+                            pass
+                if status in {401, 402, 403}:
+                    cooldown = float("inf")
+                # A quota/capacity failure can be model-specific (observed with
+                # Gemini 3.6 vs 3.5). Only credential/payment errors disable the
+                # whole provider; preserve healthy alternate models.
+                key = (selection.provider, "*" if status in {401, 402, 403} else selection.model)
+                self._unavailable_until[key] = time.monotonic() + cooldown
             error = f"CLOUD_FALLBACK_UNAVAILABLE: {category} (HTTP {status})"
             info = ModelExecutionInfo(
                 agent=role, provider=selection.provider, requested_model=selection.model,
@@ -327,13 +422,16 @@ class CloudModelRuntime:
                 return self.invoke_artifact(
                     role, envelope, candidate, fallback_reason=fallback_reason,
                     _attempt=_attempt + 1,
+                    _deadline=deadline,
                 )
             raise RuntimeError(error) from exc
         except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError, ValidationError) as exc:
             contradiction = isinstance(exc, _GovernedContradiction)
             detail = (
                 f"governed fields differ: {', '.join(exc.fields)}"
-                if contradiction else type(exc).__name__
+                if contradiction else
+                "schema validation: " + ", ".join(sorted({e["type"] for e in exc.errors(include_input=False)}))
+                if isinstance(exc, ValidationError) else type(exc).__name__
             )
             error = f"CLOUD_FALLBACK_UNAVAILABLE: {detail}"
             info = ModelExecutionInfo(
@@ -342,8 +440,11 @@ class CloudModelRuntime:
                 fallback_used=True, fallback_reason=fallback_reason, degraded=True,
                 latency_ms=int((time.perf_counter() - started) * 1000),
                 structured_output_success=False, error=error,
-                error_category="governed_contradiction" if contradiction else None,
-                retryable=True if contradiction else None,
+                error_category=("governed_contradiction" if contradiction else
+                                "incomplete_output" if isinstance(exc, _IncompleteOutput) else
+                                "timeout" if isinstance(exc, httpx.TimeoutException) else
+                                "schema_validation" if isinstance(exc, ValidationError) else "invalid_response"),
+                retryable=True,
             )
             self.attempts.append(info)
             if self.trace is not None:
@@ -357,6 +458,7 @@ class CloudModelRuntime:
                 return self.invoke_artifact(
                     role, envelope, candidate, fallback_reason=fallback_reason,
                     _attempt=_attempt + 1,
+                    _deadline=deadline,
                 )
             raise RuntimeError(error) from exc
         finally:

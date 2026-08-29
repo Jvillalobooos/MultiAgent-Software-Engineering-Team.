@@ -99,7 +99,8 @@ def test_negative_requires_the_intended_finding_not_a_failed_scanner():
                           expected_finding="resource access must be ownership-authorized") == "retry"
 
 
-def test_presentation_keeps_five_seconds_per_section_without_duplicate_pause():
+@pytest.mark.parametrize("panes", [1, 2])
+def test_presentation_keeps_five_seconds_per_section_without_duplicate_pause(panes):
     import sys
     sys.path.insert(0, str(ROOT))
     try:
@@ -110,12 +111,12 @@ def test_presentation_keeps_five_seconds_per_section_without_duplicate_pause():
     class Element:
         def wait_for(self, **kwargs): pass
         def evaluate(self, expression, *args):
-            return 360 if expression == "el => el.scrollHeight - el.clientHeight" else None
+            return 3600 if expression == "el => el.scrollHeight - el.clientHeight" else None
         def evaluate_handle(self, expression): return Handles()
         def as_element(self): return self
 
     class Handles:
-        def get_properties(self): return {"0": Element()}
+        def get_properties(self): return {str(i): Element() for i in range(panes)}
         def dispose(self): pass
 
     waits = []
@@ -124,6 +125,33 @@ def test_presentation_keeps_five_seconds_per_section_without_duplicate_pause():
     view.show(Element(), "diff")
     assert 5 <= sum(waits) < 8
     assert view.views[0]["section"] == "diff"
+
+
+def test_maximization_is_verified_not_assumed_from_a_launch_flag():
+    import sys
+    sys.path.insert(0, str(ROOT))
+    try:
+        from demo import maximize_window
+    finally:
+        sys.path.pop(0)
+
+    class Session:
+        state = "normal"
+        def send(self, command, params=None):
+            if command == "Browser.getWindowForTarget": return {"windowId": 42}
+            if command == "Browser.setWindowBounds":
+                assert params == {"windowId": 42, "bounds": {"windowState": "maximized"}}
+                self.state = "maximized"
+            return {"bounds": {"windowState": self.state, "width": 1440, "height": 900}}
+        def detach(self): pass
+
+    class Context:
+        def new_cdp_session(self, page): return Session()
+
+    class Page:
+        def wait_for_timeout(self, value): pass
+
+    assert maximize_window(Context(), Page())["windowState"] == "maximized"
 
 
 def _snapshot(*, phase, status, reason="", problems=(), security=0.0):

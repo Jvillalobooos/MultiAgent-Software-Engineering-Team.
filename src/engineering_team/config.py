@@ -28,40 +28,28 @@ class Settings(BaseSettings):
     max_cloud_escalations_per_run: int = Field(default=3, ge=0)
     ollama_base_url: str = "http://localhost:11434"
     llm_timeout_seconds: float = Field(default=60, gt=0)
+    cloud_role_timeout_seconds: float = Field(default=120, gt=0)
     ollama_timeout_seconds: float = Field(default=600, gt=0)
     gemini_api_key: str | None = None
     groq_api_key: str | None = None
-    # Ordered Gemini pool, tried left to right. Position 1 leads; the cross-provider
-    # escape is inserted at position 2 by CloudRouter where it is viable.
-    #
-    # Ordered by what was measured against this account, not by version number.
-    # Verified answering: gemini-3.6-flash and gemini-3.5-flash.
-    # Currently never answering, kept after the proven ones so they cost nothing while
-    # down and get used if they recover: 3.7-flash and flash-latest (HTTP 503 on six
-    # probes), the pro tier (HTTP 429 on every probe and in a live run).
-    # Removed outright: gemini-2.5-flash returns HTTP 404 "no longer available to new
-    # users" for every request shape, and gemini-3.1-flash-lite failed schema
-    # validation on 40% of the responses it did deliver.
+    mistral_api_key: str | None = None
+    open_router_api_key: str | None = None
+    # Per-role chain override: "provider:model,provider:model". Empty keeps the
+    # defaults in llm/cloud.py, which spread primaries over three providers.
+    cloud_chain_product: str = ""
+    cloud_chain_architecture: str = ""
+    cloud_chain_developer: str = ""
+    cloud_chain_security: str = ""
+    # Legacy compatibility settings below. CloudRouter uses cloud_chain_* instead;
+    # these pools/escape settings no longer select models. Kept for older configs.
     gemini_models: str = (
         "gemini-3.6-flash,gemini-3.5-flash,gemini-3.7-flash,gemini-flash-latest"
     )
-    # The Developer carries the hardest contract, so the pro tier stays in its pool —
-    # but behind the two models that actually answer, because leading with a model that
-    # returns 429 on every call spends a round trip per run for nothing.
     gemini_developer_models: str = (
         "gemini-3.6-flash,gemini-3.5-flash,gemini-3.1-pro-preview,"
         "gemini-pro-latest,gemini-3.7-flash"
     )
-    # Sits at position 2 of a Google chain. Gemini quota is per project, so a 429 on one
-    # Gemini model predicts a 429 on the next; leaving the provider is what recovers it.
     cloud_escape_model: str = "openai/gpt-oss-120b"
-    # Roles that take the escape LAST instead of second. Groq's on_demand tier rejects
-    # oversized requests with HTTP 413 on its tokens-per-minute cap, and the Developer
-    # ships file contents, so the escape is unlikely to answer for that role early.
-    # It is still tried after the Gemini pool: a 413 costs ~0.4s, while the alternative
-    # is falling straight through to a local model that takes 90s to time out. Removing
-    # it entirely left the Developer with no cross-provider path at all, which is what
-    # made every Gemini rate limit end the run.
     cloud_escape_tail_roles: str = "developer"
     langfuse_public_key: str | None = None
     langfuse_secret_key: SecretStr | None = None

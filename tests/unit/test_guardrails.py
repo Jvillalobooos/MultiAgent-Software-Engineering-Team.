@@ -16,6 +16,12 @@ def test_cloud_context_rejects_env_content() -> None:
         require_safe_cloud_context({"file": ".env", "content": "KEY=value"})
 
 
+@pytest.mark.parametrize("key", ["mistral_api_key", "open_router_api_key", "openrouter_api_key"])
+def test_cloud_context_rejects_new_provider_credentials(key):
+    with pytest.raises(ValueError, match="sensitive"):
+        require_safe_cloud_context({key: "credential-value"})
+
+
 @pytest.mark.parametrize("source", [
     "def login(password: str):\n    return verify(password)\n",
     "def contraseña(password: str):\n    return verify(password)\n",

@@ -2,22 +2,74 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
-
 from support import BASELINE, HERE, PROJECT, make_manifest, outcome, read_cases
 
 
 def save(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def maximize_window(context, page):
+    """Resize the native Chrome window, not a simulated Playwright viewport."""
+    session = context.new_cdp_session(page)
+    try:
+        window = session.send("Browser.getWindowForTarget")
+        window_id = window["windowId"]
+        session.send("Browser.setWindowBounds", {
+            "windowId": window_id, "bounds": {"windowState": "maximized"}})
+        page.wait_for_timeout(500)
+        bounds = session.send("Browser.getWindowBounds", {"windowId": window_id})["bounds"]
+        if bounds["windowState"] != "maximized":
+            # Some macOS window managers report a zoomed window as normal.
+            available = page.evaluate("""() => ({left: screen.availLeft, top: screen.availTop,
+                width: screen.availWidth, height: screen.availHeight})""")
+            session.send("Browser.setWindowBounds", {
+                "windowId": window_id, "bounds": {"windowState": "normal"}})
+            session.send("Browser.setWindowBounds", {"windowId": window_id, "bounds": available})
+            page.wait_for_timeout(500)
+            bounds = session.send("Browser.getWindowBounds", {"windowId": window_id})["bounds"]
+            if any(abs(bounds[key] - available[key]) > 10 for key in ("width", "height")):
+                raise RuntimeError("Chrome could not be maximized; no demo run was submitted")
+        return bounds
+    finally:
+        session.detach()
+
+
+def presentation_browser(playwright, profile: Path, headless: bool):
+    # Translation is native browser UI, not a page DOM dialog. Disable its offer
+    # in this disposable profile instead of clicking unrelated page close buttons.
+    preferences = profile / "Default" / "Preferences"
+    preferences.parent.mkdir(parents=True, exist_ok=True)
+    save(preferences, {"translate": {"enabled": False},
+                       "intl": {"accept_languages": "en-US,en,es"}})
+    context = playwright.chromium.launch_persistent_context(
+        str(profile), channel="chrome", headless=headless,
+        no_viewport=not headless,
+        viewport={"width": 1440, "height": 1000} if headless else None,
+        args=["--start-maximized", "--disable-features=Translate,TranslateUI",
+              "--no-first-run", "--no-default-browser-check"],
+    )
+    page = context.pages[0] if context.pages else context.new_page()
+    try:
+        bounds = {} if headless else maximize_window(context, page)
+        page.bring_to_front()
+        page.keyboard.press("Escape")
+        return context, page, bounds
+    except Exception:
+        context.close()
+        raise
 
 
 class Presentation:
@@ -40,15 +92,24 @@ class Presentation:
             handles = locator.evaluate_handle("""el => [el, ...el.querySelectorAll('*')]
                 .filter(n => n.clientHeight > 50 && n.scrollHeight > n.clientHeight + 8
                   && /auto|scroll/.test(getComputedStyle(n).overflowY))""")
+            scrollables = []
             for handle in handles.get_properties().values():
                 element = handle.as_element()
                 if element is None:
                     continue
                 size = element.evaluate("el => el.scrollHeight - el.clientHeight")
-                steps = max(3, min(8, int(size / 180) + 1))
+                scrollables.append((element, size))
                 element.evaluate("el => el.scrollTop = 0")
+            # Old/new diff panes describe the same change: scroll them together.
+            # Sections and file tabs remain sequential, each visible for >=5s.
+            groups = [scrollables] if name.startswith("diff") else [[item] for item in scrollables]
+            for group in groups:
+                if not group:
+                    continue
+                steps = max(3, min(8, int(max(size for _, size in group) / 180) + 1))
                 for step in range(1, steps + 1):
-                    element.evaluate("(el, y) => el.scrollTo({top:y,behavior:'smooth'})", size * step / steps)
+                    for element, size in group:
+                        element.evaluate("(el, y) => el.scrollTo({top:y,behavior:'smooth'})", size * step / steps)
                     seconds = max(0.7, (self.dwell - 2) / steps)
                     self.pause(seconds)
                     shown_seconds += seconds
@@ -122,7 +183,7 @@ def main():
     parser.add_argument("--cases", default="1,2,3,4,5,6,7")
     parser.add_argument("--resume", action="store_true", help="Explicitly allow a partially completed project")
     parser.add_argument("--dwell", type=float, default=5, help="At least 5 seconds per section")
-    parser.add_argument("--cooldown", type=float, default=15)
+    parser.add_argument("--cooldown", type=float, default=10)
     parser.add_argument("--max-attempts", type=int, default=3)
     parser.add_argument("--timeout", type=float, default=900, help="Deadline per run; never submits a duplicate while active")
     args = parser.parse_args()
@@ -134,16 +195,15 @@ def main():
     if not args.resume and make_manifest(PROJECT) != json.loads(BASELINE.read_text()):
         parser.error("Project differs from baseline. Run restore.sh, or use --resume intentionally.")
     cases = [case for case in read_cases(PROJECT / "README.md") if case["id"] in selected]
-    output = HERE / "evidence" / datetime.now().strftime("%Y%m%d-%H%M%S")
+    output = HERE / "evidence" / datetime.now(timezone.utc).astimezone().strftime("%Y%m%d-%H%M%S")
     output.mkdir(parents=True)
     started = time.monotonic()
     summary = {"started_at": datetime.now(timezone.utc).isoformat(), "authorize_writes": True,
                "cases_requested": selected, "attempts": [], "complete": False}
     print(f"Evidence: {output}", flush=True)
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(channel="chrome", headless=args.headless)
-        context = browser.new_context(viewport={"width": 1440, "height": 1000})
-        page = context.new_page()
+    with tempfile.TemporaryDirectory(prefix="nova-demo-browser-") as profile, sync_playwright() as playwright:
+        context, page, bounds = presentation_browser(playwright, Path(profile), args.headless)
+        summary["browser"] = {"headless": args.headless, "bounds": bounds, "translation_enabled": False}
         page.set_default_timeout(15000)
         view = Presentation(page, args.dwell, output)
         try:
@@ -153,8 +213,8 @@ def main():
                     ready = page.request.get(args.url + "/api/runs", timeout=5000)
                     if ready.ok:
                         break
-                except Exception:
-                    pass
+                except PlaywrightError:
+                    pass  # Bounded readiness retry; no provider response is logged.
                 if time.monotonic() >= ready_by:
                     raise RuntimeError("System not ready; start backend and frontend before the demo")
                 view.pause(2)
@@ -224,7 +284,7 @@ def main():
                         "failed": "Failed", "apply_failed": "Apply failed"}[phase]
                     try:
                         page.get_by_test_id("run-phase-badge").filter(has_text=expected_phase).wait_for(timeout=20000)
-                    except Exception:
+                    except PlaywrightError:
                         view.reload_run(case, run_id)
                         page.get_by_test_id("run-phase-badge").filter(has_text=expected_phase).wait_for()
                     await_trace = page.get_by_test_id("run-trace-id")
@@ -238,7 +298,7 @@ def main():
                         if expected_test not in snapshot.get("changed_paths", []) or not (PROJECT / expected_test).is_file():
                             raise RuntimeError("Required new test file was not applied")
                         check = subprocess.run([sys.executable, "-m", "pytest", "-q", "--disable-warnings"],
-                                               cwd=PROJECT, capture_output=True, text=True)
+                                               cwd=PROJECT, capture_output=True, text=True, check=False)
                         (output / f"case-{case['id']}-tests.txt").write_text(check.stdout + check.stderr)
                         entry["source_test_exit_code"] = check.returncode
                         if check.returncode:
@@ -247,7 +307,7 @@ def main():
                             [sys.executable, "-m", "pytest", str(HERE / "test_acceptance.py"),
                              "-q", "--disable-warnings", "--tb=short"], cwd=PROJECT,
                             env={**os.environ, "BANCA_DEMO_THROUGH": str(case["id"])},
-                            capture_output=True, text=True)
+                            capture_output=True, text=True, check=False)
                         (output / f"case-{case['id']}-acceptance.txt").write_text(independent.stdout + independent.stderr)
                         entry["acceptance_exit_code"] = independent.returncode
                         if independent.returncode:
@@ -274,14 +334,14 @@ def main():
             summary["error"] = str(error)
             try:
                 page.screenshot(path=str(output / "failure.png"))
-            except Exception:
-                pass
+            except PlaywrightError:
+                pass  # Preserve the original failure when the page has closed.
             raise
         finally:
             summary["elapsed_seconds"] = round(time.monotonic() - started, 2)
             summary["views"] = view.views
             save(output / "summary.json", summary)
-            browser.close()
+            context.close()
     print(f"Completed {len(cases)} cases in {summary['elapsed_seconds']}s. Evidence: {output}", flush=True)
 
 

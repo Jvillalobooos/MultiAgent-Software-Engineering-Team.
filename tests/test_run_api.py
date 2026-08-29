@@ -431,6 +431,25 @@ def test_approved_workspace_change_is_applied_to_selected_source(tmp_path: Path)
     assert snapshot["report"]["source_applied"] is True
 
 
+@pytest.mark.parametrize("actual_diff,expected", [
+    ("", []),
+    ("--- a/app/service.py\n+++ b/app/service.py\n@@ -1 +1 @@\n-old\n+new\n", ["app/service.py"]),
+])
+def test_real_diff_omits_unchanged_writes_but_preserves_the_tool_audit(actual_diff, expected):
+    state = _completed_state()
+    for path in ["app/service.py", "app/unchanged.py"]:
+        state["tool_results"].append({
+            "tool_name": "update_file", "status": "SUCCESS", "duration_ms": 1,
+            "allowed_role": "Developer", "output_summary": path})
+    state["tool_results"].append({
+        "tool_name": "get_diff", "status": "SUCCESS", "duration_ms": 1,
+        "allowed_role": "Developer", "output_summary": actual_diff})
+    report = final_report_from_state(state)
+    assert [item["path"] for item in report["changed_files"]] == expected
+    assert report["actual_changed_paths"] == ["app/service.py", "app/unchanged.py"]
+    assert sum(item["name"] == "update_file" for item in report["tool_results"]) == 2
+
+
 def test_changed_paths_ignore_model_claimed_diff_paths_never_actually_written(
     tmp_path: Path,
 ) -> None:

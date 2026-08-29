@@ -48,18 +48,21 @@ El sistema multiagente es otra aplicación: su UI está en
 desde la raíz del repositorio:
 
 ```bash
-OLLAMA_TIMEOUT_SECONDS=420 MAX_LOCAL_RETRIES=0 MAX_LOCAL_REPAIRS=0 ./start_systems.sh
+LLM_TIMEOUT_SECONDS=45 CLOUD_ROLE_TIMEOUT_SECONDS=120 OLLAMA_TIMEOUT_SECONDS=45 MAX_LOCAL_RETRIES=0 MAX_LOCAL_REPAIRS=0 ./start_systems.sh
 ```
 
 Usa las credenciales de proveedores ya configuradas; no las copies al proyecto
 demo. Los límites anteriores acotan la espera del fallback local y no desactivan
 scanners, pruebas ni revisión.
 
-> **El timeout local importa.** `qwen3.5:9b` tarda una mediana de 229s y hasta
-> 414s por invocación, medido sobre las corridas de este repositorio. Un
-> `OLLAMA_TIMEOUT_SECONDS` de 90 lo corta siempre antes de que termine, así que
-> cuando ambos proveedores cloud están rate-limited el run muere en
-> `AGENT_TIMEOUT` en lugar de recuperarse. 420 le da margen real. Espera a ver **Backend online** antes de comenzar.
+> **Perfil de demo:** usa `LOCAL_FIRST=false` y `CLOUD_ENABLED=true` en tu configuración.
+> Se priorizan tres proveedores cloud y se conserva Gemini como fallback. El modelo
+> local históricamente tarda varios minutos: 45s limita esa espera, no garantiza que
+> pueda rescatar un apagón de todos los proveedores. Para sesiones sin límite de
+> duración puedes aumentar `OLLAMA_TIMEOUT_SECONDS`. Los timeouts HTTP limitan
+> inactividad; el presupuesto de rol impide iniciar nuevos intentos después de 120s,
+> pero no es un límite absoluto de duración de una respuesta que siga transmitiendo.
+> Espera a ver **Backend online** antes de comenzar.
 Si el modelo de embeddings ya está en caché y necesitas trabajar sin descargarlo,
 puedes añadir `HF_HUB_OFFLINE=1` al comando; RAG sigue usando los documentos reales.
 
@@ -128,11 +131,14 @@ tokens_recuperacion en banca/db.py con token, usuario_id, expira_en y usado.
 Agrega solicitar_recuperacion(conexion, email) que genere un token de alta
 entropía con expiración de 15 minutos, y restablecer_password(conexion, token,
 password_nueva) que valide expiración, rechace tokens ya usados y marque el
-token como usado tras cambiar la contraseña. La respuesta de solicitud debe ser
+token como usado tras cambiar la contraseña. Todas las marcas de tiempo van en
+UTC, igual que las columnas creado_en y creada_en del esquema: usa
+datetime.now(timezone.utc), nunca datetime.now() sin zona. La respuesta de solicitud debe ser
 idéntica exista o no el email, para no permitir enumeración de cuentas. Esta
 función es interna: para esta demo el token se consulta solo desde la base de
 datos del test, nunca se expone en respuestas HTTP ni logs. Mantén los cambios
 pequeños y no agregues dependencias.
+Usa generar_token() con sus 32 bytes aleatorios por defecto, sin reducir su entropía.
 ```
 
 **Test specification**
@@ -142,6 +148,9 @@ Agrega tests/test_recuperacion.py que cubra: un token recién emitido permite
 restablecer la contraseña; el mismo token no puede usarse dos veces; un token
 expirado es rechazado; y solicitar recuperación para un email inexistente
 devuelve el mismo resultado que para uno existente.
+En el test de expiración guarda (datetime.now(timezone.utc) - timedelta(minutes=16)).isoformat().
+No uses CURRENT_TIMESTAMP ni datetime('now') de SQLite: devuelven fechas sin zona.
+Sigue la convención de tests del proyecto: pasa las claves de prueba como argumentos literales a las funciones, igual que tests/test_auth.py. Nunca las asignes a una variable local, porque el guardrail de contexto interpreta ese patrón como una credencial y bloquea el envío a la nube.
 ```
 
 ### Caso 2 — Bloqueo de cuenta
@@ -156,6 +165,9 @@ columnas intentos_fallidos y bloqueada_hasta en banca/db.py. Tras cinco intentos
 fallidos consecutivos la cuenta queda bloqueada 15 minutos y autenticar debe
 rechazar el acceso aunque la contraseña sea correcta. Un login exitoso reinicia
 el contador. El mensaje de error no debe revelar si la cuenta está bloqueada.
+SQLite devuelve TEXT como str: almacena bloqueada_hasta en ISO 8601 UTC y conviértela
+con datetime.fromisoformat antes de compararla con datetime.now(timezone.utc).
+No compares nunca datetime con str ni fechas naive con fechas aware; maneja NULL.
 ```
 
 **Test specification**
@@ -164,6 +176,7 @@ el contador. El mensaje de error no debe revelar si la cuenta está bloqueada.
 Agrega tests/test_bloqueo.py que cubra: cuatro intentos fallidos no bloquean; el
 quinto sí; con la cuenta bloqueada la contraseña correcta también es rechazada;
 y un login exitoso antes del quinto intento reinicia el contador.
+Sigue la convención de tests del proyecto: pasa las claves de prueba como argumentos literales a las funciones, igual que tests/test_auth.py. Nunca las asignes a una variable local, porque el guardrail de contexto interpreta ese patrón como una credencial y bloquea el envío a la nube.
 ```
 
 ### Caso 3 — Historial de transacciones
@@ -187,6 +200,9 @@ Agrega tests/test_transacciones_recientes.py que cubra: el usuario recibe solo
 sus propios movimientos; el orden es de más reciente a más antiguo; el límite se
 respeta y está acotado por LIMITE_MAXIMO; y un usuario no ve movimientos de
 cuentas ajenas.
+La semilla contiene tres movimientos de Ana y dos de Luis: no esperes cinco
+movimientos para Ana. Para verificar LIMITE_MAXIMO agrega explícitamente más
+de 100 movimientos propios; no basta probar el máximo con tres filas.
 ```
 
 ### Caso 4 — Actualización de perfil
@@ -202,6 +218,10 @@ el perfil público actualizado. Expón PATCH /api/perfil en banca/api.py usando 
 actor autenticado. El email y el password_hash no son modificables por esta vía.
 Usa sentencias UPDATE estáticas con parámetros para todos los valores; no
 construyas SQL con f-strings ni concatenación, tampoco para los nombres de columnas.
+Hazlo con dos ramas explícitas: si nombre is not None ejecuta el SQL literal
+UPDATE usuarios SET nombre = ? WHERE id = ?; si telefono is not None ejecuta
+UPDATE usuarios SET telefono = ? WHERE id = ?. Valida todos los campos antes de
+escribir y confirma la transacción al final. No agregues excepciones noqa al scanner.
 ```
 
 **Test specification**
@@ -229,6 +249,9 @@ la cuenta. Son funciones internas: no expongas el código en HTTP ni logs; el
 test simula el canal privado de entrega consultando confirmaciones en SQLite.
 Devuelve un diccionario con solicitud_id y estado (pendiente o completada),
 sin incluir el código. Usa SQL parametrizado; no agregues dependencias.
+El código debe usar al menos 32 bytes aleatorios: llama generar_token() sin
+argumentos (su valor por defecto es 32) o generar_token(32), nunca 16. La salida
+URL-safe tiene al menos 43 caracteres. Conserva la expiración y el uso único.
 ```
 
 **Test specification**
@@ -238,6 +261,8 @@ Agrega tests/test_operacion_sensible.py que cubra: un monto de 1000 o menos no
 requiere confirmación; un monto mayor queda pendiente hasta confirmarse; un
 código incorrecto es rechazado; un código ya usado no se puede reutilizar; y
 otro usuario no puede confirmar una solicitud ajena.
+Verifica también que el código almacenado tenga al menos 43 caracteres y que
+jamás aparezca en el diccionario público de respuesta.
 ```
 
 ---
@@ -292,7 +317,14 @@ Recorre la UI con Playwright: historial de runs con scroll lento (solo la
 primera vez), selección de carpeta, y para cada caso el grafo de agentes
 siguiendo al agente activo, el debrief completo, todas las pestañas de diff, y
 las pestañas de RAG, MCP y errores. Objetivo de presentación: 10–12 minutos;
-la latencia real de proveedores, reintentos y cantidad de diff pueden extenderlo.
+**la validación completa del 28 de agosto duró 24 min 37 s**, con dos reintentos.
+La ejecución acumulada consumió 9 min 55 s; el resto fue navegación, lectura,
+pausas y comprobaciones. Reserva unos 25–30 minutos para el recorrido completo;
+10–12 minutos no está validado con todas las vistas y pausas requeridas.
+
+Chrome abre maximizado en un perfil temporal con traducción desactivada. No se
+modifican las preferencias ni las pestañas de tu perfil personal. El script
+comprueba las dimensiones de la ventana y las guarda en la evidencia.
 
 Ejecutar `restore.sh` antes de cada demo.
 
@@ -324,6 +356,8 @@ Capturas, resultados y `summary.json` quedan en
 los agentes. `complete: true` se refiere únicamente a `cases_requested` en ese
 archivo. El historial y esas evidencias sobreviven a `restore.sh`.
 
-El tiempo de 10–12 minutos es un objetivo, no un timeout ni una garantía: las
-pausas nunca se saltan para ocultar latencia. Consulta la medición y los intentos
-reales en [VALIDATION.md](../banca-demo-support/VALIDATION.md).
+Los tiempos dependen de las cuotas, la latencia y las reparaciones necesarias;
+no hay garantía de duración ni de éxito al primer intento. Las pausas nunca se
+saltan para ocultar latencia. Consulta la medición y los intentos reales en
+[VALIDATION.md](../banca-demo-support/VALIDATION.md), y los modelos, alternativas
+y límites de gratuidad en [MODEL_EVALUATION.md](../banca-demo-support/MODEL_EVALUATION.md).

@@ -20,7 +20,7 @@ def test_exactly_five_scenarios_execute_with_fixed_expected_outcomes(tmp_path) -
     )
 
     records = harness.run_all()
-    harness.write(records, "evaluation/reports/scenarios.json")
+    harness.write(records, str(tmp_path / "scenarios.json"))
 
     assert len(SCENARIOS) == 5
     assert [item.expected_status for item in SCENARIOS] == [
@@ -95,11 +95,14 @@ def test_evaluation_records_model_usage_needed_by_live_aggregate(tmp_path) -> No
     raw = record.model_dump(mode="json", by_alias=True)
     metrics = aggregate([raw])
 
-    assert record.llm_calls == 6
-    assert len(raw["model_usage"]) == 6
-    assert metrics["average_llm_calls"] == 6
+    # Testing and Reviewer now consume deterministic evidence, not model calls.
+    assert {item["agent"] for item in raw["model_usage"]} == {
+        "Product", "Architecture", "Developer", "Security"}
+    assert record.llm_calls == 4
+    assert len(raw["model_usage"]) == 4
+    assert metrics["average_llm_calls"] == 4
     assert set(metrics["latency_by_model"]) == {"qwen3.5:4b", "qwen3.5:9b"}
-    assert metrics["structured_output_success"] == 6
+    assert metrics["structured_output_success"] == 4
 
 
 def test_evaluation_counts_a_successfully_repaired_local_invocation(tmp_path) -> None:
@@ -113,6 +116,6 @@ def test_evaluation_counts_a_successfully_repaired_local_invocation(tmp_path) ->
     record = harness.run(SCENARIOS[0])
     metrics = aggregate([record.model_dump(mode="json", by_alias=True)])
 
-    assert record.llm_calls == 7
-    assert metrics["structured_output_success"] == 6
+    assert record.llm_calls == 5
+    assert metrics["structured_output_success"] == 4
     assert metrics["structured_output_failure"] == 1

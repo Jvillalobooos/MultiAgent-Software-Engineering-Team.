@@ -7,6 +7,7 @@ from engineering_team.contracts.enums import (
     ToolStatus,
 )
 from engineering_team.contracts.models import ReviewerDecision
+from engineering_team.guardrails.secrets import redact_secrets
 from engineering_team.models.context import ContextEnvelope
 
 from .base import AgentBase
@@ -38,13 +39,23 @@ class ReviewerAgent(AgentBase[ReviewerDecision]):
                 evidence_references=evidence,
             )
         if security is not None and security.status is SecurityStatus.FAIL:
+            problems = [finding.description for finding in security.findings]
+            if any(finding.category == "security tooling" for finding in security.findings):
+                latest_scans = {(item.tool_name, item.input_summary): item
+                    for item in envelope.tool_results if item.tool_name in {
+                        "run_security_scan", "scan_dependencies", "get_security_report"}}
+                failures = [item for item in latest_scans.values()
+                            if item.status is not ToolStatus.SUCCESS]
+                problems.extend(f"{item.tool_name}: {redact_secrets(item.output_summary[-2000:])}"
+                                for item in failures[:2])
             return ReviewerDecision(
                 status=ReviewerStatus.REJECTED, score=40,
                 subscores={item: (0 if item == "security" else 70) for item in _DIMENSIONS},
-                problems=[finding.description for finding in security.findings],
-                reason="security findings require code remediation",
+                problems=problems,
+                reason=("unsafe requirement requires human revision" if security.requires_hitl
+                        else "security findings require code remediation"),
                 remediation_category=RemediationCategory.SECURITY,
-                return_to=RouteTarget.DEVELOPER, confidence=1,
+                return_to=None if security.requires_hitl else RouteTarget.DEVELOPER, confidence=1,
                 evidence_references=evidence,
             )
         if latest_test is not None and latest_test.status is not ToolStatus.SUCCESS:

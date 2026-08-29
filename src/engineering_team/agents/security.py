@@ -64,6 +64,7 @@ class SecurityAgent(AgentBase[SecurityReview]):
                 recommendations=[finding.recommendation],
                 sources=finding.sources,
                 checklist=_checklist("sensitive_information"),
+                requires_hitl=True,
             )
         if ("any user" in requirement or "arbitrary" in requirement or
             ("cualquier usuario" in requirement and any(phrase in requirement for phrase in (
@@ -85,6 +86,7 @@ class SecurityAgent(AgentBase[SecurityReview]):
                 recommendations=[finding.recommendation],
                 sources=finding.sources,
                 checklist=_checklist("idor"),
+                requires_hitl=True,
             )
         return SecurityReview(
             status=SecurityStatus.PASS,

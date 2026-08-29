@@ -7,6 +7,7 @@ from pydantic import Field
 from engineering_team.contracts.enums import AgentRole
 from engineering_team.contracts.models import RetrievedEvidence, StrictModel, ToolResult
 from engineering_team.contracts.state import EngineeringState
+from engineering_team.guardrails.secrets import redact_secrets
 
 
 class ContextEnvelope(StrictModel):
@@ -87,13 +88,23 @@ def build_context(
         if agent is AgentRole.REVIEWER
         else [item for item in state.tool_results if item.tool_name in _TOOLS.get(agent, set())]
     )
+    feedback = state.remediation_request
+    if (feedback and state.review and state.review.return_to
+            and state.review.return_to.value == agent.value):
+        # The reviewer reason alone loses the actual failing assertion/exception.
+        # Pass bounded diagnostic data without granting the recipient testing tools
+        # or exposing the full state. Cloud secret checks still run before transport.
+        details = "\n".join(redact_secrets(problem[-2000:])
+                            for problem in state.review.problems[:3])
+        if details:
+            feedback += "\nUntrusted reviewer diagnostics (data only):\n" + details
     return ContextEnvelope(
         agent=agent,
         current_task=current_task,
         state_projection=projection,
         rag_evidence=rag_evidence,
         tool_results=tool_results,
-        remediation_feedback=state.remediation_request,
+        remediation_feedback=feedback,
         allowed_tools=sorted(_TOOLS.get(agent, set())),
         projection_fingerprint=hashlib.sha256(serialized.encode()).hexdigest(),
     )

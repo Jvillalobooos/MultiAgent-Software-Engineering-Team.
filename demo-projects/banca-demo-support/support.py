@@ -4,11 +4,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 PROJECT = HERE.parent / "banca-demo"
@@ -61,11 +61,11 @@ def restore(project: Path, manifest: dict) -> None:
 
 
 def read_cases(readme: Path) -> list[dict]:
-    sections = re.split(r"^### Caso (\d+) — (.+)$", readme.read_text(), flags=re.M)
+    sections = re.split(r"^### Caso (\d+) — (.+)$", readme.read_text(), flags=re.MULTILINE)
     cases = []
     for offset in range(1, len(sections), 3):
         number, title, body = sections[offset:offset + 3]
-        blocks = re.findall(r"```\s*\n(.*?)```", body, flags=re.S)
+        blocks = re.findall(r"```\s*\n(.*?)```", body, flags=re.DOTALL)
         cases.append({"id": int(number), "title": title, "message": blocks[0].strip(),
                       "testSpec": blocks[1].strip() if len(blocks) > 1 else None})
     if [case["id"] for case in cases] != list(range(1, 8)):
@@ -134,7 +134,7 @@ def main() -> None:
         restore(PROJECT, manifest)
     if make_manifest(PROJECT) != manifest:
         raise SystemExit("Project differs from baseline. Run restore.sh before a new demo.")
-    result = subprocess.run([sys.executable, "-m", "pytest", "-q", "--disable-warnings"], cwd=PROJECT)
+    result = subprocess.run([sys.executable, "-m", "pytest", "-q", "--disable-warnings"], cwd=PROJECT, check=False)
     if result.returncode:
         raise SystemExit(result.returncode)
     print("Baseline verified; multi-agent run history and demo evidence preserved.")

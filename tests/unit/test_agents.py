@@ -29,6 +29,7 @@ def test_security_agent_rejects_non_expiring_token_requirement() -> None:
     assert reviewed.findings[0].category == "sensitive information"
     assert len(reviewed.checklist) == 13
     assert reviewed.checklist["sensitive_information"] == "FAIL"
+    assert reviewed.requires_hitl is True
 
 
 def test_reviewer_rejects_when_required_rag_grounding_failed() -> None:
@@ -62,6 +63,11 @@ def test_security_understands_explicit_unsafe_spanish_requirements(requirement, 
         AgentRole.SECURITY, state.model_copy(update={"specification": product}), "review"))
     assert reviewed.status.value == "FAIL"
     assert reviewed.findings[0].category == category
+    decision = ReviewerAgent().execute(build_context(
+        AgentRole.REVIEWER, state.model_copy(update={"security_review": reviewed}), "review"))
+    assert decision.status is ReviewerStatus.REJECTED
+    assert decision.subscores["security"] == 0
+    assert decision.return_to is None
 
 
 def test_security_does_not_flag_authenticated_owner_scoped_spanish_requirement():
@@ -70,6 +76,20 @@ def test_security_does_not_flag_authenticated_owner_scoped_spanish_requirement()
     reviewed = SecurityAgent().execute(build_context(
         AgentRole.SECURITY, state.model_copy(update={"specification": product}), "review"))
     assert reviewed.status.value == "PASS"
+
+
+def test_reviewer_keeps_scanner_diagnostic_for_code_remediation():
+    tool = ToolResult(tool_name="run_security_scan", allowed_role=AgentRole.SECURITY,
+        status=ToolStatus.FAIL, input_summary="project", duration_ms=1,
+        output_summary="S608 Possible SQL injection\n  --> banca/perfil.py:53:13")
+    state = EngineeringState(run_id="r", requirement="Update own profile", tool_results=[tool])
+    security = SecurityAgent().execute(build_context(AgentRole.SECURITY, state, "scan"))
+    state = state.model_copy(update={"security_review": security})
+    review = ReviewerAgent().execute(build_context(AgentRole.REVIEWER, state, "review"))
+    assert review.status is ReviewerStatus.REJECTED
+    assert review.return_to.value == "Developer"
+    assert "S608" in "\n".join(review.problems)
+    assert "banca/perfil.py:53" in "\n".join(review.problems)
 
 
 @pytest.mark.parametrize("statuses,scopes,expected", [
@@ -87,3 +107,8 @@ def test_security_uses_latest_scan_for_each_scope_without_erasing_history(status
     reviewed = SecurityAgent().execute(envelope)
     assert reviewed.status.value == expected
     assert envelope.tool_results == tools
+    assert reviewed.requires_hitl is False
+    if expected == "FAIL":
+        decision = ReviewerAgent().execute(build_context(
+            AgentRole.REVIEWER, state.model_copy(update={"security_review": reviewed}), "review"))
+        assert decision.return_to.value == "Developer"

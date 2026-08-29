@@ -9,6 +9,7 @@ from typing import Any
 _SENSITIVE_KEYS = {
     "api_key", "apikey", "secret", "secret_key", "access_token", "password",
     "gemini_api_key", "groq_api_key", "langfuse_secret_key",
+    "mistral_api_key", "open_router_api_key", "openrouter_api_key",
 }
 
 
